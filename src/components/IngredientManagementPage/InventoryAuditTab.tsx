@@ -192,20 +192,15 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
     // ── Guide bước 5 (Kiểm kê): hint dòng cà phê, tick khi bấm Lưu. Bắt đầu sau Kết ca (bước 4, /report). ──
     const cashFlowProgress = useOnboardingProgress('cashFlowProgress', { isGuest, addressId })
     const hintInventory = isGuest && !!addressId && isCashFlowProgressDone(cashFlowProgress) && !isInventoryProgressDone(inventoryProgress)
-    // 3 câu hỏi lần lượt (mỗi lúc sáng 1 chỗ trên dòng cà phê): đã dùng bao nhiêu (Sử dụng) → máy tính
-    // còn bao nhiêu (Lý thuyết) → mình đếm được bao nhiêu (Cuối kỳ).
-    const hintStep: HintStep = !inventoryProgress.usedOpened ? 'used' : !inventoryProgress.theoryOpened ? 'theory' : 'count'
-    const onHintSeen = useCallback(
-        (step: 'used' | 'theory') => setInventoryProgress(prev => ({ ...prev, [step === 'used' ? 'usedOpened' : 'theoryOpened']: true })),
-        [setInventoryProgress]
-    )
+    // Sáng ô Cuối kỳ của dòng cà phê (chi tiết Sử dụng đã hiện sẵn, không còn việc bấm xem).
+    const hintStep: HintStep = 'count'
     // NVL của bước onboarding: chỉ cà phê (đếm ly/nắp là cùng một thao tác).
     const coffee = isGuest ? findIngredientByLabel(inventory.ingredientsList, 'cà phê')?.ingredient : undefined
     const coffeeTyped = !!coffee && (inventory.inventoryInputs[coffee] ?? '') !== ''
     const hintInventoryIngredient = hintInventory ? coffee ?? null : null
 
     // Demo: khách chỉ tự đếm cà phê; các NVL/bao bì khác điền sẵn "số nhân viên đếm" = Lý thuyết − đúng phần của mấy
-    // ly pha không bấm bill (getGuestUnbilled) → Tổng hao hụt + thẻ "Nghi vấn bán thiếu ghi nhận" chỉ đúng món/số ly,
+    // ly pha không bấm bill (getGuestUnbilled) → Tổng hao hụt + thẻ "Khả năng bấm thiếu" chỉ đúng món/số ly,
     // khớp với số két dư ở Kết ca. Guide gợi ý số cà phê nhập = Lý thuyết − phần cà phê của mấy ly đó. 1 lần mỗi lần mở tab, ô đã có số thì giữ.
     const prefilledRef = useRef(false)
     useEffect(() => {
@@ -226,8 +221,12 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
     }, [hintInventory, isTodayScope, inventory, ordersToday.length, usedMap, coffee, setInventoryProgress])
 
     // Tới ô Cuối kỳ cà phê: móm sẵn số gợi ý (suggest) — khách bấm vào ô là lưu (ColumnInput), như ô Tiền mặt ở Kết ca.
+    // Trễ 400ms: lượt điền sẵn các NVL khác ở trên tự lưu ngay (setTimeout 0) — nếu số cà phê vào cùng lúc thì bị lưu luôn
+    // và guide tự tick xong bước dù khách chưa bấm gì.
     useEffect(() => {
-        if (hintInventory && hintStep === 'count' && coffee && inventoryProgress.suggest && !coffeeTyped) inventory.onInventoryChange(coffee, String(inventoryProgress.suggest))
+        if (!(hintInventory && hintStep === 'count' && coffee && inventoryProgress.suggest && !coffeeTyped)) return
+        const t = setTimeout(() => inventory.onInventoryChange(coffee, String(inventoryProgress.suggest)), 400)
+        return () => clearTimeout(t)
     }, [hintInventory, hintStep, coffee, coffeeTyped, inventoryProgress.suggest, inventory])
 
     // Cà phê đã có số và đã lưu → tick bước sau ~1,2s (toast "Đã lưu" + số vừa lưu còn trên dòng) → dòng thu lại, cuộn
@@ -376,7 +375,6 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
                         hintIngredient={hintInventoryIngredient}
                         // Cà phê đã lưu → tắt nhấp nháy ngay (dòng vẫn mở ~1,2s chờ tick, xem effect tick coffee) — khỏi tưởng chưa xong.
                         hintStep={coffeeTyped && !inventory.isDirty ? null : hintStep}
-                        onHintSeen={onHintSeen}
                         beforeTotal={!isGuest && (
                             <div className={`flex items-center justify-between gap-3 rounded-[14px] border px-3 py-2.5 ${changedSince ? 'bg-warning/10 border-warning/30' : confirmedAt ? 'bg-success/10 border-success/30' : 'bg-surface border-border/40'}`}>
                                 <div className="min-w-0">

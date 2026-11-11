@@ -16,9 +16,8 @@ export const DEFAULT_ONBOARDING_STATE = {
     journalProgress: { viewedIncome: false, viewedExpense: false, viewedReport: false },
     // Bước 4 "Kết ca" — DailyReportPage.tsx. expectCash/expectTransfer = số guide đọc ra để két lệch 20k so với doanh thu.
     cashFlowProgress: { cash: false, transfer: false, expectCash: 0, expectTransfer: 0 },
-    // Bước 5 "Kiểm kê" — tab Kiểm kê của /inventory. usedOpened/theoryOpened: đã bấm xem ô Sử dụng / Lý thuyết
-    // của cà phê; suggest: số cà phê móm sẵn vào ô Cuối kỳ (Lý thuyết − phần ly pha không bill).
-    inventoryProgress: { usedOpened: false, theoryOpened: false, coffee: false, suggest: 0 },
+    // Bước 5 "Kiểm kê" — tab Kiểm kê của /inventory. coffee: đã lưu Cuối kỳ cà phê; suggest: số cà phê móm sẵn vào ô Cuối kỳ (Lý thuyết − phần ly pha không bill).
+    inventoryProgress: { coffee: false, suggest: 0 },
     // Bước 6 "Bổ sung tồn kho" — WarehousePrepNotice.tsx: bought = đã nhập kho mẫu 1 món (app nhập nốt phần còn lại).
     // viewedNet: đã quay về Báo cáo xem Thực nhận cuối ngày sau khi chi tiền nhập kho (DailyReportPage.tsx).
     restockProgress: { bought: false, viewedNet: false },

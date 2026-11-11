@@ -43,12 +43,9 @@ export const STEPS: Step[] = [
     {
         title: 'Kiểm kê',
         items: ({ inventoryProgress: i }) => [
-            // 3 câu hỏi: đã dùng bao nhiêu → máy tính còn bao nhiêu → mình đếm được bao nhiêu. `|| coffee`: khách nhập
-            // luôn mà không bấm xem 2 ô đầu thì vẫn không kẹt. Số gợi ý nhập: `suggest` (tab Kiểm kê tính theo mấy ly pha
+            // Chi tiết Sử dụng + Lý thuyết còn đã hiện sẵn trên dòng, khách chỉ việc đếm → nhập Cuối kỳ. Số gợi ý nhập: `suggest` (tab Kiểm kê tính theo mấy ly pha
             // không bấm bill), chưa có thì Lý thuyết − 20g; rời ô là tự lưu.
-            { label: 'Xem lượng cà phê đã dùng hôm nay', done: i.usedOpened || i.coffee, offerSignup: true, hideBar: true },
-            { label: 'Xem Lý thuyết', done: i.theoryOpened || i.coffee, hideBar: true },
-            { label: 'Nhập Cuối kỳ cà phê', done: isInventoryProgressDone(i), hideBar: true },
+            { label: 'Nhập Cuối kỳ cà phê', done: isInventoryProgressDone(i), offerSignup: true, hideBar: true },
         ],
     },
     {

@@ -50,16 +50,14 @@ interface Props {
     onInventoryChange: FieldChange
     onFieldBlur?: () => void // rời ô Cuối kỳ → cha tự lưu (phải ổn định: IngredientRow là memo)
     hintIngredient?: string | null
-    // Onboarding bước Tồn kho chia 3 câu hỏi, mỗi lần sáng 1 chỗ: Sử dụng → Lý thuyết → Cuối kỳ.
-    // onHintSeen báo guide khi khách bấm xem 2 chỗ đầu (xem onboarding/steps.ts).
+    // Onboarding bước Tồn kho: sáng ô Cuối kỳ của dòng được gợi ý (xem onboarding/steps.ts).
     hintStep?: HintStep | null
-    onHintSeen?: (step: 'used' | 'theory') => void
     // Chen ngay trên "Tổng hao hụt" (vd dòng Xác nhận kiểm kê của tab).
     beforeTotal?: ReactNode
     // Dưới Tổng hao hụt, cùng cột (laptop: cột phải dính).
     afterTotal?: ReactNode
 }
-export type HintStep = 'used' | 'theory' | 'count'
+export type HintStep = 'count'
 
 function computeRowStatus(args: Parameters<typeof computeHaoHut>[0]) {
     const haoHut = computeHaoHut(args)
@@ -70,9 +68,9 @@ function computeRowStatus(args: Parameters<typeof computeHaoHut>[0]) {
 }
 
 // Per-ingredient layout (counter-side only — Tồn kho tách ra ngoài):
-//   row 1 (inputs):  Đầu kỳ    |  Nhập thêm (col-span 2)
-//   row 2:           Đã bán    |  Sử dụng (col-span 2)
-//   row 3 (audit):   Chênh lệch|  Lý thuyết   |  Cuối kỳ (input, = Thực tế)
+//   row 1:  Đầu kỳ    |  Nhập thêm
+//   rows 2–4: [chi tiết Sử dụng theo món]  |  Sử dụng / Lý thuyết còn / Cuối kỳ (input, = Thực tế, nổi nhất)
+//   (hụt/dư + tiền nằm ở nhãn tiêu đề dòng, không lặp thành ô)
 //
 // Staff inputs: Đầu kỳ, Nhập thêm, Cuối kỳ. Everything else is computed and disabled.
 // Audit math:
@@ -89,7 +87,6 @@ export default function InventoryReportCard({
     madeMap = {},
     periodMadeMap = {},
     consumptionBreakdown = {}, // ingredient → { [variantKey]: { name, qty, totalAmount } } for expand-on-tap
-    ingredientToProduct = {}, // ingredient → { amountPerCup, productName } for "Tương đương N ly" label
     isSubmitting,
     // Sửa lịch sử (ngày cũ): khóa Đầu kỳ + Nhập thêm read-only, chỉ cho sửa Cuối kỳ —
     // tránh đụng kho tổng (Nhập thêm nằm trong công thức warehouse anchor).
@@ -107,7 +104,7 @@ export default function InventoryReportCard({
     // Nguyên liệu đang được onboarding phase 4 gợi ý bấm vào — xem DailyReportPage.tsx
     // (hintCoffeeIngredient) + onboarding/steps.ts.
     hintIngredient = null,
-    hintStep = null, onHintSeen, beforeTotal, afterTotal,
+    hintStep = null, beforeTotal, afterTotal,
 }: Props) {
     // Sort by status priority so staff sees "Chưa nhập" first, then anomalies,
     // then matched rows at the bottom. Tie-break by display name for stability.
@@ -227,7 +224,6 @@ export default function InventoryReportCard({
             breakdown={lookupByLabel(ing.ingredient, consumptionBreakdown) || null}
             period={openingPeriods[ing.ingredient]}
             openingNote={openingNotes[ing.ingredient]}
-            productRef={ingredientToProduct[ing.ingredient]}
             isSubmitting={isSubmitting}
             lockWarehouseInputs={lockWarehouseInputs}
             readOnly={readOnly}
@@ -237,7 +233,6 @@ export default function InventoryReportCard({
             onFieldBlur={onFieldBlur}
             hint={ing.ingredient === hintIngredient}
             hintStep={ing.ingredient === hintIngredient ? hintStep : null}
-            onHintSeen={onHintSeen}
         />
     )
 
@@ -337,7 +332,6 @@ interface RowProps {
     breakdown: ConsumptionBreakdown[string] | null
     period?: OpeningPeriods[string]
     openingNote?: OpeningNotes[string]
-    productRef?: IngredientToProduct[string]
     isSubmitting?: boolean
     lockWarehouseInputs: boolean
     readOnly: boolean
@@ -347,15 +341,14 @@ interface RowProps {
     onFieldBlur?: () => void
     hint: boolean
     hintStep: HintStep | null
-    onHintSeen?: (step: 'used' | 'theory') => void
 }
 
 const IngredientRow = memo(function IngredientRow({
     ing, ingredientUnits, openingValue, openingFallback, isLocked, restockValue, inventoryValue,
-    warehouseAvailable, used, made, periodMade, breakdown, period, openingNote, productRef,
+    warehouseAvailable, used, made, periodMade, breakdown, period, openingNote,
     isSubmitting, lockWarehouseInputs, readOnly,
     onOpeningChange, onRestockChange, onInventoryChange, onFieldBlur,
-    hint, hintStep, onHintSeen,
+    hint, hintStep,
 }: RowProps) {
     // Whole-row collapse: default closed so staff can scroll the list of NVL fast and
     // open just the ones they're counting. Status badge in the header tells them
@@ -365,12 +358,8 @@ const IngredientRow = memo(function IngredientRow({
     const [seenHint, setSeenHint] = useState(hint)
     // Hết gợi ý (đã lưu Cuối kỳ) → tự thu lại, nhường chỗ cho Tổng hao hụt bên dưới.
     if (hint !== seenHint) { setSeenHint(hint); setOpen(hint) }
-    // Sub-expand: per-recipe consumption breakdown inside the expanded row.
-    const [expanded, setExpanded] = useState(false)
     // Inline help bubble for the Lý thuyết formula — tap the (i) to toggle.
-    const [showLyThuyetInfo, setShowLyThuyetInfo] = useState(false)
     const hasBreakdown = breakdown && Object.keys(breakdown).length > 0
-    const toggleExpanded = () => { if (hasBreakdown) { setExpanded(e => !e); if (hint) onHintSeen?.('used') } }
 
     const unit = getIngredientUnit(ing.ingredient, ing.unit, ingredientUnits)
     const openingDisplay = openingValue ?? (openingFallback !== undefined && openingFallback !== null ? String(openingFallback) : '')
@@ -392,9 +381,7 @@ const IngredientRow = memo(function IngredientRow({
     // Kỳ kiểm kê (lần đếm trước cách từ 2 ngày, đầu kỳ chưa bị sửa tay): hiển thị CỘNG DỒN từ lần đếm — Đầu kỳ = số đã đếm,
     // Sử dụng = dùng cả kỳ + hôm nay, nhập thêm = đã nhập trong kỳ + nhập hôm nay. Chỉ là cách hiện; số lưu vẫn theo ngày.
     const p = isLocked ? undefined : period
-    // Onboarding: mỗi lúc sáng 1 chỗ — Sử dụng (đã dùng bao nhiêu) → Lý thuyết (máy tính còn bao nhiêu) → Cuối kỳ (nhập).
-    const hintUsed = hint && open && !!hasBreakdown && !p && hintStep === 'used'
-    const hintTheory = hint && open && hintStep === 'theory'
+    const showBreakdown = hasBreakdown && !p
     const hintCount = hint && open && hintStep === 'count'
     const restockTotal = p ? restockNum + p.restock : restockNum
     const { openingNum, usedNum, lyThuyet, haoHut } = p
@@ -404,10 +391,6 @@ const IngredientRow = memo(function IngredientRow({
     const madeNum = r1(made)
     const madeAll = p ? r1(madeNum + periodMade) : madeNum   // kỳ nhiều ngày: cộng dồn cả các mẻ của kỳ
     const usedShown = r1(usedNum + madeAll)
-    const haoHutTone = haoHut == null
-        ? 'neutral'
-        : haoHut === 0 ? 'good' : haoHut < 0 ? 'bad' : 'warn'
-
     // Lý thuyết âm mà đếm ra dương = "dư" ảo (dùng nhiều hơn đầu kỳ + nhập → nhập hàng chưa ghi): không quy ra tiền / ly.
     const phantomDu = haoHut != null && haoHut > 0 && lyThuyet < 0
 
@@ -422,30 +405,12 @@ const IngredientRow = memo(function IngredientRow({
 
     // Cups-equivalent label: how many drinks of the dominant product the |Hao hụt|
     // could have made. Skips ingredients where amountPerCup is missing/1 (cup/lid passthrough).
-    let tuongDuongText = '—'
-    const perCup = productRef?.amountPerCup ?? 0
-    if (haoHut != null && !phantomDu && perCup > 0 && haoHut !== 0) {
-        const cups = Math.round(Math.abs(haoHut) / perCup)
-        if (cups > 0) tuongDuongText = `≈ ${cups} ly ${productRef?.productName || ''}`.trim()
-    }
-
-    // Tổng cộng cell text: total cups across all variants that consumed this ingredient
-    // today (sum of breakdown[*].qty). Variants with totalAmount === 0 (e.g. size LỚN /
-    // BÌNH NHỎ that don't draw on this unit) are excluded — counting them would inflate
-    // the cup total above "Sử dụng" even though they consumed nothing. Tap to expand.
-    const totalCupsUsing = hasBreakdown
-        ? Object.values(breakdown).reduce(
-            (sum, e) => sum + ((Number(e.totalAmount) || 0) > 0 ? (Number(e.qty) || 0) : 0),
-            0,
-        )
-        : 0
-    const totalCupsText = totalCupsUsing > 0 ? `${totalCupsUsing} ly` : '—'
-
     // Status badge text + tone for the collapsed header.
     // 'pending' uses a quiet secondary tone — "Chưa nhập" is the default state of
     // every row before staff opens chốt ca, not a problem to flag.
     let badge: { text: string; tone: 'pending' | 'good' | 'bad' | 'warn' }
-    if (haoHut == null) {
+    // Guide: ô Cuối kỳ cà phê được móm sẵn số gợi ý, khách chưa bấm xác nhận → coi như chưa nhập (khỏi lộ "Hụt" trước khi khách đếm).
+    if (haoHut == null || (hint && hintStep === 'count')) {
         badge = { text: 'Chưa nhập', tone: 'pending' }
     } else if (haoHut === 0) {
         badge = { text: 'Khớp', tone: 'good' }
@@ -461,6 +426,76 @@ const IngredientRow = memo(function IngredientRow({
         warn: 'bg-warning/10 text-warning border-warning/30',
         pending: 'bg-surface-light text-text-secondary border-border/60',
     }[badge.tone]
+
+    const cellDauKy = p ? <TextCell label="Đầu kỳ" text={`${p.counted} ${unit}`} /> : (
+        <ColumnInput
+            label="Đầu kỳ"
+            value={openingDisplay}
+            unit={unit}
+            disabled={isLocked || lockWarehouseInputs || readOnly}
+            onChange={(v) => onOpeningChange(ing.ingredient, v)}
+            onBlur={onFieldBlur}
+            locked={isLocked || lockWarehouseInputs || readOnly}
+        />
+    )
+    const cellNhap = (
+        <ColumnInput
+            label={p ? 'Nhập hôm nay' : 'Nhập thêm'}
+            value={madeNum > 0 ? String(r1(restockNum + madeNum)) : restockValue || ''}
+            unit={unit}
+            disabled={lockWarehouseInputs || readOnly || madeNum > 0}
+            onChange={(v) => onRestockChange(ing.ingredient, v)}
+            onBlur={onFieldBlur}
+            overflow={restockOverflow}
+            locked={lockWarehouseInputs || readOnly || madeNum > 0}
+        />
+    )
+    const cellSuDung = <TextCell label="Sử dụng" text={`${usedShown} ${unit}`} />
+    const cellLyThuyet = <ColumnInput label="Lý thuyết còn" value={lyThuyet} unit={unit} disabled />
+    const cellCuoiKy = (
+        <ColumnInput
+            label="Cuối kỳ"
+            value={inventoryValue ?? ''}
+            unit={unit}
+            disabled={readOnly} // không khoá theo isSubmitting: tự lưu khi rời ô sẽ tắt luôn ô vừa được focus kế tiếp
+            locked={readOnly}
+            onChange={(v) => onInventoryChange(ing.ingredient, v)}
+            onBlur={onFieldBlur}
+            hint={hintCount}
+            emphasis
+        />
+    )
+    // Đầu kỳ ≠ số đếm hôm qua vì có đơn bán sau giờ đếm — cùng kiểu hàng công thức
+    const openingNotePanel = !p && !isLocked && openingNote && Number(openingDisplay) === r1(openingNote.counted - openingNote.used) && (
+        <div className={`px-1.5 py-3 bg-surface-light rounded-[10px] border border-border/40 flex items-center justify-between gap-0.5 text-[11px] leading-tight ${showBreakdown ? 'mb-2 flex-wrap' : 'mt-2 whitespace-nowrap'}`}>
+            {[['Hôm qua', openingNote.counted], ['Sử dụng thêm', openingNote.used], ['Hôm nay', openingDisplay]].map(([label, val], i) => (
+                <Fragment key={label}>
+                    {i > 0 && <span className="text-[13px] font-bold text-text">{['−', '='][i - 1]}</span>}
+                    <span className="flex flex-col items-center gap-1">
+                        <span className="font-bold text-text-secondary">{label}</span>
+                        <span className="text-[12px] font-black text-text tabular-nums">{val} {unit}</span>
+                    </span>
+                </Fragment>
+            ))}
+        </div>
+    )
+    const breakdownCard = showBreakdown && (
+        <div className="min-w-0 flex-1 px-2 py-2 bg-surface-light rounded-[10px] border border-border/40 flex flex-col justify-between gap-1.5">
+            {Object.values(breakdown)
+                .filter((e) => (Number(e.totalAmount) || 0) > 0)
+                .sort((a, b) => b.totalAmount - a.totalAmount)
+                .map((entry, i) => (
+                    <div key={i} className="flex flex-col">
+                        <span className="text-[12px] font-medium text-text leading-tight line-clamp-2">{entry.name}</span>
+                        <div className="flex items-baseline justify-between gap-2 tabular-nums">
+                            <span className="text-[10.5px] text-text-dim">{entry.qty} ly × {r1(entry.totalAmount / entry.qty)}</span>
+                            <span className="text-[11px] font-bold text-text">{entry.totalAmount} {unit}</span>
+                        </div>
+                    </div>
+                ))
+            }
+        </div>
+    )
 
     return (
         <div className="border-b border-border/20 last:border-0">
@@ -491,135 +526,25 @@ const IngredientRow = memo(function IngredientRow({
                     </div>
                 )}
 
-                {/* Row 1 — warehouse level */}
-                <div className="grid grid-cols-3 gap-2">
-                    {p ? <TextCell label="Đầu kỳ" text={`${p.counted} ${unit}`} /> : (
-                        <ColumnInput
-                            label="Đầu kỳ"
-                            value={openingDisplay}
-                            unit={unit}
-                            disabled={isLocked || lockWarehouseInputs || readOnly}
-                            onChange={(v) => onOpeningChange(ing.ingredient, v)}
-                            onBlur={onFieldBlur}
-                            locked={isLocked || lockWarehouseInputs || readOnly}
-                        />
-                    )}
-                    <div className="col-span-2">
-                        <ColumnInput
-                            label={p ? 'Nhập hôm nay' : 'Nhập thêm'}
-                            value={madeNum > 0 ? String(r1(restockNum + madeNum)) : restockValue || ''}
-                            unit={unit}
-                            disabled={lockWarehouseInputs || readOnly || madeNum > 0}
-                            onChange={(v) => onRestockChange(ing.ingredient, v)}
-                            onBlur={onFieldBlur}
-                            overflow={restockOverflow}
-                            locked={lockWarehouseInputs || readOnly || madeNum > 0}
-                        />
+                {showBreakdown ? (<>
+                    {openingNotePanel}
+                    {/* Có chi tiết món: lưới 2 cột bằng nhau × 4 hàng bằng nhau. Cột phải = 4 ô cách đều; cột trái = Đầu kỳ (hàng 1) + bảng chi tiết trải hàng 2–4 (đỉnh–đáy thẳng với Sử dụng–Cuối kỳ). Hụt/dư + tiền đã nằm ở nhãn tiêu đề dòng. */}
+                    <div className="grid grid-cols-2 grid-rows-4 items-center gap-2">
+                        <div className="col-start-1 row-start-1">{cellDauKy}</div>
+                        <div className="col-start-2 row-start-1">{cellNhap}</div>
+                        <div className="col-start-1 row-start-2 row-span-3 self-stretch min-w-0 flex flex-col">{breakdownCard}</div>
+                        <div className="col-start-2 row-start-2">{cellSuDung}</div>
+                        <div className="col-start-2 row-start-3">{cellLyThuyet}</div>
+                        <div className="col-start-2 row-start-4">{cellCuoiKy}</div>
                     </div>
-                </div>
-
-                {!p && !isLocked && openingNote && Number(openingDisplay) === r1(openingNote.counted - openingNote.used) && (
-                    /* Đầu kỳ ≠ số đếm hôm qua vì có đơn bán sau giờ đếm — cùng kiểu hàng công thức Lý thuyết bên dưới */
-                    <div className="mt-2 px-1.5 py-3 bg-surface-light rounded-[10px] border border-border/40 flex items-center justify-between gap-0.5 text-[11px] leading-tight whitespace-nowrap">
-                        {[['Hôm qua', openingNote.counted], ['Sử dụng thêm', openingNote.used], ['Hôm nay', openingDisplay]].map(([label, val], i) => (
-                            <Fragment key={label}>
-                                {i > 0 && <span className="text-[13px] font-bold text-text">{['−', '='][i - 1]}</span>}
-                                <span className="flex flex-col items-center gap-1">
-                                    <span className="font-bold text-text-secondary">{label}</span>
-                                    <span className="text-[12px] font-black text-text tabular-nums">{val} {unit}</span>
-                                </span>
-                            </Fragment>
-                        ))}
+                </>) : (<>
+                    {/* Không có chi tiết món: cùng 2 cột — Đầu kỳ | Nhập thêm ; Sử dụng | Lý thuyết còn ; Cuối kỳ trải cả hàng. */}
+                    {openingNotePanel}
+                    <div className="grid grid-cols-2 gap-2">
+                        {cellDauKy}{cellNhap}{cellSuDung}{cellLyThuyet}
+                        <div className="col-span-2">{cellCuoiKy}</div>
                     </div>
-                )}
-
-                {/* Row 2 — counter level */}
-                <div className="grid grid-cols-3 gap-2 mt-2">
-                    {/* Kỳ nhiều ngày: không có số ly cộng dồn (ngày đã chốt chỉ lưu gram) và chi tiết món chỉ của hôm nay → ẩn cả hai. */}
-                    {!p && <TextCell label="Đã bán" text={totalCupsText} />}
-                    <div className={p ? 'col-span-3' : 'col-span-2'}>
-                        <TextCell
-                            label="Đã sử dụng"
-                            text={`${usedShown} ${unit}`}
-                            onClick={hasBreakdown && !p ? toggleExpanded : undefined}
-                            expanded={expanded}
-                            hint={hintUsed}
-                        />
-                    </div>
-                </div>
-
-                {expanded && hasBreakdown && !p && (
-                    <div className="mt-2 px-3 py-3 bg-surface-light rounded-[10px] border border-border/40 flex flex-col gap-2">
-                        {Object.values(breakdown)
-                            .filter((e) => (Number(e.totalAmount) || 0) > 0)
-                            .sort((a, b) => b.totalAmount - a.totalAmount)
-                            .map((entry, i) => (
-                                <div key={i} className="flex items-center justify-between">
-                                    <span className="text-[13px] font-bold text-text truncate flex-1">{entry.name}</span>
-                                    <span className="text-[13px] font-bold text-text-secondary tabular-nums shrink-0 ml-2">
-                                        {entry.qty} ly × {r1(entry.totalAmount / entry.qty)} {unit} = <span className="text-text font-black">{entry.totalAmount} {unit}</span>
-                                    </span>
-                                </div>
-                            ))
-                        }
-                    </div>
-                )}
-
-                {/* Row 3 — audit: Hao hụt | Lý thuyết | Cuối kỳ (= Thực tế, gộp 1 input) */}
-                <div className="grid grid-cols-3 gap-2 mt-2">
-                    <ColumnInput
-                        label="Chênh lệch"
-                        value={haoHut != null ? haoHut : ''}
-                        unit={unit}
-                        disabled
-                        tone={haoHutTone}
-                    />
-                    <ColumnInput
-                        label="Lý thuyết"
-                        value={lyThuyet}
-                        unit={unit}
-                        disabled
-                        onBoxClick={() => { setShowLyThuyetInfo(s => !s); if (hint) { onHintSeen?.('theory'); setExpanded(false) } }} // guide: sang Lý thuyết thì thu bảng Sử dụng cho gọn
-                        hint={hintTheory}
-                    />
-                    <ColumnInput
-                        label="Cuối kỳ"
-                        value={inventoryValue ?? ''}
-                        unit={unit}
-                        disabled={readOnly} // không khoá theo isSubmitting: tự lưu khi rời ô sẽ tắt luôn ô vừa được focus kế tiếp
-                        locked={readOnly}
-                        onChange={(v) => onInventoryChange(ing.ingredient, v)}
-                        onBlur={onFieldBlur}
-                        hint={hintCount}
-                    />
-                </div>
-                {showLyThuyetInfo && (
-                    /* Nhãn trên, số dưới — 1 hàng không wrap kể cả màn 320px */
-                    <div className="mt-2 px-1.5 py-3 bg-surface-light rounded-[10px] border border-border/40 flex items-center justify-between gap-0.5 text-[11px] leading-tight whitespace-nowrap">
-                        {[['Đầu kỳ', openingNum], ['Nhập thêm', r1(restockTotal + madeAll)], ['Sử dụng', usedShown], ['Lý thuyết', lyThuyet]].map(([label, val], i) => (
-                            <Fragment key={label}>
-                                {i > 0 && <span className="text-[13px] font-bold text-text">{['+', '−', '='][i - 1]}</span>}
-                                <span className="flex flex-col items-center gap-1">
-                                    <span className="font-bold text-text-secondary">{label}</span>
-                                    <span className="text-[12px] font-black text-text tabular-nums">{val} {unit}</span>
-                                </span>
-                            </Fragment>
-                        ))}
-                    </div>
-                )}
-                {/* Row 4 — money + cups-equivalent context for Hao hụt */}
-                <div className="grid grid-cols-3 gap-2 mt-2">
-                    <TextCell
-                        label="Giá trị"
-                        text={giaTri != null
-                            ? `${giaTri < 0 ? '-' : ''}${formatVND(Math.abs(giaTri))}`
-                            : '—'}
-                        tone={haoHutTone}
-                    />
-                    <div className="col-span-2">
-                        <TextCell label="Tương đương" text={tuongDuongText} tone={haoHutTone} />
-                    </div>
-                </div>
+                </>)}
             </div>)}
         </div>
     )
@@ -647,9 +572,10 @@ interface ColumnInputProps {
     tone?: string
     onBoxClick?: () => void
     hint?: boolean | 'soft'
+    emphasis?: boolean // ô chính của thao tác (Cuối kỳ): viền + nền cam nhạt, số to hơn
 }
 
-function ColumnInput({ label, value, unit, disabled, locked, onChange, onBlur, overflow, tone = 'neutral', onBoxClick, hint = false }: ColumnInputProps) {
+function ColumnInput({ label, value, unit, disabled, locked, onChange, onBlur, overflow, tone = 'neutral', onBoxClick, hint = false, emphasis = false }: ColumnInputProps) {
     // tone overrides the default disabled coloring for read-only diff cells.
     const t: Partial<ToneCls> = TONE[tone] || {}
 
@@ -659,7 +585,9 @@ function ColumnInput({ label, value, unit, disabled, locked, onChange, onBlur, o
             ? `border ${t.wrap}`
             : locked
                 ? 'bg-primary/8 border border-primary/30'
-                : 'bg-surface-light border border-border/60 focus-within:border-primary/40'
+                : emphasis
+                    ? 'bg-primary/10 border border-primary/50 focus-within:border-primary'
+                    : 'bg-surface-light border border-border/60 focus-within:border-primary/40'
     const inputCls = overflow ? 'text-danger' : t.text || (locked ? 'text-primary cursor-not-allowed' : 'text-text')
     const unitCls = overflow ? 'text-danger/70' : t.unit || (locked ? 'text-primary/70' : 'text-text-dim')
     const Box = onBoxClick ? 'div' : 'label'
@@ -667,7 +595,7 @@ function ColumnInput({ label, value, unit, disabled, locked, onChange, onBlur, o
     return (
         <div className="flex flex-col">
             <div className="flex items-center justify-center gap-1 mb-1">
-                <span className="text-[9px] font-black uppercase text-text-dim">{label}</span>
+                <span className="text-[10px] font-black uppercase text-text-secondary">{label}</span>
             </div>
             {/* <label> để bấm chỗ nào trong ô cũng focus vào input — input tự co theo số
                 (width tính bằng ch) nên đơn vị luôn nằm sát ngay sau số, cả cụm canh giữa.
@@ -688,7 +616,7 @@ function ColumnInput({ label, value, unit, disabled, locked, onChange, onBlur, o
                     onKeyDown={onBlur ? e => { if (e.key === 'Enter') e.currentTarget.blur() } : undefined} // Enter/"Đi" không mất focus → tự blur để kích hoạt lưu
                     disabled={disabled}
                     style={{ width: `${Math.max(String(value ?? '').length, 1)}ch` }}
-                    className={`min-w-0 bg-transparent text-[13px] font-bold text-center placeholder:text-text-secondary/40 focus:outline-none no-spin ${tone === 'neutral' ? 'disabled:opacity-50' : ''} ${inputCls}`}
+                    className={`min-w-0 bg-transparent ${emphasis ? 'text-[15px] font-black' : 'text-[13px] font-bold'} text-center placeholder:text-text-secondary/40 focus:outline-none no-spin ${tone === 'neutral' ? 'disabled:opacity-50' : ''} ${inputCls}`}
                 />
                 <span className={`text-[10px] font-medium shrink-0 ${unitCls}`}>{unit}</span>
                 {onBoxClick && <Info size={10} className={`absolute right-1.5 text-text-dim pointer-events-none ${onboardingHintClass(hint === 'soft', 'soft')}`} />}
@@ -706,7 +634,7 @@ function TextCell({ label, text, tone = 'neutral', onClick, expanded = false, hi
     return (
         <div className="flex flex-col">
             <div className="flex items-center justify-center gap-1 mb-1">
-                <span className="text-[9px] font-black uppercase text-text-dim">{label}</span>
+                <span className="text-[10px] font-black uppercase text-text-secondary">{label}</span>
             </div>
             {interactive ? (
                 <button type="button" onClick={onClick} className={`${boxClasses} ${onboardingHintClass(hint === true)}`}>

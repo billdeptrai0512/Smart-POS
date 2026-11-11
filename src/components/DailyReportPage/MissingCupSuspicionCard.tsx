@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Search } from 'lucide-react'
 import { ingredientLabel } from '../../utils/ingredients'
 import { formatVND } from '../../utils'
 import CollapsibleCard from './CollapsibleCard'
@@ -14,9 +13,10 @@ type Cash = { diff: number; system: number }
 
 // Tối giản: 1 màu nhấn (kết luận), còn lại trung tính. Mọi bằng chứng quy về CÙNG đơn vị "ly" và so với vạch N ly của kết luận
 // — đọc từ trên xuống: kết luận → từng bằng chứng (nhãn · thanh · số ly), thanh nào chạm vạch thì khớp.
-function Row({ label, cups, max, n, first = false }: { label: string; cups: number | null; max: number; n: number; first?: boolean }) {
+// value: chữ hiển thị thay cho "x.x ly" (dòng Thực thu hiện tiền; thanh vẫn vẽ theo ly để so với vạch).
+function Row({ label, cups, max, n, first = false, value }: { label: string; cups: number | null; max: number; n: number; first?: boolean; value?: string }) {
     return (
-        <div className="grid grid-cols-[96px_1fr_60px] items-center gap-3 text-[12px] tabular-nums">
+        <div className="grid grid-cols-[96px_1fr_76px] items-center gap-3 text-[12px] tabular-nums">
             <span className="text-text-secondary truncate">{label}</span>
             <div className="relative h-1.5 rounded-full bg-surface-light">
                 {cups != null && <div className="h-full rounded-full bg-text-secondary/60" style={{ width: `${Math.max(3, Math.min(100, (cups / max) * 100))}%` }} />}
@@ -24,7 +24,7 @@ function Row({ label, cups, max, n, first = false }: { label: string; cups: numb
                     {first && <span className="absolute -top-3.5 -translate-x-1/2 text-[9px] font-bold text-warning whitespace-nowrap">{n} ly</span>}
                 </div>
             </div>
-            <span className="font-bold text-text text-right">{cups != null ? `${cups.toFixed(1)} ly` : '—'}{cups != null && Math.abs(cups - n) <= 0.5 && <span className="text-warning"> ✓</span>}</span>
+            <span className="font-bold text-text text-right whitespace-nowrap">{value ?? (cups != null ? `${cups.toFixed(1)} ly` : '—')}{cups != null && Math.abs(cups - n) <= 0.5 && <span className="text-warning"> ✓</span>}</span>
         </div>
     )
 }
@@ -41,8 +41,7 @@ export default function MissingCupSuspicionCard({ candidates = [], cash = null }
 
     return (
         <CollapsibleCard
-            icon={<Search size={15} className="text-warning shrink-0" />}
-            title="Nghi vấn bán thiếu ghi nhận"
+            title="Khả năng bấm thiếu"
             open={open}
             onToggle={() => setOpen(o => !o)}
             borderClass="border-warning/30"
@@ -59,7 +58,7 @@ export default function MissingCupSuspicionCard({ candidates = [], cash = null }
 
                 {/* Bằng chứng, cùng đơn vị ly; vạch cam = số ly kết luận */}
                 <div className="flex flex-col gap-3 rounded-[14px] bg-surface-light/60 px-3 pb-4 pt-6">
-                    <Row label={cash ? (cash.diff >= 0 ? 'Thực thu dư' : 'Thực thu thiếu') : 'Thực thu'} cups={cash ? Math.max(0, cash.diff) / price : null} max={max} n={n} first />
+                    <Row label="Thực thu" cups={cash ? Math.max(0, cash.diff) / price : null} max={max} n={n} first value={cash ? formatVND(Math.abs(cash.diff)) : undefined} />
                     {[...c.matches].sort((a, b) => b.ratio - a.ratio).map(m => (
                         <Row key={m.ingredient} label={ingredientLabel(m.ingredient)} cups={m.ratio} max={max} n={n} />
                     ))}
