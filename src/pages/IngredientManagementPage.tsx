@@ -318,7 +318,9 @@ export default function IngredientManagementPage() {
 
     const handleCreateIngredient = (name: string, unit: string, groupId: string) => withSaving('Tạo nguyên liệu mới', async () => {
         const key = normalizeIngredientKey(name)
-        await upsertIngredientCost(key, 0, addressId, unit || 'đv')
+        // Chặn trùng: upsert sẽ ghi đè giá vốn về 0 + tên của nguyên liệu đã có.
+        if (key in ingredientCosts) throw new Error(`"${ingredientLabel(key)}" đã có trong kho`)
+        await upsertIngredientCost(key, 0, addressId, unit || 'đv', { displayName: name.replace(/\s+/g, ' ') })
         // category (báo cáo "Mua bao bì" vs "Mua nguyên liệu") đi theo section của nhóm — trigger DB ép.
         if (groupId) {
             if (!addressId) throw new Error('Cần chọn một địa chỉ cụ thể (không áp dụng cho Mẫu mặc định)')

@@ -227,7 +227,8 @@ export const fetchLocalIngredientCosts = (addressId: string | null) => {
         min_counter_stock: item.min_counter_stock ?? null,
         category: item.category,
         count_in_audit: item.count_in_audit !== undefined ? item.count_in_audit : (item.countInAudit !== undefined ? item.countInAudit : true),
-        tare_weight: item.tare_weight ?? null
+        tare_weight: item.tare_weight ?? null,
+        display_name: item.display_name ?? null
     }));
 };
 
@@ -270,6 +271,8 @@ export const upsertLocalIngredientCost = (payload: Row) => {
 
     const tareWeight = payload.tare_weight !== undefined ? payload.tare_weight : payload.tareWeight;
     if (tareWeight !== undefined) mapped.tare_weight = tareWeight;
+
+    if (payload.displayName !== undefined) mapped.display_name = payload.displayName;
 
     if (idx >= 0) items[idx] = { ...items[idx], ...mapped };
     else items.push(mapped);

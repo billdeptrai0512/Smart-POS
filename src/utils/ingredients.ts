@@ -49,7 +49,22 @@ export function normalizeSearchText(s = '') {
     return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd')
 }
 
+// Tên hiển thị do người dùng gõ (ingredient_costs.display_name), nạp mỗi lần fetch giá vốn.
+// Module-level để 57 chỗ gọi ingredientLabel(key) không phải đổi chữ ký.
+let customLabels = new Map<string, string>()
+export function setIngredientDisplayNames(rows: { ingredient?: string; display_name?: string | null }[]) {
+    const m = new Map<string, string>()
+    for (const r of rows) {
+        const dn = r.display_name?.trim()
+        // Chỉ nhận khi khớp key (chặn tên lỗi thời nếu key đã đổi mà display_name chưa kịp cập nhật).
+        if (dn && r.ingredient && normalizeIngredientKey(dn) === r.ingredient) m.set(r.ingredient, dn)
+    }
+    customLabels = m
+}
+
 export function ingredientLabel(key: string) {
+    const custom = customLabels.get(key)
+    if (custom) return custom
     if (INGREDIENT_NAMES[key]) return INGREDIENT_NAMES[key]
     const name = key.replace(/_/g, ' ')
     return name.charAt(0).toUpperCase() + name.slice(1)

@@ -20,7 +20,7 @@ export async function fetchIngredientCostsAndUnits(addressId: UUID | null) {
     // migration 20260518_decouple_ingredient_costs.sql. Admin edits to default
     // rows DO NOT propagate to existing active addresses.
     const groupsPromise = fetchIngredientGroups(addressId)
-    const cols = 'ingredient, unit_cost, unit, address_id, pack_size, pack_unit, pack2_size, pack2_unit, min_stock, min_counter_stock, category, count_in_audit, tare_weight, group_id'
+    const cols = 'ingredient, unit_cost, unit, address_id, pack_size, pack_unit, pack2_size, pack2_unit, min_stock, min_counter_stock, category, count_in_audit, tare_weight, group_id, display_name'
     const q = supabase.from('ingredient_costs').select<string, Row>(cols) // cols là chuỗi động → khai báo hình dạng hàng, nếu không supabase-js rơi về GenericStringError
     const { data, error } = await (addressId ? q.eq('address_id', addressId) : q.is('address_id', null))
     const groups = await groupsPromise
@@ -37,7 +37,7 @@ export async function fetchIngredientCostsAndUnits(addressId: UUID | null) {
     for (const d of data) {
         costs[d.ingredient] = d.unit_cost
         units[d.ingredient] = d.unit || 'đv'
-        rows.push({ ingredient: d.ingredient, unit: d.unit || 'đv', unit_cost: d.unit_cost, pack_size: d.pack_size, pack_unit: d.pack_unit, pack2_size: d.pack2_size ?? null, pack2_unit: d.pack2_unit ?? null, min_stock: d.min_stock, min_counter_stock: d.min_counter_stock ?? null, category: d.category || null, count_in_audit: d.count_in_audit ?? true, tare_weight: d.tare_weight ?? null, group_id: d.group_id ?? null })
+        rows.push({ ingredient: d.ingredient, unit: d.unit || 'đv', unit_cost: d.unit_cost, pack_size: d.pack_size, pack_unit: d.pack_unit, pack2_size: d.pack2_size ?? null, pack2_unit: d.pack2_unit ?? null, min_stock: d.min_stock, min_counter_stock: d.min_counter_stock ?? null, category: d.category || null, count_in_audit: d.count_in_audit ?? true, tare_weight: d.tare_weight ?? null, group_id: d.group_id ?? null, display_name: d.display_name ?? null })
     }
     return { costs, units, rows, groups }
 }
@@ -93,6 +93,16 @@ export async function setIngredientsGroup(ingredients: string[], addressId: UUID
     if (error) throw error
 }
 
+// Chỉ đổi tên hiển thị — UPDATE (không upsert) để không mang theo unit_cost cũ ghi đè giá do phiên khác vừa sửa.
+export async function setIngredientDisplayName(ingredient: string, addressId: UUID, displayName: string) {
+    if (localRepo.isGuest()) {
+        const cur = localRepo.fetchLocalIngredientCosts(addressId).find((r: Row) => r.ingredient === ingredient)
+        return localRepo.upsertLocalIngredientCost({ ingredient, address_id: addressId, unit_cost: cur?.unit_cost ?? 0, displayName })
+    }
+    const { error } = await supabase.from('ingredient_costs').update({ display_name: displayName }).eq('address_id', addressId).eq('ingredient', ingredient)
+    if (error) throw error
+}
+
 // Kept for backward-compat — delegates to fetchIngredientCostsAndUnits
 export async function fetchIngredientCostsWithUnits(addressId: UUID | null) {
     const { rows } = await fetchIngredientCostsAndUnits(addressId)
@@ -123,6 +133,7 @@ export async function upsertIngredientCost(ingredient: string, unitCost: number,
     if (opts.category !== undefined) payload.category = opts.category ?? null
     if (opts.countInAudit !== undefined) payload.count_in_audit = !!opts.countInAudit
     if (opts.tareWeight !== undefined) payload.tare_weight = opts.tareWeight ?? null
+    if (opts.displayName !== undefined) payload.display_name = opts.displayName ?? null
 
     const upsert = (body: Row) => sb
         .from('ingredient_costs')
@@ -135,7 +146,7 @@ export async function upsertIngredientCost(ingredient: string, unitCost: number,
     // Degrade dần nếu cột optional chưa migrate: bỏ từng cột (mới nhất trước) rồi thử lại.
     let body: Row = payload
     let { error } = await upsert(body)
-    for (const col of ['tare_weight', 'count_in_audit', 'category']) {
+    for (const col of ['display_name', 'tare_weight', 'count_in_audit', 'category']) {
         if (!error) break
         if (!missingCol(error, col) || !(col in body)) continue
         const { [col]: _drop, ...rest } = body

@@ -8,7 +8,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useHistory } from '../contexts/HistoryContext'
 import {
     fetchIngredientRestockHistory, fetchIngredientStocks, fetchIngredientWithdrawals,
-    deleteIngredientCost, upsertIngredientCost, renameIngredient,
+    deleteIngredientCost, upsertIngredientCost, renameIngredient, setIngredientDisplayName,
     adjustIngredientStock, setCounterStock, recordInvoicePayment, cancelRestock,
     editIngredientRestock, mergeShiftClosingInventory, fetchIngredientDailyContext,
     processIngredientRestock, setIngredientsGroup,
@@ -304,10 +304,13 @@ export default function IngredientDetailPage() {
 
     async function saveName(newDisplayName: string) {
         const newKey = normalizeIngredientKey(newDisplayName)
-        if (!newKey || newKey === ingredientKey) return
+        const displayName = newDisplayName.trim().replace(/\s+/g, ' ')
+        // Cùng key vẫn cho đổi: chỉ sửa hoa/thường ("thạch chân châu" → "Thạch Chân Châu") thì chỉ cập nhật display_name.
+        if (!newKey || (newKey === ingredientKey && displayName === ingredientLabel(ingredientKey))) return
         await withSaving('Đổi tên nguyên liệu', async () => {
             if (!addressId) throw new Error('Cần chọn một địa chỉ cụ thể (không áp dụng cho Mẫu mặc định)')
             await renameIngredient(ingredientKey, newKey, addressId)
+            await setIngredientDisplayName(newKey, addressId, displayName) // sau rename để theo key mới
             refreshProducts?.()
             // URL param drives every fetch on this page — repoint at the new key
             // so the page keeps showing the same ingredient under its new name.

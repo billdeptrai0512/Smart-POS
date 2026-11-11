@@ -14,7 +14,7 @@ import { readJSON, writeJSON } from '../utils/storage'
 import { fetchProduction } from '../services/productionService'
 import type { ProductionRow } from '../utils/production'
 import { dateStringVN, addDaysVN } from '../utils/dateVN'
-import { normalizeIngredientKey } from '../utils/ingredients'
+import { normalizeIngredientKey, setIngredientDisplayNames } from '../utils/ingredients'
 
 export interface ProductContextValue {
     /** Món bán (đã loại thành phẩm). */
@@ -143,6 +143,9 @@ export function ProductProvider() {
     const [productToppings, setProductToppings] = useState<Record<string, CartTopping[]>>(() => readCache('product_toppings', {}))
     const [discountPrograms, setDiscountPrograms] = useState<DiscountProgram[]>(() => readCache('discount_programs', []))
     const [productDiscounts, setProductDiscounts] = useState<Record<string, DiscountProgram[]>>(() => readCache('product_discounts', {}))
+    // Nạp tên hiển thị của ĐỊA CHỈ ĐANG CHỌN (kể cả từ cache lúc khởi động) ngay khi render, trước các con gọi ingredientLabel.
+    // Không nạp trong service fetch vì nó chạy cho nhiều địa chỉ (prefetch, mẫu mặc định) và ghi đè nhau.
+    useMemo(() => setIngredientDisplayNames(ingredientConfigs), [ingredientConfigs])
     // ponytail: chỉ 62 ngày gần nhất — báo cáo dài hơn thì mẻ cũ không được cộng; tải theo khoảng khi cần.
     const [productionRows, setProductionRows] = useState<(ProductionRow & Row)[]>([])
     const refreshProduction = useCallback(async () => {
