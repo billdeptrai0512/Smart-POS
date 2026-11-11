@@ -660,7 +660,7 @@ export default function DailyReportPage() {
     const restockCfg = editingRestock && (ingredientsList || []).find(i => i.ingredient === editingRestock.ingredient)
 
     return (
-        <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
+        <div className="flex flex-col h-full max-w-lg lg:max-w-none mx-auto bg-bg relative">
             <HistoryHeader
                 title="Báo cáo"
                 rangeLabel={rangeLabel}
@@ -686,7 +686,7 @@ export default function DailyReportPage() {
                 belowTabs={<ReportViewFilter value={view} onChange={setView} isStaff={isStaff} />}
             />
 
-            <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-6 pb-6 space-y-4 bg-bg">
+            <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-6 pb-6 bg-bg lg:px-8"><div className="space-y-4 lg:max-w-[1280px] lg:mx-auto">
                 {!isReady ? (
                     <div className="flex flex-col gap-4 animate-pulse">
                         <div className="grid grid-cols-2 gap-3">
@@ -701,6 +701,8 @@ export default function DailyReportPage() {
                     </div>
                 ) : (
                     <div className="flex flex-col gap-4 animate-fade-in">
+                        {/* Laptop+: Dòng tiền tự chia 2 cột (CashFlowCard); Lợi nhuận là bảng đọc dọc nên giữ 1 cột giữa. */}
+                        <div className={view === VIEW_CASHFLOW ? '' : 'lg:max-w-4xl lg:w-full lg:mx-auto'}>
                         {(view === VIEW_ALL || view === VIEW_PROFIT) && !isStaff && (
                             <FinanceCards
                                 totalRevenue={totalRevenue}
@@ -747,6 +749,8 @@ export default function DailyReportPage() {
                             />
                         )}
 
+                        </div>
+
                         {/* Guide: CTA cuối của demo nằm cuối trang — khách cuộn qua Thực chi/Thực nhận là gặp (dải trên đỉnh ẩn ở
                             trang này, OnboardingGuide). Hiện ngay khi nhập kho xong, không chờ tick viewedNet; thế chỗ 2 nút cuối trang. */}
                         {isGuest && restockProgress.bought ? (
@@ -765,6 +769,7 @@ export default function DailyReportPage() {
                         )}
                     </div>
                 )}
+                </div>
             </main>
 
             <Toast toast={toast} />

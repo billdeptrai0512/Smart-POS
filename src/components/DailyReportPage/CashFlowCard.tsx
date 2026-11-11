@@ -362,9 +362,10 @@ export default function CashFlowCard({
     )
 
     return (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:items-start">
             {children && <div className="w-full">{children}</div>}
 
+            <div className="flex flex-col gap-4">
             {/* PANEL 1: THỰC THU */}
             <ReportPanel
                 panelRef={panelRef}
@@ -423,7 +424,9 @@ export default function CashFlowCard({
                     </ReportPanel>
                 )
             })()}
+            </div>
 
+            <div className="flex flex-col gap-4">
             {/* PANEL 2: THỰC CHI — 4 section theo group_section nhãn (Vận hành / Quản lý
                 & khác / Tồn kho / Ngoài kinh doanh), section phụ chỉ hiện khi có chi.
                 Mỗi section là các dòng nhãn collapse; Tổng thực chi nằm cuối CÙNG PANEL. */}
@@ -504,6 +507,7 @@ export default function CashFlowCard({
                     <PanelRow label="Chuyển khoản" value={money(takeHomeTransfer)} valueClassName={cashNotEntered ? 'text-text-dim' : takeHomeTransfer < 0 ? 'text-danger' : 'text-text'} />
                 </div>
             </ReportPanel>
+            </div>
         </div>
     )
 }
