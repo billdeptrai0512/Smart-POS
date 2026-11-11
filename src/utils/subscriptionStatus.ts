@@ -39,7 +39,10 @@ export function computeSubscriptionStatus(rows?: Row[] | null) {
         const latest = (rows || []).reduce<Row | null>((a, b) => (!a || b.valid_to > a.valid_to ? b : a), null)
         return { status: 'none', validTo: null, trialEnded: latest?.note === 'trial' || latest?.note === 'grace' }
     }
-    const dominant = active.reduce((a, b) => (b.valid_to > a.valid_to ? b : a))
+    // Dòng trả trước nối sau ân hạn/trial có valid_from ở tương lai (confirm_payment nối tiếp) — vẫn tính để
+    // badge hiện "Đã đăng ký" ngay khi đã chuyển khoản, không đợi tới ngày bắt đầu.
+    const upcoming = (rows || []).filter(r => startOfDayVN(new Date(r.valid_from)) > today)
+    const dominant = [...active, ...upcoming].reduce((a, b) => (b.valid_to > a.valid_to ? b : a))
     return {
         // 'grace' = ân hạn chuyển đổi 3 ngày (20261044) → hiển thị như dùng thử.
         status: dominant.note === 'trial' || dominant.note === 'grace' ? 'trial' : 'paid',
