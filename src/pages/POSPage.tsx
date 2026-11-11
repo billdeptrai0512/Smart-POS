@@ -64,10 +64,6 @@ export default function POSPage() {
         handleLoadHistory()
     }
 
-    // Ô cột 4 trong Header (tablet) — TableModal inline portal thẻ Mang đi vào đây.
-    // State (không phải ref) để TableModal render lại khi ô đã gắn vào DOM.
-    const [takeawaySlot, setTakeawaySlot] = useState<HTMLDivElement | null>(null)
-
     // Tablet/foldable (biến thể dine-split, xem index.css): chia đôi
     // màn hình — bên trái vẫn là POS như trên điện thoại, bên phải là lưới chọn bàn
     // luôn hiện (TableModal inline) thay vì phải bấm mở modal, và "Tạo đơn" nằm
@@ -89,7 +85,6 @@ export default function POSPage() {
                     recentOrders={recentOrders}
                     enterKey={enterKey}
                     showOnboardingHint={showHistoryHint}
-                    takeawaySlotRef={setTakeawaySlot}
                     notice={<>
                         {/* POS không hiện dải guide (dải Bạn cần chuẩn bị / Tạo đơn / Nhật ký tự sáng) — chỉ chạy ngầm để ghi phễu. */}
                         <OnboardingGuide silent />
@@ -132,7 +127,7 @@ export default function POSPage() {
             </div>
 
             <div className="pos-table-pane hidden dine-split:flex flex-col min-h-0 [grid-area:table] bg-bg">
-                <TableModal inline takeawaySlot={takeawaySlot} />
+                <TableModal inline />
             </div>
 
             {showTables && <TableModal onClose={() => setShowTables(false)} />}

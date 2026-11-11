@@ -1,4 +1,4 @@
-import type { ReactNode, Ref } from 'react'
+import type { ReactNode } from 'react'
 import { onboardingHintClass } from '../../utils/onboardingHint'
 import Typewriter from '../common/Typewriter'
 import type { LastOrder } from '../../services/cartOps'
@@ -12,11 +12,10 @@ interface Props {
     recentOrders?: LastOrder[]
     enterKey: string | null
     showOnboardingHint?: boolean
-    takeawaySlotRef: Ref<HTMLDivElement>
     notice?: ReactNode // dải notice dưới 2 thẻ, vẫn trong header (PrepPinBar)
 }
 
-export default function Header({ dayName, dateOnly, onOpenHistory, addressName, onAddressClick, recentOrders = [], enterKey, showOnboardingHint = false, takeawaySlotRef, notice }: Props) {
+export default function Header({ dayName, dateOnly, onOpenHistory, addressName, onAddressClick, recentOrders = [], enterKey, showOnboardingHint = false, notice }: Props) {
     const hintClass = onboardingHintClass(showOnboardingHint, 'solid')
     // Saved orders only, newest first (max 3). isNew matches only the exact row just
     // committed locally (enterKey) → it slides in and types out; the realtime DB echo,
@@ -54,7 +53,7 @@ export default function Header({ dayName, dateOnly, onOpenHistory, addressName, 
                     onClick={onOpenHistory}
                     role="button"
                     tabIndex={0}
-                    className={`dine-split:col-span-2 cursor-pointer bg-bg rounded-[20px] p-3 sm:p-3.5 border border-primary/35 hover:border-primary/60 shadow-sm flex flex-col gap-[2px] relative overflow-hidden h-full transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${hintClass}`}
+                    className={`dine-split:col-span-3 cursor-pointer bg-bg rounded-[20px] p-3 sm:p-3.5 border border-primary/35 hover:border-primary/60 shadow-sm flex flex-col gap-[2px] relative overflow-hidden h-full transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${hintClass}`}
                 >
                     <div className="flex flex-col justify-between items-start relative z-10 w-full">
                         <span className="text-[12px] sm:text-[13px] text-primary font-black uppercase tracking-wider">Nhật ký</span>
@@ -80,11 +79,6 @@ export default function Header({ dayName, dateOnly, onOpenHistory, addressName, 
                     </div>
                 </div>
 
-                {/* Cột 4 (tablet): thẻ Mang đi — TableModal inline portal vào đây, state
-                    + modal danh sách vẫn ở TableModal. [&>*]:h-full: cao bằng hàng header
-                    thay vì CARD_H của lưới bàn. [&>*]:w-full: tile tĩnh (chưa có đơn) là
-                    <button>, ngoài grid thì chỉ rộng vừa chữ. */}
-                <div ref={takeawaySlotRef} className="hidden dine-split:block [&>*]:h-full [&>*]:w-full" />
             </div>
             {/* empty:hidden — notice trả null thì không chừa khoảng trống */}
             <div className="px-6 mt-3 empty:hidden [&>button]:rounded-[14px]">{notice}</div>

@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, type FormEvent, type SyntheticEvent } from 'react'
-import { createPortal } from 'react-dom'
 import { useLocation } from 'react-router-dom'
 import { Plus, Check, Pencil, Trash2, ArrowUpDown, GripVertical } from 'lucide-react'
 import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
@@ -76,9 +75,9 @@ function pendingCups(rounds: TableRound[]) {
 // inline = true: render as the permanent right-pane "screen" on tablet split-view
 // (POSPage) instead of a bottom-sheet Dialog — no backdrop, no close button, picking
 // a table just updates this pane (no onClose to call back to).
-interface Props { onClose?: () => void; inline?: boolean; takeawaySlot?: HTMLElement | null }
+interface Props { onClose?: () => void; inline?: boolean }
 
-export default function TableModal({ onClose, inline = false, takeawaySlot }: Props) {
+export default function TableModal({ onClose, inline = false }: Props) {
     const { tableName, setTableName, openTables, refreshTables, showError } = useCart()
     const { addressId, selectedAddress, setTables } = useAddress()
     const { isManager, isAdmin } = useAuth()
@@ -251,10 +250,8 @@ export default function TableModal({ onClose, inline = false, takeawaySlot }: Pr
         } catch (err) { showError(err, 'Đổi tên bàn') }
     }
 
-    // Trên header (inline) nền bg-bg cho khớp thẻ Địa chỉ — bg-surface trùng màu nền header.
-    const idleBg = inline ? 'bg-bg' : 'bg-surface'
     const takeawayCard = takeaway ? (
-        <div className={`${CARD_H} relative rounded-[20px] border p-3.5 flex flex-col gap-1.5 transition-colors ${!tableName ? 'bg-primary/15 border-primary' : `${idleBg} border-border/60`}`}>
+        <div className={`${CARD_H} relative rounded-[20px] border p-3.5 flex flex-col gap-1.5 transition-colors ${!tableName ? 'bg-primary/[0.07] border-primary/40' : 'bg-surface border-border/60'}`}>
             {/* Chỉ đổi tiêu điểm, không pick('') (không gọi onClose) — mobile
                 là bottom-sheet, đóng ngay thì tap thứ 2 (mở chi tiết) không còn
                 gì để nhấn vào, phải mở lại sheet từ đầu. */}
@@ -279,9 +276,10 @@ export default function TableModal({ onClose, inline = false, takeawaySlot }: Pr
     ) : (
         <button
             onClick={() => pick('')}
-            className={`${CARD_H} rounded-[20px] border p-3.5 flex flex-col items-center justify-center transition-colors ${!tableName ? 'bg-primary/15 border-primary' : `${idleBg} border-border/60 hover:border-primary/40`}`}
+            className={`${CARD_H} rounded-[20px] border p-3.5 flex flex-col gap-1 text-left transition-colors ${!tableName ? 'bg-primary/[0.07] border-primary/40' : 'bg-surface/50 border-border/40 hover:border-primary/40'}`}
         >
-            <span className="text-[13px] font-black uppercase tracking-wide text-text">Mang đi</span>
+            <span className={`text-[13px] font-black uppercase tracking-wide ${!tableName ? 'text-text' : 'text-text-secondary'}`}>Mang đi</span>
+            <span className="text-[12px] font-bold text-text-secondary/50">Trống</span>
         </button>
     )
 
@@ -310,9 +308,8 @@ export default function TableModal({ onClose, inline = false, takeawaySlot }: Pr
                         Có đơn đang chờ ra món thì hiện overview như thẻ bàn busy — chạm 1 cái
                         để CHỌN (như mọi thẻ khác), chạm cái nữa vào đúng thẻ đang chọn mới mở
                         danh sách chi tiết. Không thì tile tĩnh bấm-là-chọn như trước.
-                        Tablet (inline): thẻ portal lên cột 4 của Header (xem takeawaySlot ở
-                        POSPage) — state + TakeawayListModal vẫn ở đây, chỉ chỗ hiện đổi. */}
-                    {inline ? (takeawaySlot && createPortal(takeawayCard, takeawaySlot)) : takeawayCard}
+                        Luôn nằm đầu lưới bàn (cả tablet lẫn mobile). */}
+                    {takeawayCard}
 
                     {/* 1 SortableContext cho cả bàn cố định lẫn bàn tạm (adHoc) — nhân viên
                         (!canEdit) hoặc bàn tạm vẫn nằm trong context này nhưng không có

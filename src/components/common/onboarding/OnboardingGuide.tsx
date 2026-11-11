@@ -62,8 +62,9 @@ export default function OnboardingGuide({ silent = false }: { silent?: boolean }
     if (current?.hideBar) return null
     const label = current?.label ?? ''
     return (
-        <div className={`${bar} bg-primary/15 text-text`}>
+        <div className={`${bar} relative bg-primary/15 text-text`}>
             <span className="shrink-0 grid place-items-center size-6 rounded-full bg-primary/20 text-primary"><Lightbulb size={14} /></span>
+            <span className="shrink-0 text-[11px] font-black tabular-nums text-primary">{idx + 1}/{STEPS.length}</span>
             {/* Chữ gõ dần (Typewriter); bản ẩn cùng nội dung giữ chỗ để dải không đổi chiều cao lúc đang gõ. */}
             <span className="flex-1 relative uppercase tracking-wider text-[12px] font-black">
                 <span className="invisible line-clamp-2">{label}</span>
@@ -75,6 +76,8 @@ export default function OnboardingGuide({ silent = false }: { silent?: boolean }
                     Đăng ký
                 </Link>
             )}
+            {/* Thanh tiến độ mảnh dưới đáy dải: khách thấy còn bao xa. */}
+            <span className="absolute bottom-0 left-0 h-0.5 bg-primary transition-all duration-500" style={{ width: `${(idx / STEPS.length) * 100}%` }} />
         </div>
     )
 }
