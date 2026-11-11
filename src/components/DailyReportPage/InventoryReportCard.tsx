@@ -1,4 +1,4 @@
-import { Fragment, memo, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Check, ChevronDown, ChevronUp, ClipboardList, Info } from 'lucide-react'
 import { ingredientLabel, getIngredientUnit, lookupByLabel, normalizeIngredientCategory, INGREDIENT_CATEGORIES } from '../../utils/ingredients'
 import { computeBalance, computeHaoHut, r1, type UsageMap, type buildIngredientToProduct, type calculateConsumptionBreakdown } from '../../utils/inventory'
@@ -54,8 +54,6 @@ interface Props {
     // onHintSeen báo guide khi khách bấm xem 2 chỗ đầu (xem onboarding/steps.ts).
     hintStep?: HintStep | null
     onHintSeen?: (step: 'used' | 'theory') => void
-    // Báo số Lý thuyết hiện tại của dòng đang được gợi ý để guide ghi "bạn sẽ còn Xg".
-    onHintValue?: (lyThuyet: number) => void
 }
 export type HintStep = 'used' | 'theory' | 'count'
 
@@ -105,7 +103,7 @@ export default function InventoryReportCard({
     // Nguyên liệu đang được onboarding phase 4 gợi ý bấm vào — xem DailyReportPage.tsx
     // (hintCoffeeIngredient) + onboarding/steps.ts.
     hintIngredient = null,
-    hintStep = null, onHintSeen, onHintValue,
+    hintStep = null, onHintSeen,
 }: Props) {
     // Sort by status priority so staff sees "Chưa nhập" first, then anomalies,
     // then matched rows at the bottom. Tie-break by display name for stability.
@@ -189,6 +187,15 @@ export default function InventoryReportCard({
         return { totalLossValue: loss, countedCount: counted, uncounted, losses: losses.sort((a, b) => b.value - a.value) }
     }, [sortedList, inventoryInputs, restockInputs, openingInputs, openingStock, usedMap, ingredientUnits])
 
+    // Guide: lưu xong NVL đang gợi ý (hintIngredient về null) → dòng đó tự thu (InventoryRow), cuộn xuống Tổng hao hụt
+    // + thẻ Nghi vấn bán thiếu ngay dưới — phần "kết luận" của bước Kiểm kê.
+    const totalRef = useRef<HTMLDivElement>(null)
+    const prevHintRef = useRef(hintIngredient)
+    useEffect(() => {
+        if (prevHintRef.current && !hintIngredient) setTimeout(() => totalRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 700) // thu dòng → ngừng 1 nhịp → mới cuộn
+        prevHintRef.current = hintIngredient
+    }, [hintIngredient])
+
     if (isLoading) {
         return (
             <div className="flex flex-col gap-3 py-4 animate-pulse">
@@ -227,13 +234,12 @@ export default function InventoryReportCard({
             hint={ing.ingredient === hintIngredient}
             hintStep={ing.ingredient === hintIngredient ? hintStep : null}
             onHintSeen={onHintSeen}
-            onHintValue={onHintValue}
         />
     )
 
     // Footer tổng — tiền hao hụt cộng dồn, chỉ hiện khi đã kiểm ít nhất 1 NVL.
     const totalRow = countedCount > 0 && (
-        <div>
+        <div ref={totalRef} className="scroll-mt-4">
             <div className="flex items-center justify-between">
                 <span className="text-[14px] font-black text-text uppercase">Tổng hao hụt</span>
                 <span className={`text-[14px] font-black tabular-nums ${totalLossValue > 0 ? 'text-danger' : 'text-text-secondary'}`}>
@@ -325,7 +331,6 @@ interface RowProps {
     hint: boolean
     hintStep: HintStep | null
     onHintSeen?: (step: 'used' | 'theory') => void
-    onHintValue?: (lyThuyet: number) => void
 }
 
 const IngredientRow = memo(function IngredientRow({
@@ -333,7 +338,7 @@ const IngredientRow = memo(function IngredientRow({
     warehouseAvailable, used, made, periodMade, breakdown, period, openingNote, productRef,
     isSubmitting, lockWarehouseInputs, readOnly,
     onOpeningChange, onRestockChange, onInventoryChange, onFieldBlur,
-    hint, hintStep, onHintSeen, onHintValue,
+    hint, hintStep, onHintSeen,
 }: RowProps) {
     // Whole-row collapse: default closed so staff can scroll the list of NVL fast and
     // open just the ones they're counting. Status badge in the header tells them
@@ -341,7 +346,8 @@ const IngredientRow = memo(function IngredientRow({
     const [open, setOpen] = useState(hint)
     // Onboarding: dòng đang được gợi ý tự mở sẵn — khỏi 1 lần bấm đi tìm ô Cuối kỳ.
     const [seenHint, setSeenHint] = useState(hint)
-    if (hint !== seenHint) { setSeenHint(hint); if (hint) setOpen(true) }
+    // Hết gợi ý (đã lưu Cuối kỳ) → tự thu lại, nhường chỗ cho Tổng hao hụt bên dưới.
+    if (hint !== seenHint) { setSeenHint(hint); setOpen(hint) }
     // Sub-expand: per-recipe consumption breakdown inside the expanded row.
     const [expanded, setExpanded] = useState(false)
     // Inline help bubble for the Lý thuyết formula — tap the (i) to toggle.
@@ -377,7 +383,6 @@ const IngredientRow = memo(function IngredientRow({
     const { openingNum, usedNum, lyThuyet, haoHut } = p
         ? computeBalance({ inventoryValue, restockValue: restockTotal, openingValue: p.counted, used: r1(used) + p.used })
         : computeBalance({ inventoryValue, restockValue, openingValue, openingFallback, used })
-    useEffect(() => { if (hint) onHintValue?.(lyThuyet) }, [hint, lyThuyet, onHintValue])
     // Thành phẩm / topping: mẻ làm ra chính là "Nhập thêm" của nó (không qua kho tổng), Sử dụng chỉ còn phần bán — Lý thuyết không đổi (usedNum là ròng). Chỉ là cách hiện, không ghi vào ô Nhập thêm đã lưu.
     const madeNum = r1(made)
     const madeAll = p ? r1(madeNum + periodMade) : madeNum   // kỳ nhiều ngày: cộng dồn cả các mẻ của kỳ
@@ -557,7 +562,7 @@ const IngredientRow = memo(function IngredientRow({
                         value={lyThuyet}
                         unit={unit}
                         disabled
-                        onBoxClick={() => { setShowLyThuyetInfo(s => !s); if (hint) onHintSeen?.('theory') }}
+                        onBoxClick={() => { setShowLyThuyetInfo(s => !s); if (hint) { onHintSeen?.('theory'); setExpanded(false) } }} // guide: sang Lý thuyết thì thu bảng Sử dụng cho gọn
                         hint={hintTheory}
                     />
                     <ColumnInput
@@ -661,6 +666,8 @@ function ColumnInput({ label, value, unit, disabled, locked, onChange, onBlur, o
                     value={value}
                     onChange={e => onChange?.(e.target.value)}
                     onBlur={onBlur}
+                    // Guide khách dùng thử: số đã móm sẵn vào ô đang sáng → bấm vào là xác nhận (blur = lưu).
+                    onFocus={hint === true && value !== '' && onBlur ? e => e.currentTarget.blur() : undefined}
                     onKeyDown={onBlur ? e => { if (e.key === 'Enter') e.currentTarget.blur() } : undefined} // Enter/"Đi" không mất focus → tự blur để kích hoạt lưu
                     disabled={disabled}
                     style={{ width: `${Math.max(String(value ?? '').length, 1)}ch` }}

@@ -55,6 +55,7 @@ export default function HistoryHeader({
                 <button
                     onClick={onBack}
                     className={ICON_BTN}
+                    aria-label="Trang trước"
                 >
                     <ArrowLeft size={20} strokeWidth={2.5} />
                 </button>
@@ -70,6 +71,7 @@ export default function HistoryHeader({
 
                 <button
                     onClick={onForward}
+                    aria-label="Trang tiếp"
                     className={`${ICON_BTN} ${onboardingHintClass(hintForward)}`}
                 >
                     <ArrowRight size={20} strokeWidth={2.5} />

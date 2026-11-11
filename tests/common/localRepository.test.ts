@@ -117,12 +117,12 @@ describe('initializeGuestFromGlobal (kho/quầy split seeding)', () => {
         expect(report.remaining).toBe(318)
     })
 
-    it('produces no shift closing when every ingredient has zero counter_stock', () => {
+    it('quầy = 0 vẫn seed dòng phiếu hôm qua (Kiểm kê hiện Đầu kỳ 0 thay vì trống)', () => {
         repo.initializeGuestFromGlobal({
             stocks: [{ ingredient: 'duong', current_stock: 500, warehouse_stock: 500, counter_stock: 0 }]
         })
         const addr = repo.getDemoAddress().id
-        expect(repo.fetchAllLocalShiftClosings(addr)).toHaveLength(0)
+        expect(repo.fetchAllLocalShiftClosings(addr)[0].inventory_report).toEqual([{ ingredient: 'duong', opening: 0, restock: 0, remaining: 0 }])
         expect(repo.fetchLocalIngredientStocks(addr).find(s => s.ingredient === 'duong').warehouse_stock).toBe(500)
     })
 })

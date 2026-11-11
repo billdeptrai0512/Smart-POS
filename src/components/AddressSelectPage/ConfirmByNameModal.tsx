@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { Dialog, ModalHeader, ModalActions } from '../common/ModalShell'
 import { errorMessage } from '../../utils/errorMessage'
+import FloatingLabelInput from '../common/FloatingLabelInput'
 
 // Modal "gõ lại tên để xác nhận" dùng chung cho mọi hard-delete không thể hoàn tác
 // (xoá địa chỉ, xoá dữ liệu bán hàng) — trước đây là 2 file gần như y hệt nhau.
@@ -52,14 +53,15 @@ export default function ConfirmByNameModal({
                 {description}
                 {warning}
                 <div>
-                    <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Gõ lại tên địa chỉ để xác nhận</label>
-                    <input
-                        type="text"
+                    <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-3">Gõ lại tên địa chỉ để xác nhận</label>
+                    {/* Tên đích làm label nổi: gõ vào vẫn thấy tên nằm trên viền để đối chiếu (placeholder thì biến mất). */}
+                    <FloatingLabelInput
+                        id="confirm-by-name"
+                        label={targetName}
                         value={confirmName}
                         onChange={e => setConfirmName(e.target.value)}
                         disabled={busy}
-                        placeholder={targetName}
-                        className="w-full px-4 py-3 rounded-[12px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-danger/40 focus:border-danger disabled:opacity-50"
+                        className="focus:ring-danger/40 focus:border-danger disabled:opacity-50"
                         autoFocus
                     />
                 </div>

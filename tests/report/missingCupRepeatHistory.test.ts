@@ -70,4 +70,46 @@ describe('buildDayCandidateSets + attachRepeatHistory', () => {
         expect(out.map(c => c.productId)).toEqual(['p2', 'p1'])
         expect(out[0].repeatDays).toBe(2)
     })
+
+    it('cùng số ngày lặp → % khớp cao hơn lên trước (không xét số nguyên liệu khớp)', () => {
+        const today = [
+            { productId: 'nhieuNVL', matches: [1, 2, 3, 4], confidence: 0.55 },
+            { productId: 'khop', matches: [1, 2], confidence: 1 },
+        ]
+        expect(attachRepeatHistory(today, []).map(c => c.productId)).toEqual(['khop', 'nhieuNVL'])
+    })
+})
+
+describe('findMissingCupCandidates — chỉ đích danh món + số ly', () => {
+    const menu = [
+        { id: 'sua', name: 'Cà phê sữa', price: 16000, is_active: true },
+        { id: 'mat', name: 'Matcha latte', price: 21000, is_active: true },
+        { id: 'tra', name: 'Trà đá', price: 0, is_active: true },
+    ]
+    const rec = [
+        { product_id: 'sua', ingredient: 'ca_phe', amount: 17 }, { product_id: 'sua', ingredient: 'sua_dac', amount: 36 },
+        { product_id: 'sua', ingredient: 'cup', amount: 1 }, { product_id: 'sua', ingredient: 'lid', amount: 1 },
+        { product_id: 'mat', ingredient: 'matcha', amount: 15 }, { product_id: 'mat', ingredient: 'sua_tuoi', amount: 60 },
+        { product_id: 'mat', ingredient: 'cup', amount: 1 }, { product_id: 'mat', ingredient: 'lid', amount: 1 },
+        { product_id: 'tra', ingredient: 'cup', amount: 1 }, { product_id: 'tra', ingredient: 'lid', amount: 1 },
+    ]
+    const ings = [
+        { ingredient: 'ca_phe', unit_cost: 500 }, { ingredient: 'sua_dac', unit_cost: 50 }, { ingredient: 'matcha', unit_cost: 1000 },
+        { ingredient: 'sua_tuoi', unit_cost: 35 }, { ingredient: 'cup', unit_cost: 600 }, { ingredient: 'lid', unit_cost: 400 },
+    ]
+    const find = (haoHutByIngredient: Record<string, number>) => findMissingCupCandidates({ ingredientsList: ings, haoHutByIngredient, recipes: rec, products: menu })
+
+    it('hụt đúng 2 ly cà phê sữa → chỉ cà phê sữa, 2 ly, ~100%; matcha (chỉ chung ly/nắp) không bị nghi', () => {
+        const out = find({ ca_phe: -34, sua_dac: -72, cup: -2, lid: -2, matcha: 0, sua_tuoi: 0 })
+        expect(out.map(c => c.productId)).toEqual(['sua'])
+        expect(out[0].estimatedCups).toBe(2)
+        expect(out[0].confidence).toBeGreaterThan(0.95)
+        expect(out[0].estimatedRevenue).toBe(32000)
+    })
+    it('chỉ hụt 1 ly + 1 nắp → không nghi món nào (món có NVL riêng không hụt bị trừ điểm)', () => {
+        expect(find({ ca_phe: 0, sua_dac: 0, cup: -1, lid: -1, matcha: 0, sua_tuoi: 0 })).toEqual([])
+    })
+    it('hụt rải rác nhỏ ở mọi NVL → không đủ 50% để nghi', () => {
+        expect(find({ ca_phe: -5, sua_dac: -3, cup: -1, lid: 0, matcha: -2, sua_tuoi: -10 })).toEqual([])
+    })
 })

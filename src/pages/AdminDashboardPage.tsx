@@ -271,15 +271,10 @@ function OnboardingFunnelCard({ byRange, visits }: { byRange: Record<string, Gue
 // Thanh % thay cho chỉ đọc số — nhìn 1 phát ra chỗ thắt cổ chai (thanh nào
 // ngắn hẳn so với thanh ngay trên nó) thay vì phải so từng dòng "N (X%)"
 // trong đầu. Cùng pattern thanh progress ở ChangeCategorySheet.tsx.
-// Nhãn mốc do RPC trả (xem 20261018_guest_onboarding_funnel_five_steps.sql) — đổi chữ ở client
+// Nhãn mốc do RPC trả (xem 20261045_guest_onboarding_funnel_day_story.sql) — đổi chữ ở client
 // thay vì viết lại cả hàm SQL chỉ để đổi nhãn hiển thị.
-// Mốc 3/4 đảo nhãn: SQL gắn nhãn theo vị trí (3 = Kết ca, 4 = Tồn kho) nhưng guide đi Tồn kho trước Kết ca
-// (steps.ts) — số cũ của khách trước khi đổi thứ tự không đổi theo.
 const STAGE_RENAME: Record<string, string> = {
-    'Cài công thức (hết guide)': 'Nhập định lượng',
     'Vào dùng thử': 'Bấm dùng thử miễn phí',
-    'Kết ca đếm tiền': 'Kiểm kê tồn kho',
-    'Kiểm kê tồn kho': 'Kết ca đếm tiền',
 }
 const stageLabel = (raw: string) => {
     const name = raw.replace(/^Xong: /, '')

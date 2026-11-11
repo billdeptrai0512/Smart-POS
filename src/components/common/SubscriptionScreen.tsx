@@ -27,6 +27,7 @@ export default function SubscriptionScreen({ backTo = '/addresses', preselectAdd
             <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex items-center px-4 gap-3">
                 <button
                     onClick={() => navigate(backTo)}
+                    aria-label="Quay lại"
                     className={ICON_BTN}
                 >
                     <ArrowLeft size={20} strokeWidth={2.5} />

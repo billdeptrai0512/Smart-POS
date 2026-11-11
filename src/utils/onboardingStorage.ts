@@ -1,34 +1,27 @@
-// Shared between OnboardingGuide.tsx (reads it), MenuGrid.tsx + HistoryPage.tsx (write
-// step-1 progress into it from /pos and /history respectively), and localRepository.ts (clears
-// it on a fresh guest init) — bump ALL call sites together if the storage shape changes, or one
-// side silently reads/resets/writes the wrong key or shape.
+// Tiến độ guide khách dùng thử (onboarding/steps.ts đọc qua OnboardingGuide.tsx). Mỗi trang ghi phần
+// của mình; localRepository.ts xoá khi vào dùng thử mới — đổi shape thì tăng prefix để bản cũ bị bỏ.
 import { readJSON, writeJSON } from './storage'
 
-export const ONBOARDING_STORAGE_PREFIX = 'onboarding_v4_'
+export const ONBOARDING_STORAGE_PREFIX = 'onboarding_v5_'
 
-// orderProgress tracks bước 1 "Tạo đơn": `sent` = số đơn đã gửi thật (0..2) + `picked` = số món đã
-// chọn đủ của đơn 2 (xem useOrderOnboardingProgress.ts); viewedHistory là mốc chuyển sang Nhật ký.
-// journalProgress tracks phase 2 "Nhật ký"'s 3 tab-visit flags on /history (Thu nhập/Chi
-// phí/Báo cáo — xem HistoryTabsBar.tsx), viewedIncome tick ngay vì đó là tab mặc định —
-// written from HistoryPage.tsx (see onboarding/steps.ts).
-// cashFlowProgress (phase 3) + inventoryProgress (phase 4) tracked from DailyReportPage.tsx —
-// xem onboarding/steps.ts. Cờ chỉ set true, không bao giờ revert, để tránh
-// guide tái xuất hiện khi dữ liệu hôm sau reset (actual_cash/inventory_report chỉ có nghĩa
-// "hôm nay").
-// recipeProgress (phase 5): viewedMenu/viewedRecipes ghi từ RecipeMenuPage.tsx (vào tab Menu/Công
-// thức, chỉ tính sau khi xong Tồn kho); filledAmount (mọi dòng định lượng > 0 — ly/nắp/đường đã điền
-// sẵn lúc vào dùng thử, xem localRepository.ts, nên khách chỉ còn nhập cà phê) + addedExtra ghi
-// từ RecipeIngredientPage.tsx cho công thức "Cà phê đen" — xem onboarding/steps.ts.
+// Cờ chỉ set true, không bao giờ revert, để guide khỏi tái xuất hiện khi dữ liệu hôm sau reset
+// (actual_cash/inventory_report chỉ có nghĩa "hôm nay"). Riêng `ready`/số đếm là trạng thái sống.
 export const DEFAULT_ONBOARDING_STATE = {
-    // ready: giỏ đang đủ món của đơn hiện tại (không latch — giỏ đổi thì tắt) → guide nhắc bấm Tạo đơn.
-    orderProgress: { sent: 0, picked: 0, viewedHistory: false, ready: false },
-    journalProgress: { viewedIncome: false, viewedExpense: false, viewedReport: false, viewedProfit: false },
-    cashFlowProgress: { cash: false, transfer: false },
-    // usedOpened/theoryOpened: đã bấm xem ô Sử dụng / Lý thuyết của cà phê (2 câu hỏi trước khi nhập Cuối kỳ).
-    // theory: số Lý thuyết hiện tại của cà phê (g) — guide đọc ra "bạn sẽ còn Xg"; 0 = chưa có.
-    // typed: đã gõ tồn cà phê nhưng chưa bấm Lưu (không latch) → guide nhắc bấm Lưu.
-    inventoryProgress: { usedOpened: false, theoryOpened: false, theory: 0, coffee: false, typed: false },
-    recipeProgress: { viewedMenu: false, viewedRecipes: false, filledAmount: false, addedExtra: false },
+    // Bước 1 "Chuẩn bị" — PrepPinBar.tsx: opened = đã mở dải; taken/total = số món đã lấy / cần lấy; done chốt khi lấy đủ.
+    prepProgress: { opened: false, taken: 0, total: 0, done: false },
+    // Bước 2 "Bán hàng" — useOrderOnboardingProgress.ts: sent = số đơn đã gửi; ready = giỏ đang có món (không latch).
+    // viewedHistory: đã vào Nhật ký sau khi bán (HistoryPage.tsx).
+    orderProgress: { sent: 0, ready: false, viewedHistory: false },
+    // Bước 3 "Nhật ký" — HistoryPage.tsx: viewedReport = bấm mũi tên "tiến" sang Báo cáo.
+    journalProgress: { viewedIncome: false, viewedExpense: false, viewedReport: false },
+    // Bước 4 "Kết ca" — DailyReportPage.tsx. expectCash/expectTransfer = số guide đọc ra để két lệch 20k so với doanh thu.
+    cashFlowProgress: { cash: false, transfer: false, expectCash: 0, expectTransfer: 0 },
+    // Bước 5 "Kiểm kê" — tab Kiểm kê của /inventory. usedOpened/theoryOpened: đã bấm xem ô Sử dụng / Lý thuyết
+    // của cà phê; suggest: số cà phê móm sẵn vào ô Cuối kỳ (Lý thuyết − phần ly pha không bill).
+    inventoryProgress: { usedOpened: false, theoryOpened: false, coffee: false, suggest: 0 },
+    // Bước 6 "Bổ sung tồn kho" — WarehousePrepNotice.tsx: bought = đã nhập kho mẫu 1 món (app nhập nốt phần còn lại).
+    // viewedNet: đã quay về Báo cáo xem Thực nhận cuối ngày sau khi chi tiền nhập kho (DailyReportPage.tsx).
+    restockProgress: { bought: false, viewedNet: false },
 }
 
 export type OnboardingState = typeof DEFAULT_ONBOARDING_STATE
@@ -39,20 +32,11 @@ export type OnboardingKey = keyof OnboardingState
 // phải tự báo.
 export const ONBOARDING_EVENT = 'onboarding-change'
 
-// Phase 5 "Công thức" is done once both sub-goals are ticked — shared by onboarding/steps.ts and
-// every page (phase 7) that gates a hint on "has phase 5 finished".
-export function isRecipeProgressDone(recipeProgress: Pick<OnboardingState['recipeProgress'], 'filledAmount' | 'addedExtra'>) {
-    return recipeProgress.filledAmount && recipeProgress.addedExtra
-}
-
-// Phase 3 "Kết ca đếm tiền" — shared by DailyReportPage.tsx (which
-// needs the same "is this phase done" check to gate phase 4's hint sequence).
 export function isCashFlowProgressDone(cashFlowProgress: { cash: boolean; transfer: boolean }) {
     return cashFlowProgress.cash && cashFlowProgress.transfer
 }
 
-// Phase 4 "Kiểm kê tồn kho" — shared by DailyReportPage.tsx (same
-// reason as isCashFlowProgressDone above). Chỉ đếm cà phê: ly/nắp là cùng một thao tác.
+// Chỉ đếm cà phê: ly/nắp là cùng một thao tác.
 export function isInventoryProgressDone(inventoryProgress: Pick<OnboardingState['inventoryProgress'], 'coffee'>) {
     return inventoryProgress.coffee
 }

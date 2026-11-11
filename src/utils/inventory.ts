@@ -633,103 +633,75 @@ export function computeBalance({ inventoryValue, restockValue, openingValue, ope
 export const computeHaoHut = (args: Parameters<typeof computeBalance>[0]) => computeBalance(args).haoHut
 
 /**
- * PROTOTYPE — dò nghi vấn "pha bán nhưng không bấm bill".
+ * PROTOTYPE — dò nghi vấn "pha bán nhưng không bấm bill": chỉ ra MÓN NÀO, THIẾU MẤY LY.
  *
- * Ý tưởng: hao hụt của MỘT nguyên liệu đơn lẻ hầu như luôn chỉ là nhiễu (rơi vãi,
- * cân/đong tay không chính xác) — không đủ để kết luận gì. Nhưng nếu hao hụt của
- * NHIỀU nguyên liệu trong CÙNG 1 công thức đều quy đổi ra cùng một số ly N (trong
- * dung sai), khả năng trùng hợp ngẫu nhiên giảm mạnh theo số nguyên liệu đồng thuận
- * → tín hiệu mạnh hơn nhiều so với label "Tương đương N ly" hiện có (vốn chỉ nhìn
- * 1 nguyên liệu "dominant" mỗi dòng, không cross-check).
+ * Ý tưởng: coi hao hụt hôm nay là 1 vector (mỗi nguyên liệu hụt bao nhiêu, quy ra tiền). Giả thuyết
+ * "pha N ly món P không bấm bill" dự đoán đúng N × công thức P. Điểm của giả thuyết =
+ *   phần giá trị hao hụt nó GIẢI THÍCH được (Σ min(hụt, N×định lượng) × giá vốn)
+ *   − phần nó dự đoán SAI (nguyên liệu lẽ ra phải hụt N×định lượng mà thực tế không hụt, ngoài dung sai).
+ * confidence = điểm / tổng giá trị hao hụt → "khớp X% hao hụt". Nguyên liệu dùng chung mọi món (ly, nắp)
+ * không còn tự làm món nào cũng thành nghi vấn: món có cà phê mà cà phê không hụt thì bị trừ điểm.
  *
- * ⚠️ Đây là gợi ý nghi vấn (heuristic), KHÔNG phải kết luận chắc chắn — nhiều
- * nguyên liệu trùng tỉ lệ vẫn có thể do nguyên nhân khác (công thức sai định lượng
- * chung, đổ nguyên liệu lẫn giữa các món). Dùng để soi lại chỗ đáng ngờ, không dùng
- * để quy kết nhân viên.
+ * ⚠️ Gợi ý để soi lại, KHÔNG phải kết luận — hụt đúng tỉ lệ 1 công thức vẫn có thể do định lượng sai, đổ nhầm.
  *
- * @param {Array} ingredientsList - inventory.ingredientsList ({ ingredient, unit_cost })
- * @param {Object} haoHutByIngredient - ingredient → hao hụt hôm nay (từ computeHaoHut; âm = hụt)
- * @param {Array} recipes - toàn bộ recipes ({ product_id, ingredient, amount })
- * @param {Array} products - toàn bộ products ({ id, name, price, is_active })
- * @param {Object} [noiseByIngredient] - ingredient → độ lệch chuẩn hao hụt lịch sử (từ
- *   computeIngredientNoise). Có thì dùng dung sai THÍCH NGHI theo độ ồn thật của từng
- *   nguyên liệu; không có (hoặc chưa đủ ngày dữ liệu) thì fallback về ±30%/±0.5 cứng.
- * @returns {Array<{ productId, productName, estimatedCups, confidence, estimatedRevenue, ingredientValue, matches }>}
- *   sorted theo (số nguyên liệu khớp desc, confidence desc). estimatedRevenue = N ×
- *   giá bán; ingredientValue = giá trị nguyên liệu hụt tương ứng (Σ|haoHut|×unit_cost
- *   trên các nguyên liệu đã đồng thuận). matches = các dòng nguyên liệu đã đồng thuận
- *   N ly ({ ingredient, haoHut, amount, ratio }).
+ * @param noiseByIngredient ingredient → độ lệch chuẩn hao hụt lịch sử (computeIngredientNoise): dung sai cho phần
+ *   "dự đoán sai" = 2× độ ồn; chưa có lịch sử thì 30% định lượng 1 ly.
+ * @returns ứng viên confidence ≥ 50%, ≥ 2 nguyên liệu khớp, sort confidence giảm dần — phần tử đầu là nghi vấn
+ *   chính. estimatedRevenue = N × giá bán; ingredientValue = giá trị hụt được giải thích; matches = nguyên liệu khớp.
  */
 export function findMissingCupCandidates({ ingredientsList = [], haoHutByIngredient = {}, recipes = [], products = [], noiseByIngredient = {} }: { ingredientsList?: Row[]; haoHutByIngredient?: Record<string, number | null>; recipes?: RecipeRow[]; products?: Row[] | null; noiseByIngredient?: UsageMap }) {
-    const unitCostByIngredient: UsageMap = {}
-    for (const ing of ingredientsList) unitCostByIngredient[ing.ingredient] = Number(ing.unit_cost) || 0
-
     const recipeByProduct: Record<string, { ingredient: string; amount: number }[]> = {}
+    const maxAmount: UsageMap = {}
     for (const r of recipes) {
         if (!r.amount || r.amount <= 0) continue
         ;(recipeByProduct[r.product_id] ??= []).push({ ingredient: r.ingredient, amount: r.amount })
+        maxAmount[r.ingredient] = Math.max(maxAmount[r.ingredient] || 0, r.amount)
     }
+    // Trọng số = giá vốn; NVL chưa có giá thì quy "1 ly" = 1 đơn vị để vẫn được tính.
+    const weight: UsageMap = {}
+    for (const ing of ingredientsList) weight[ing.ingredient] = Number(ing.unit_cost) || (maxAmount[ing.ingredient] ? 1 / maxAmount[ing.ingredient] : 0)
+    const lossOf = (ingredient: string) => {
+        const h = lookupByLabel<number | null>(ingredient, haoHutByIngredient, null)
+        return h == null ? null : Math.max(0, -h)
+    }
+    let total = 0
+    for (const ing of ingredientsList) total += (lossOf(ing.ingredient) || 0) * (weight[ing.ingredient] || 0)
+    if (total <= 0) return []
 
-    // Index 1 lần: vòng dưới chạy mỗi product-có-công-thức, và cả hàm này chạy lại
-    // mỗi phím gõ + 14 lần trong buildDayCandidateSets — .find() mỗi dòng là quét lại
-    // cả bảng products mỗi lần.
     const productById = new Map((products || []).map(p => [p.id, p]))
     const candidates: MissingCupCandidate[] = []
-    for (const [productId, recipeRows] of Object.entries(recipeByProduct)) {
+    for (const [productId, rows] of Object.entries(recipeByProduct)) {
         const product = productById.get(productId)
-        // Giá 0đ (món test/chưa cấu hình giá, vd "Trà đá"/"Kem muối" mặc định) → không
-        // có chuyện "bán thiếu ghi nhận" vì không tốn tiền để bán — loại khỏi nghi vấn.
+        // Giá 0đ (món test/chưa cấu hình giá) → không có chuyện "bán thiếu ghi nhận".
         if (!product?.is_active || !(Number(product.price) > 0)) continue
-
-        // Quy đổi mỗi nguyên liệu trong công thức ra "số ly ngụ ý" nếu nó đang hụt.
-        // Nguyên liệu Khớp/Dư → ratio 0 (phá vỡ đồng thuận, kéo confidence xuống).
-        const ratios: { ingredient: string; amount: number; haoHut: number; ratio: number }[] = []
-        for (const { ingredient, amount } of recipeRows) {
-            const haoHut = lookupByLabel<number | null>(ingredient, haoHutByIngredient, null)
-            if (haoHut == null) continue // chưa nhập Cuối kỳ cho nguyên liệu này hôm nay
-            const ratio = haoHut < 0 ? Math.abs(haoHut) / amount : 0
-            ratios.push({ ingredient, amount, haoHut, ratio })
-        }
-        if (ratios.length < 2) continue // 1 nguyên liệu không cross-check được — bỏ qua
-
-        // Nhóm theo số ly làm tròn gần nhất, lấy nhóm đông nhất làm ứng viên N.
-        // Dung sai THÍCH NGHI theo độ ồn thật của từng nguyên liệu (2× độ lệch chuẩn
-        // hao hụt lịch sử, quy đổi ra ly — ~95% dao động bình thường nằm trong khoảng
-        // này) — matcha 1.5g/ly cần chặt hơn nhiều so với sữa tươi 80ml/ly, dùng chung
-        // 1 con số % là sai. Chưa đủ ngày dữ liệu (ingredient mới, ít lịch sử) → fallback
-        // ±30% (tối thiểu ±0.5 ly).
-        const groups: Record<number, typeof ratios> = {}
-        for (const r of ratios) {
-            const n = Math.round(r.ratio)
-            if (n < 1) continue
+        const known = rows.map(r => {
             const noise = lookupByLabel<number | null>(r.ingredient, noiseByIngredient, null)
-            const tol = noise != null ? Math.max(0.15, (noise / r.amount) * 2) : Math.max(0.5, n * 0.3)
-            if (Math.abs(r.ratio - n) > tol) continue
-            ;(groups[n] ??= []).push(r)
-        }
-        const best = Object.entries(groups).sort((a, b) => b[1].length - a[1].length)[0]
-        if (!best || best[1].length < 2) continue
+            return { ...r, loss: lossOf(r.ingredient), w: weight[r.ingredient] || 0, tol: noise != null ? 2 * noise : 0.3 * r.amount }
+        }).filter(r => r.loss != null) as { ingredient: string; amount: number; loss: number; w: number; tol: number }[]
+        if (known.length < 2) continue // chưa đếm đủ để cross-check
 
-        const [bestN, bestMatches] = best
-        const confidence = bestMatches.length / ratios.length
-        if (confidence < 0.6) continue // đa số nguyên liệu công thức phải đồng thuận
+        const scoreAt = (n: number) => known.reduce((s, r) =>
+            s + Math.min(r.loss, n * r.amount) * r.w - Math.max(0, n * r.amount - r.loss - r.tol) * r.w, 0)
+        const maxN = Math.min(20, Math.ceil(Math.max(...known.map(r => r.loss / r.amount))))
+        let bestN = 0, best = 0
+        for (let n = 1; n <= maxN; n++) { const s = scoreAt(n); if (s > best) { best = s; bestN = n } }
+        if (!bestN) continue
 
-        const ingredientValue = bestMatches.reduce(
-            (sum, m) => sum + Math.abs(m.haoHut) * (unitCostByIngredient[m.ingredient] || 0), 0
-        )
-
+        const matches = known.filter(r => r.loss >= 0.5 * bestN * r.amount)
+            .map(r => ({ ingredient: r.ingredient, haoHut: -r.loss, amount: r.amount, ratio: r.loss / r.amount }))
+        const confidence = best / total
+        if (matches.length < 2 || confidence < 0.5) continue
         candidates.push({
             productId,
             productName: product.name,
-            estimatedCups: Number(bestN),
+            estimatedCups: bestN,
             confidence,
-            estimatedRevenue: Number(bestN) * (Number(product.price) || 0),
-            ingredientValue,
-            matches: bestMatches,
+            estimatedRevenue: bestN * (Number(product.price) || 0),
+            ingredientValue: known.reduce((s, r) => s + Math.min(r.loss, bestN * r.amount) * r.w, 0),
+            matches,
         })
     }
-
-    return candidates.sort((a, b) => b.matches.length - a.matches.length || b.confidence - a.confidence)
+    return candidates.sort((a, b) => b.confidence - a.confidence)
 }
 
 // Dựng chuỗi hao hụt THEO TỪNG NGÀY từ lịch sử shift_closings (cùng công thức audit
@@ -833,7 +805,7 @@ export function buildDayCandidateSets({ ingredientsList, historicalDailyHaoHut =
  * @param {Array<Set<string>>} dayCandidateSets - từ buildDayCandidateSets()
  * @returns candidates hôm nay, thêm field `repeatDays` (số ngày gần đây món này CŨNG
  *   là candidate) + `repeatWindowDays` (tổng số ngày có dữ liệu để so), sort theo
- *   repeatDays trước tiên — lặp lại nhiều ngày mới đáng tin, không phải trùng hợp 1 lần.
+ *   repeatDays trước tiên — lặp lại nhiều ngày mới đáng tin, không phải trùng hợp 1 lần — rồi % hao hụt khớp.
  */
 export function attachRepeatHistory<C extends { productId: string; matches: unknown[]; confidence: number }>(todayCandidates: C[], dayCandidateSets: Set<string>[] = []) {
     if (!todayCandidates.length) return []
@@ -843,5 +815,5 @@ export function attachRepeatHistory<C extends { productId: string; matches: unkn
             repeatDays: dayCandidateSets.filter(set => set.has(c.productId)).length,
             repeatWindowDays: dayCandidateSets.length,
         }))
-        .sort((a, b) => b.repeatDays - a.repeatDays || b.matches.length - a.matches.length || b.confidence - a.confidence)
+        .sort((a, b) => b.repeatDays - a.repeatDays || b.confidence - a.confidence)
 }

@@ -10,6 +10,7 @@ import TimeInput from '../common/TimeInput'
 import { BottomSheet } from '../common/ModalShell'
 import SegmentedControl from '../common/SegmentedControl'
 import type { Discount } from '../../types/domain'
+import { onboardingHintClass } from '../../utils/onboardingHint'
 
 export type PayMethod = 'cash' | 'transfer'
 export type CashPhase = 'in_shift' | 'post_close'
@@ -54,6 +55,8 @@ interface Props {
     mode?: 'create' | 'edit'
     initial?: RestockInitial | null
     initialQty?: number | null
+    /** Guide khách dùng thử: móm sẵn Tiền hàng (Đã trả tự = Cần trả), không bật bàn phím, nút Xác nhận sáng → 1 chạm. */
+    demoSubtotal?: number | null
 }
 
 export default function RestockModal({
@@ -71,6 +74,7 @@ export default function RestockModal({
     // Gợi ý số lượng cần mua (vd needPacks từ card "Chuẩn bị ngày mai") — mớm sẵn để
     // đỡ gõ tay khi user mua đúng số dự báo (đa số trường hợp). Chỉ áp dụng create mode.
     initialQty = null,
+    demoSubtotal = null,
 }: Props) {
     const today = dateStringVN()
     const hasPack = !!(packSize && packUnit)
@@ -94,10 +98,10 @@ export default function RestockModal({
     // Số lượng đã mớm sẵn (từ card "Chuẩn bị ngày mai") → khỏi cần sửa số lượng nữa,
     // nhảy thẳng focus qua Tổng tiền để gõ tiếp.
     useEffect(() => {
-        if (initialQty != null) subtotalInputRef.current?.focus()
+        if (initialQty != null && !demoSubtotal) subtotalInputRef.current?.focus()
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
-    const [subtotal, setSubtotal] = useState(initial?.subtotal ? formatVNDInput(initial.subtotal) : '')
+    const [subtotal, setSubtotal] = useState(initial?.subtotal ? formatVNDInput(initial.subtotal) : demoSubtotal ? formatVNDInput(demoSubtotal) : '')
     const [purchaseDate, setPurchaseDate] = useState(initial?.purchaseDate || today)
     // Giờ mua — edit: giữ giờ gốc của phiếu; create: default giờ VN hiện tại.
     const [purchaseTime, setPurchaseTime] = useState(() => initial?.purchaseTime || timeStringVN())
@@ -414,7 +418,7 @@ export default function RestockModal({
                     disabled={submitting}
                     className={`w-full py-3.5 rounded-[14px] text-white text-[15px] font-black uppercase tracking-wide active:scale-[0.98] transition-all disabled:cursor-not-allowed shadow-lg shadow-primary/20 ${
                         isValid ? 'bg-primary hover:bg-primary/90 active:bg-primary/80' : 'bg-primary/40 disabled:opacity-100'
-                    }`}
+                    } ${onboardingHintClass(!!demoSubtotal && isValid && !submitting, 'solid')}`}
                 >
                     {submitting ? 'Đang xử lý...' : mode === 'edit' ? 'Lưu thay đổi' : 'Xác nhận nhập kho'}
                 </button>

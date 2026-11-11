@@ -194,7 +194,8 @@ export async function fetchIngredientRestockHistory(addressIds: (UUID | null)[] 
 // Phiếu hủy bị xóa (CASCADE payments) nên không còn dòng để tính nợ ma.
 export interface IngredientDebt { ingredient: string; owing: number; invoices: Row[] }
 // Cache 30s theo địa chỉ (reportCache): nhập kho / trả nợ / hủy phiếu đều invalidateReportCache(addressId) nên không bao giờ cũ sau thao tác trong app.
-export const fetchIngredientDebts = (addressId: UUID) =>
+// ponytail: demo (guest) không theo dõi công nợ NCC — trả rỗng; thêm bản local nếu demo cần khoe công nợ.
+export const fetchIngredientDebts = (addressId: UUID) => localRepo.isGuest() ? Promise.resolve([] as IngredientDebt[]) :
     reportCache.through<IngredientDebt[]>([addressId, 'ingredientDebts'], () => scanIngredientDebts(addressId))
 
 async function scanIngredientDebts(addressId: UUID): Promise<IngredientDebt[]> {

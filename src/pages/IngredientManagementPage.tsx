@@ -43,7 +43,6 @@ import { dateStringVN, dateShortVN, dateFullVN } from '../utils/dateVN'
 import { DateRangePicker } from '../components/HistoryPage/HistoryHeader'
 import { useOnboardingProgressPersist } from '../hooks/useOnboardingProgressPersist'
 import { isInventoryProgressDone } from '../utils/onboardingStorage'
-import { isRecipeStepActive } from '../components/common/onboarding/steps'
 import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
 import type { IngredientConfig, Row } from '../types/domain'
 
@@ -251,14 +250,13 @@ export default function IngredientManagementPage() {
         return map
     }, [ingredientStocks])
 
-    // Phase 5 (công thức) — từ /history mũi tên "tiến" giờ rơi vào Kiểm kê trước, nên sáng mũi tên "tiến" ở đây.
-    // State (không chỉ đọc): InventoryAuditTab tick coffee/cacao khi bấm Lưu, hint mũi tên "tiến" phải tươi ngay.
+    // Guide khách dùng thử — bước 5 Kiểm kê (InventoryAuditTab ghi) rồi bước 6 Bổ sung tồn kho (dải ở đầu trang).
+    // State (không chỉ đọc): InventoryAuditTab tick coffee khi lưu, dải Bổ sung tồn kho phải sáng ngay.
     const storedInventoryProgress = useOnboardingProgress('inventoryProgress', { isGuest, addressId })
     const [inventoryProgress, setInventoryProgress] = useState(storedInventoryProgress)
     useOnboardingProgressPersist('inventoryProgress', inventoryProgress, { isGuest, addressId })
-    // Chỉ đọc (RecipeIngredientPage/RecipeMenuPage ghi) — để biết khi nào sáng mũi tên "tiến" sang Công thức.
-    const recipeProgress = useOnboardingProgress('recipeProgress', { isGuest, addressId })
-    const hintRecipesTab = isGuest && isRecipeStepActive(isInventoryProgressDone(inventoryProgress), recipeProgress)
+    const restockProgress = useOnboardingProgress('restockProgress', { isGuest, addressId })
+    const hintRestock = isGuest && isInventoryProgressDone(inventoryProgress) && !restockProgress.bought
 
     // PERF: index configs by ingredient ONCE.
     // Was: ingredientConfigs.find() called THREE times per ingredient (packSize, packUnit, minStock).
@@ -348,10 +346,11 @@ export default function IngredientManagementPage() {
         <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
             <Toast toast={toast} />
 
-            {/* Mỗi tab 1 dải, không hiện trùng: Kiểm kê → soạn cho ngày mai; Lưu trữ → bổ sung tồn kho. */}
-            {activeView === 'stocking'
-                ? <WarehousePrepNotice onRestocked={loadStocks} onOpenIngredient={openIngredient} />
-                : <TomorrowPrepNotice />}
+            {/* "Bổ sung tồn kho" hiện ở cả 2 tab (kiểm kê xong là thấy ngay cần mua gì, khỏi sang Lưu trữ); "Soạn cho ngày mai"
+                (chỉ nhóm kho chung) giữ ở tab Kiểm kê. */}
+            {/* Khách dùng thử: ẩn tới khi xong Kiểm kê — hiện sớm thì dễ bấm nhầm bước 6 khi đang đếm. */}
+            {!(isGuest && !isInventoryProgressDone(inventoryProgress)) && <WarehousePrepNotice onRestocked={loadStocks} onOpenIngredient={openIngredient} hint={hintRestock} />}
+            {activeView !== 'stocking' && <TomorrowPrepNotice />}
 
             <MenuPageHeader
                 title="Tồn kho"
@@ -378,6 +377,7 @@ export default function IngredientManagementPage() {
                         onPresetSelect={(p) => guardLeave(() => dateScope.applyPreset(p))}
                     />
                 ) : undefined}
+                hintBack={isGuest && restockProgress.bought} // bước cuối: luôn sáng đường về Báo cáo (CTA đăng ký ở cuối trang đó)
                 onBack={() => guardLeave(() => goToMenuStep('main', -1, { navigate, backTo: location.state?.from || '/history/sales', wizard: location.state?.wizard }))}
                 onForward={() => guardLeave(() => goToMenuStep('main', +1, { navigate, backTo: location.state?.from || '/history/sales', wizard: location.state?.wizard }))}
                 tabs={INGREDIENT_TABS}
@@ -386,7 +386,6 @@ export default function IngredientManagementPage() {
                     if (key === 'management' && auditLocked) { navigate('/subscription', { state: { preselectAddressId: addressId, from: '/inventory/management' } }); return }
                     guardLeave(() => setView(key))
                 }}
-                hintForward={hintRecipesTab}
             />
 
             <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-4 pb-8 bg-bg">

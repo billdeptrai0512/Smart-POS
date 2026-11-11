@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { CircleAlert } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { useNavigate, useLocation, Link } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import ErrorBanner from '../components/common/ErrorBanner'
 import FloatingLabelInput from '../components/common/FloatingLabelInput'
 import PasswordInput from '../components/common/PasswordInput'
@@ -27,7 +27,6 @@ const suggestEmailFix = (value: string) => {
 export default function SignUpPage() {
     const { signUp, isGuest } = useAuth()
     const navigate = useNavigate()
-    const location = useLocation()
     const [name, setName] = useState('')
     const [branch, setBranch] = useState('')
     // Có link ?clone=MÃ → chi nhánh đầu tiên do modal "Tạo địa chỉ" ở /addresses lo (chép cấu hình
@@ -36,28 +35,36 @@ export default function SignUpPage() {
     const [email, setEmail] = useState('')
     const [username, setUsername] = useState('')
     const [password, setPassword] = useState('')
-    const [error, setError] = useState('')
+    // field: ô gây lỗi → viền đỏ (aria-invalid); gõ bất kỳ ô nào thì bỏ viền, giữ câu báo (onChange của form).
+    const [error, setError] = useState<{ msg: string; field?: string } | null>(null)
     const [loading, setLoading] = useState(false)
     const emailFix = suggestEmailFix(email)
     useEffect(trackSignupPageVisit, [])
 
     async function handleSubmit(e: FormEvent) {
         e.preventDefault()
-        if (!name.trim()) { setError('Vui lòng nhập tên'); return }
-        if (!hasCloneCode && !branch.trim()) { setError('Vui lòng nhập tên quán'); return }
+        if (!name.trim()) return setError({ msg: 'Vui lòng nhập tên', field: 'name' })
+        if (!hasCloneCode && !branch.trim()) return setError({ msg: 'Vui lòng nhập tên quán', field: 'branch' })
         // ponytail: format email để type="email" + regex trong signUp lo, không lặp lại ở đây.
-        if (!email.trim()) { setError('Vui lòng nhập email'); return }
-        if (!username.trim()) { setError('Vui lòng nhập tài khoản'); return }
-        if (username.length < 3) { setError('Tài khoản ít nhất 3 ký tự'); return }
-        if (!isStrongPassword(password)) { setError('Mật khẩu mạnh yêu cầu ít nhất 8 ký tự, bao gồm cả chữ và số'); return }
-        setError('')
+        if (!email.trim()) return setError({ msg: 'Vui lòng nhập email', field: 'email' })
+        if (!username.trim()) return setError({ msg: 'Vui lòng nhập tài khoản', field: 'username' })
+        if (username.length < 3) return setError({ msg: 'Tài khoản ít nhất 3 ký tự', field: 'username' })
+        if (!isStrongPassword(password)) return setError({ msg: 'Mật khẩu mạnh yêu cầu ít nhất 8 ký tự, bao gồm cả chữ và số', field: 'password' })
+        setError(null)
         setLoading(true)
         try {
             const { address } = await signUp(username.trim(), password, name.trim(), email.trim(), hasCloneCode ? '' : branch)
-            // Có chi nhánh (đã chọn sẵn) → vào thẳng tab Công thức để set up (tab Menu dễ rối); không thì tự tạo ở /addresses.
-            navigate(address ? '/category/recipes' : '/addresses', { replace: true })
+            // Có chi nhánh → y như tạo địa chỉ ở /addresses (AddressSelectPage.handleCreate): địa chỉ mới chưa có gói nên qua
+            // cổng gói trước rồi vào Danh mục — vào thẳng /category thì SubscriptionGuard đá ngược về /addresses.
+            // Không tự quyết theo cờ thu phí ở đây: trang này đọc cờ lúc còn là khách (anon → RLS trả [] → "tắt" sai);
+            // /subscription đọc lại sau khi đã đăng nhập, tắt thì tự cho qua. Không có chi nhánh → tự tạo ở /addresses.
+            if (address) navigate('/subscription', { replace: true, state: { preselectAddressId: address.id, from: '/addresses', locked: true, skipTo: '/category/overall', skipState: { from: '/addresses' } } })
+            else navigate('/addresses', { replace: true })
         } catch (err) {
-            setError(errorMessage(err, 'Đăng ký thất bại'))
+            const msg = errorMessage(err, 'Đăng ký thất bại')
+            // Supabase trả nguyên câu tiếng Anh khi trùng tên tài khoản (tài khoản = email nội bộ, formatUsernameToEmail).
+            if (/already registered|already exists/i.test(msg)) setError({ msg: 'Tên tài khoản này đã có người dùng', field: 'username' })
+            else setError({ msg })
         } finally {
             setLoading(false)
         }
@@ -72,11 +79,12 @@ export default function SignUpPage() {
                 </div>
 
 
-                <form onSubmit={handleSubmit} className="bg-surface border border-border/60 rounded-[20px] p-6 shadow-sm space-y-4">
-                    <ErrorBanner message={error} />
+                <form onSubmit={handleSubmit} onChange={() => error?.field && setError({ msg: error.msg })} className="bg-surface border border-border/60 rounded-[20px] p-6 shadow-sm space-y-4">
+                    <ErrorBanner message={error?.msg} />
 
                     <FloatingLabelInput
                         id="signup-name"
+                        aria-invalid={error?.field === 'name'}
                         label="Họ và Tên"
                         autoCapitalize="words"
                         value={name}
@@ -88,6 +96,7 @@ export default function SignUpPage() {
                     {!hasCloneCode && (
                         <FloatingLabelInput
                             id="signup-branch"
+                        aria-invalid={error?.field === 'branch'}
                             label="Tên quán / chi nhánh"
                             autoCapitalize="words"
                             value={branch}
@@ -99,6 +108,7 @@ export default function SignUpPage() {
 
                     <FloatingLabelInput
                         id="signup-username"
+                        aria-invalid={error?.field === 'username'}
                         label="Tài khoản"
                         value={username}
                         onChange={e => setUsername(e.target.value)}
@@ -109,6 +119,7 @@ export default function SignUpPage() {
                     <div>
                         <PasswordInput
                             id="signup-password"
+                        aria-invalid={error?.field === 'password'}
                             label="Mật khẩu"
                             value={password}
                             onChange={e => setPassword(e.target.value)}
@@ -121,6 +132,7 @@ export default function SignUpPage() {
                     <div>
                         <FloatingLabelInput
                             id="signup-email"
+                        aria-invalid={error?.field === 'email'}
                             label="Email"
                             type="email"
                             value={email}
@@ -152,21 +164,14 @@ export default function SignUpPage() {
                         {loading ? 'Đang tạo...' : 'Tạo tài khoản'}
                     </button>
 
-                    {/* Phiên dùng thử chỉ bị xoá SAU khi đăng ký/đăng nhập thành công — chưa thì quay lại demo vẫn còn nguyên.
-                        Link chữ (không phải nút to) để không ngang hàng với "Tạo tài khoản". */}
-                    <p className="text-center text-text-secondary text-xs mt-2">
-                        {isGuest ? (
-                            <button
-                                type="button"
-                                onClick={() => (location.key !== 'default' ? navigate(-1) : navigate('/pos'))}
-                                className="hover:text-text hover:underline"
-                            >
-                                Tiếp tục dùng thử
-                            </button>
-                        ) : (
-                            <><Link to="/login" className="text-primary font-bold hover:underline">Quay lại</Link> trang đăng nhập</>
-                        )}
-                    </p>
+                    {/* Khách dùng thử: không có lối "Tiếp tục dùng thử" — trang này là CTA cuối của demo (phiên dùng thử vẫn
+                        còn nguyên tới khi đăng ký thành công, nút Back của máy vẫn quay lại được). */}
+                    {/* !loading: đăng ký xong isGuest tắt TRƯỚC khi chuyển trang — khỏi chớp dòng này. */}
+                    {!isGuest && !loading && (
+                        <p className="text-center text-text-secondary text-xs mt-2">
+                            <Link to="/login" className="text-primary font-bold hover:underline">Quay lại</Link> trang đăng nhập
+                        </p>
+                    )}
                 </form>
             </div>
         </div>

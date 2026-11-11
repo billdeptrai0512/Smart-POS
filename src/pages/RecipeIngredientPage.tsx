@@ -4,10 +4,6 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useProducts } from '../contexts/ProductContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useAddress } from '../contexts/AddressContext'
-import { useOnboardingProgressPersist } from '../hooks/useOnboardingProgressPersist'
-import { readOnboardingState, DEFAULT_ONBOARDING_STATE } from '../utils/onboardingStorage'
-import { norm } from '../utils/onboardingHint'
-import { RECIPE_TARGET_PRODUCT } from '../components/common/onboarding/steps'
 import {
     upsertRecipe,
     upsertRecipes,
@@ -72,10 +68,6 @@ export default function RecipeIngredientPage() {
     const { saving, withSaving } = useSavingAction(showError)
     const [showCopyFrom, setShowCopyFrom] = useState(false)
     const [toppingTab, setToppingTab] = useState('detail')
-    const [recipeProgress, setRecipeProgress] = useState(() =>
-        (addressId ? readOnboardingState(addressId) : DEFAULT_ONBOARDING_STATE).recipeProgress
-    )
-    useOnboardingProgressPersist('recipeProgress', recipeProgress, { isGuest, addressId })
 
     const product = useMemo(() => products.find(p => p.id === productId) ?? batchProducts.find(p => p.id === productId), [products, batchProducts, productId])
     // Thành phẩm: công thức này là CÔNG THỨC MẺ (sản lượng = batch_yield), không có giá bán/tùy chọn.
@@ -84,9 +76,6 @@ export default function RecipeIngredientPage() {
     // Back / sau khi xoá: về đúng loại đang xem của danh sách.
     const backUrl = '/category/recipes' + (isTopping ? '?kind=topping' : isBatch ? '?kind=batch' : '')
     const td = useToppingDetail(isTopping ? productId : null, withSaving, backUrl, () => showToast('Đã lưu', 'success'))
-
-    // Onboarding phase 5 — chỉ hint/track trên đúng công thức "Cà phê đen".
-    const isCafeDen = isGuest && norm(product?.name) === RECIPE_TARGET_PRODUCT
 
     // Index recipes by product — used by the "copy from" picker and to count rows.
     const recipesByProduct = useMemo(() => groupRecipesByProduct(recipes || []), [recipes])
@@ -117,15 +106,6 @@ export default function RecipeIngredientPage() {
         () => Object.fromEntries(prodRecipes.map(r => [r.ingredient, r.amount])),
         [prodRecipes]
     )
-
-    // Render-time-adjust (cùng pattern DailyReportPage.tsx) — track hành động thật, không cần
-    // nút Lưu riêng vì FastIngredientFill/ExtrasSection đã ghi DB ngay khi user nhập.
-    if (isCafeDen && prodRecipes.length > 0 && prodRecipes.every(r => r.amount > 0) && !recipeProgress.filledAmount) {
-        setRecipeProgress(prev => ({ ...prev, filledAmount: true }))
-    }
-    if (isCafeDen && extras.length > 0 && !recipeProgress.addedExtra) {
-        setRecipeProgress(prev => ({ ...prev, addedExtra: true }))
-    }
 
     const dbIngredients = useMemo(
         () => Object.keys(ingredientCosts)
@@ -163,7 +143,7 @@ export default function RecipeIngredientPage() {
                 : [...recipes, { product_id: productId, ingredient, amount, unit: unit || getIngredientUnit(ingredient) }]
             setRecipes(next)
             await syncBatchCost(next)
-            // Guide onboarding đọc định lượng từ context nên guest phải đồng bộ ngay (user thật thì không cần refetch).
+            // Guest: context đọc từ localStorage nên đồng bộ ngay (user thật thì không cần refetch).
             if (isGuest) refreshProducts?.()
         })
     }
@@ -497,7 +477,6 @@ export default function RecipeIngredientPage() {
                     onSetAmount={setBaseAmount}
                     onRemove={removeBaseIngredient}
                     onAddCustom={handleAddBaseIngredients}
-                    hint={isCafeDen && !recipeProgress.filledAmount}
                 />
 
 
@@ -513,7 +492,6 @@ export default function RecipeIngredientPage() {
                     extraHandlers={extraHandlers}
                     categoryOf={categoryOf}
                     baseAmounts={baseAmounts}
-                    hint={isCafeDen && recipeProgress.filledAmount && !recipeProgress.addedExtra}
                 />}
 
                 {canEdit && (

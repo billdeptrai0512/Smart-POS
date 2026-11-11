@@ -6,7 +6,7 @@ import { dateStringVN, dayMonthVN, timeStringVN } from '../../utils/dateVN'
 import { OFFSCREEN_FRAME_CSS, captureOffscreen, printBillJob } from '../../lib/escposBitmap'
 import { Dialog } from '../common/ModalShell'
 import { ReportPanel, PanelRow } from './ReportPanel'
-import { ingredientLabel } from '../../utils/ingredients'
+import { ingredientLabel, INGREDIENT_CATEGORIES, normalizeIngredientCategory } from '../../utils/ingredients'
 import { capitalizeWords } from '../../utils/text'
 import { groupMeta } from '../../constants/expenseGroups'
 import { useClickOutside } from '../../hooks/useClickOutside'
@@ -51,6 +51,7 @@ interface Props {
     onTransferChange?: (value: string) => void
     hintCash?: boolean
     hintTransfer?: boolean
+    hintNet?: boolean
     onEditExpense?: (expense: Row) => void
     onEditRestockPayment?: (payment: Row) => void
     printInfo?: { addressName?: string | null; dateLabel?: string; revenue?: number; cups?: number; printerIp?: string | null }
@@ -91,6 +92,7 @@ export default function CashFlowCard({
     // Onboarding bước 3: hintCash/hintTransfer sáng từng ô; còn ô cần sáng thì panel tự cuộn vào màn hình.
     hintCash = false,
     hintTransfer = false,
+    hintNet = false,
     // Bấm 1 dòng chi phí → mở modal sửa (DailyReportPage điều hướng sang tab Chi phí).
     onEditExpense,
     // Bấm 1 dòng "Mua nguyên liệu/bao bì" → mở RestockModal sửa phiếu nhập (chỉ khi
@@ -104,13 +106,16 @@ export default function CashFlowCard({
     onPreviewClose,
     onPrintError,
 }: Props) {
-    // Guide còn ô Thực thu cần nhập → cuộn panel vào giữa màn hình, khách khỏi phải tự kéo xuống.
-    // Chỉ chạy khi cờ bật lên (chuyển từ ô tiền mặt sang chuyển khoản vẫn là true nên không cuộn lại).
+    // Guide: còn ô Thực thu cần nhập → cuộn Thực thu vào giữa; bước cuối (nhập kho xong) → cuộn tới đầu Thực chi.
+    // Chỉ chạy khi đích đổi (tiền mặt → chuyển khoản vẫn là 'cash' nên không cuộn lại); trễ chút cho trang dựng xong.
     const panelRef = useRef<HTMLDivElement>(null)
-    const scrollToPanel = hintCash || hintTransfer
+    const netRef = useRef<HTMLDivElement>(null)
+    const scrollTo = hintNet ? 'net' : hintCash || hintTransfer ? 'cash' : null
     useEffect(() => {
-        if (scrollToPanel) panelRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-    }, [scrollToPanel])
+        if (!scrollTo) return
+        const t = setTimeout(() => (scrollTo === 'net' ? netRef : panelRef).current?.scrollIntoView({ block: scrollTo === 'net' ? 'start' : 'center', behavior: 'smooth' }), 400)
+        return () => clearTimeout(t)
+    }, [scrollTo])
     // Nhóm nguyên liệu — để chia các dòng trong mục Tồn kho bên dưới. Mặc định collapse từng nhóm.
     const { ingredientConfigs, ingredientGroups } = useProducts()
     const [expandedCats, setExpandedCats] = useState<Record<string, boolean>>({})
@@ -228,9 +233,12 @@ export default function CashFlowCard({
         // nguyên liệu — báo cáo dòng tiền chỉ quan tâm tiền ra trong kỳ, không phân
         // biệt trả cho hoá đơn ngày nào.
         // Mỗi nhóm nguyên liệu (ingredient_groups) 1 dòng theo sort_order, tên viết hoa chữ cái đầu
-        // mỗi từ; NVL không thuộc nhóm nào (hoặc địa chỉ chưa chia nhóm) rơi về "Khác".
-        const groupById = new Map((ingredientGroups || []).map(g => [g.id, g]))
-        const groupIdByKey = new Map((ingredientConfigs || []).map(c => [c.ingredient, c.group_id]))
+        // mỗi từ; NVL không thuộc nhóm nào rơi về "Khác". Địa chỉ chưa chia nhóm (vd dùng thử) → chia theo 2 danh mục
+        // Nguyên liệu chính / Bao bì, như thẻ Kiểm kê (InventoryReportCard).
+        const byCategory = !ingredientGroups?.length
+        const groups = byCategory ? INGREDIENT_CATEGORIES.map((c, i) => ({ id: c.key, name: c.label, sort_order: i })) : ingredientGroups
+        const groupById = new Map(groups.map(g => [g.id, g]))
+        const groupIdByKey = new Map((ingredientConfigs || []).map(c => [c.ingredient, byCategory ? normalizeIngredientCategory(c.category) : c.group_id]))
         const paysByGroup = new Map<string | null, Row[]>()
         for (const p of nvlPayments) {
             const gid = groupIdByKey.get(p.invoice_metadata?.ingredient)
@@ -420,6 +428,7 @@ export default function CashFlowCard({
                 & khác / Tồn kho / Ngoài kinh doanh), section phụ chỉ hiện khi có chi.
                 Mỗi section là các dòng nhãn collapse; Tổng thực chi nằm cuối CÙNG PANEL. */}
             <ReportPanel
+                panelRef={netRef}
                 title="Thực chi"
                 total={{ label: 'Tổng thực chi', value: `-${formatVND(totalExpenses)}`, className: 'text-danger' }}
             >
@@ -683,6 +692,8 @@ function MoneyInputRow({ label, value, onChange, onBlur, hint }: { label: string
                     value={value}
                     onChange={e => onChange?.(e.target.value)}
                     onBlur={onBlur}
+                    // Guide khách dùng thử: số đã móm sẵn vào ô đang sáng → bấm vào là xác nhận (blur = lưu).
+                    onFocus={hint && value ? e => e.currentTarget.blur() : undefined}
                     // Lưu chỉ chạy ở onBlur — Enter / phím "Đi" của bàn phím điện thoại không làm mất focus,
                     // nên phải tự blur để kích hoạt lưu (và hạ bàn phím).
                     enterKeyHint="done"

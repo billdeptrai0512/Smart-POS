@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { formatVND } from '../../utils'
 import { ingredientLabel, normalizeSearchText } from '../../utils/ingredients'
-import { onboardingHintClass } from '../../utils/onboardingHint'
 import { SignedBox, SIGNED_INPUT_CLASS } from './SignedMoneyInput'
 import IngredientPicker from './IngredientPicker'
 
@@ -24,7 +23,6 @@ interface Props {
     onSetAmount: (ingredient: string, amount: number, unit: string) => void
     onRemove: (ingredient: string) => void
     onAddCustom: (ingredient: CustomIngredient) => void
-    hint?: boolean
     /** Có cặp này = cha điều khiển bảng thêm nguyên liệu và tự đặt nút "Thu gọn" (ExtraCard thay vào chỗ Xóa/Nhân bản). */
     addOpen?: boolean
     onAddOpenChange?: (open: boolean) => void
@@ -42,7 +40,7 @@ const CATS = [
 export default function FastIngredientFill({
     entries, dbIngredients, getUnit, categoryOf = () => 'main', groups, groupIdOf,
     ingredientCosts, canEdit, showCost = false, allowNegative = false,
-    baseAmounts, onSetAmount, onRemove, onAddCustom, hint = false,
+    baseAmounts, onSetAmount, onRemove, onAddCustom,
     addOpen: addOpenProp, onAddOpenChange,
 }: Props) {
     const [revealed, setRevealed] = useState<Set<string>>(() => new Set()) // chip-tapped, not yet saved
@@ -64,9 +62,6 @@ export default function FastIngredientFill({
         for (const k of revealed) set.add(k)
         return [...set]
     }, [entries, revealed])
-
-    // Chỉ 1 ô nhấp nháy mỗi lúc: dòng đầu tiên chưa có định lượng.
-    const hintKey = hint ? rowKeys.find(k => !(amountByKey[k] > 0)) : undefined
 
     const reveal = (k: string) => setRevealed(prev => new Set(prev).add(k))
     const drop = (k: string) => setRevealed(prev => { const n = new Set(prev); n.delete(k); return n })
@@ -99,7 +94,6 @@ export default function FastIngredientFill({
                             autoFocus={revealed.has(k) && !(amountByKey[k] != null)}
                             onCommit={onSetAmount}
                             onRemove={() => { onRemove(k); drop(k) }}
-                            hint={k === hintKey}
                         />
                     ))}
                 </div>
@@ -182,10 +176,9 @@ interface FillRowProps {
     autoFocus: boolean
     onCommit: Props['onSetAmount']
     onRemove: () => void
-    hint?: boolean
 }
 
-function FillRow({ ingredient, amount, unit, unitCost, canEdit, showCost, allowNegative, baseAmount, autoFocus, onCommit, onRemove, hint = false }: FillRowProps) {
+function FillRow({ ingredient, amount, unit, unitCost, canEdit, showCost, allowNegative, baseAmount, autoFocus, onCommit, onRemove }: FillRowProps) {
     // Khi có nút ±, dấu chỉ sống ở nút — ô số luôn là trị tuyệt đối, tránh đọc thành "− (−1)".
     const toDraft = (a?: number | null) => a ? String(allowNegative ? Math.abs(a) : a) : '' // 0/chưa có → ô trống (placeholder —), không phải số 0
     const [draft, setDraft] = useState(() => toDraft(amount))
@@ -242,7 +235,7 @@ function FillRow({ ingredient, amount, unit, unitCost, canEdit, showCost, allowN
                                 onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
                                 onBlur={commit}
                                 placeholder="—"
-                                className={`${SIGNED_INPUT_CLASS} ${onboardingHintClass(hint)}`}
+                                className={SIGNED_INPUT_CLASS}
                             />
                 </SignedBox>
             ) : (
@@ -256,7 +249,7 @@ function FillRow({ ingredient, amount, unit, unitCost, canEdit, showCost, allowN
                             onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
                             onBlur={commit}
                             placeholder="—"
-                            className={`w-[60px] max-[329px]:w-11 bg-bg border ${saved ? 'border-success' : 'border-border/60'} rounded-lg px-2 py-1.5 text-[13px] text-text text-right focus:outline-none focus:border-primary disabled:opacity-60 no-spin ${onboardingHintClass(hint)}`}
+                            className={`w-[60px] max-[329px]:w-11 bg-bg border ${saved ? 'border-success' : 'border-border/60'} rounded-lg px-2 py-1.5 text-[13px] text-text text-right focus:outline-none focus:border-primary disabled:opacity-60 no-spin`}
                         />
             )}
             {baseAmount != null ? (

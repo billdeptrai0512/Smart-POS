@@ -35,8 +35,7 @@ export default function POSPage() {
     } = useCart()
     const { handleLoadHistory } = useHistory()
 
-    // Dòng vừa chạm (cuối giỏ) — thanh extras sửa dòng này. Tính một lần ở đây vì cả
-    // MenuGrid lẫn useOrderOnboardingProgress cần.
+    // Dòng vừa chạm (cuối giỏ) — thanh extras sửa dòng này.
     const activeItem = cart[cart.length - 1]
 
     // "BÀN 3" trong Nhật ký nhảy tới /pos kèm state.openTableDetail — mở thẳng lưới bàn (TableModal
@@ -52,9 +51,7 @@ export default function POSPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
-    const { hintProductId, hintExtraName, showCheckoutHint, showHistoryHint } = useOrderOnboardingProgress({
-        isGuest, addressId, products, cart, enterKey,
-    })
+    const { hintProductIds, showCheckoutHint, showHistoryHint } = useOrderOnboardingProgress({ isGuest, addressId, products, cart, enterKey })
 
     // Prefetch the lazy History chunk on mount so "go next" doesn't flash the Suspense
     // fallback while it loads. Same module App.tsx lazy-imports → warms the same chunk.
@@ -94,7 +91,8 @@ export default function POSPage() {
                     showOnboardingHint={showHistoryHint}
                     takeawaySlotRef={setTakeawaySlot}
                     notice={<>
-                        {isGuest && <div className="mb-2 last:mb-0 rounded-[14px] overflow-hidden"><OnboardingGuide /></div>}
+                        {/* POS không hiện dải guide (dải Bạn cần chuẩn bị / Tạo đơn / Nhật ký tự sáng) — chỉ chạy ngầm để ghi phễu. */}
+                        <OnboardingGuide silent />
                         {/* Pill bàn cùng hàng với "Chuẩn bị hôm nay" ("Mang đi" khi chưa chọn bàn); pill vừa khít tên bàn (tối đa 50%, dài thì truncate), bar kia lấy phần còn lại; bar kia ẩn thì pill giãn full-width.
                             Ẩn ở dine-split: lưới bàn đã hiện sẵn bên cạnh. Chạm = mở lưới bàn để đổi. */}
                         <div className="flex gap-2 [&>button]:rounded-[14px] [&>button]:w-auto [&>button]:min-w-0 [&>button:first-child]:flex-1">
@@ -127,8 +125,7 @@ export default function POSPage() {
                     onToggleTopping={handleToggleTopping}
                     enabledStickyExtraIds={enabledStickyExtraIds}
                     onToggleStickyExtra={handleToggleStickyExtra}
-                    hintProductId={hintProductId}
-                    hintExtraName={hintExtraName}
+                    hintProductIds={hintProductIds}
                 />
 
                 <Toast toast={toast} />

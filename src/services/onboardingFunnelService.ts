@@ -5,7 +5,7 @@ import { fireAndForget } from './rpcFireAndForget'
 // Cố tình KHÔNG dùng lại:
 //   - DEMO_ADDRESS_ID (localRepository.ts) — literal cố định dùng chung mọi trình duyệt khách,
 //     đếm theo nó thì mọi khách gom về đúng 1 dòng.
-//   - onboarding_v4_<addressId> (onboardingStorage.ts) — theo địa chỉ, không phải theo người.
+//   - onboarding_v5_<addressId> (onboardingStorage.ts) — theo địa chỉ, không phải theo người.
 const VISITOR_ID_KEY = 'guest_funnel_visitor_id'
 
 function getOrCreateVisitorId() {

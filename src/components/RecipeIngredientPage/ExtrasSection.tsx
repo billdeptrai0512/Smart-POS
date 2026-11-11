@@ -4,7 +4,6 @@ import type { ExtraIngredients } from '../../utils/inventory'
 import ExtraCard from './ExtraCard'
 import { parseSignedVNDInput } from '../../utils'
 import SignedMoneyInput from './SignedMoneyInput'
-import { onboardingHintClass } from '../../utils/onboardingHint'
 import type { CustomIngredient } from './FastIngredientFill'
 
 export interface ExtraHandlers {
@@ -30,14 +29,12 @@ interface Props {
     extraHandlers: ExtraHandlers
     categoryOf: (ingredient: string) => string | null | undefined
     baseAmounts?: Record<string, number>
-    hint?: boolean
 }
 
 export default function ExtrasSection({
     extras, extraIngs, ingredientUnits, dbIngredients, canEdit, saving,
     onAddExtra, onSaveSortOrder,
     extraHandlers, categoryOf, baseAmounts,
-    hint = false,
 }: Props) {
     const [addingExtra, setAddingExtra] = useState(false)
     const [newExtraName, setNewExtraName] = useState('')
@@ -158,12 +155,11 @@ export default function ExtrasSection({
                     </div>
                 </div>
             ) : (
-                // Onboarding (hint): 1 chạm thêm luôn "Lớn +5.000đ" thay vì mở form gõ tên + giá — khỏi nhập.
                 <button
-                    onClick={() => (hint ? onAddExtra('Lớn', 5000) : setAddingExtra(true))}
-                    className={`w-full text-[12px] text-primary/70 hover:text-primary font-medium mt-2 transition-colors bg-surface border border-border/60 rounded-[14px] px-4 py-3 text-center ${onboardingHintClass(hint)}`}
+                    onClick={() => setAddingExtra(true)}
+                    className="w-full text-[12px] text-primary/70 hover:text-primary font-medium mt-2 transition-colors bg-surface border border-border/60 rounded-[14px] px-4 py-3 text-center"
                 >
-                    {hint ? '+ Thêm tùy chọn "Lớn" +5.000đ' : '+ Thêm tùy chọn'}
+                    + Thêm tùy chọn
                 </button>
             ))}
         </div>

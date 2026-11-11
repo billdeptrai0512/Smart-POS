@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 import { nativePrinterIp } from '../lib/escposBitmap'
 import { printKitchenTicket } from '../components/common/KitchenTicket'
 import { fetchTodayStats, submitOrder, fetchOrderNo, fetchTodayOrders, deleteOrder, updateOrderDiscount, fetchTodayExpenses, insertExpense, updateExpense, deleteExpense, fetchRecentOrders, invalidateDailyContext, fetchOpenTables, closeTable, reopenTable, markOrder, extractRounds, dropTableByName, restoreTable, moveRoundsIntoTable, moveTableRounds as moveTableRoundsService, type OpenTable, type TableRound } from '../services/orderService'
+import { guestDemoDayPending } from '../services/localRepository'
 import {
     isNetworkError, cartTotal, cartOrderCount, cartDiscountTotal, newCartLine, patchLine, removeLatestOfProduct, toggleExtraOnLast, toggleToppingOnLast,
     setStickyExtraOnLast, buildLastOrderFromDB, buildLastOrderFromCart, mergeFetchedOrders, computeSubmitTotals, pendingOrderItems, submitLines, appendRoundToTables,
@@ -580,7 +581,10 @@ export function POSProvider() {
             const optimisticOrder = buildOptimisticOrder(cartItems, totals,
                 { orderId, createdAt: addedRow.createdAt, staffName: profile?.name || null, tableName: tableNameArg })
             setTodayOrders(prev => [optimisticOrder, ...prev])
+            const seedsDay = isGuest && guestDemoDayPending()
             submitOrder(cartItems, netTotal, null, addressId, cartCost, costPerItem, profile?.name, discountApplied, orderId, tableNameArg, programDiscount)
+                // Demo: đơn đầu tiên sinh cả ngày bán trước đó (seedGuestDemoDay) → nạp lại tổng ngày + Nhật ký.
+                .then(() => { if (seedsDay) { refreshStats(addressId); loadHistoryNow() } })
                 .then(() => fetchOrderNo(orderId).catch(() => null))
                 .then(orderNo => { patchOrderNo(orderNo); printKitchen(orderNo) })
                 .catch(err => {

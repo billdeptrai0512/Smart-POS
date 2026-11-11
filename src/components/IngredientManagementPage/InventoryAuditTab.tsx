@@ -15,12 +15,13 @@ import type { useToast } from '../../hooks/useToast'
 import type { OnboardingState } from '../../utils/onboardingStorage'
 import type { Row } from '../../types/domain'
 import { useOnboardingProgress } from '../../hooks/useOnboardingProgress'
-import { useVisualViewportBox } from '../../hooks/useVisualViewportBox'
 import { getPendingOrders } from '../../hooks/useOfflineSync'
-import { calculateEstimatedConsumption, calculateConsumptionBreakdown, buildIngredientToProduct, orderItemsOf, isLiveOrder, sumLiveRevenue, usedOf } from '../../utils/inventory'
+import { calculateEstimatedConsumption, calculateConsumptionBreakdown, buildIngredientToProduct, orderItemsOf, isLiveOrder, sumLiveRevenue, usedOf, computeBalance } from '../../utils/inventory'
 import { ingredientLabel } from '../../utils/ingredients'
-import { findIngredientByLabel, onboardingHintClass } from '../../utils/onboardingHint'
-import { isInventoryProgressDone } from '../../utils/onboardingStorage'
+import { findIngredientByLabel } from '../../utils/onboardingHint'
+import { inShiftCashTotal } from '../../utils/reportStats'
+import { getGuestUnbilled } from '../../services/localRepository'
+import { isInventoryProgressDone, isCashFlowProgressDone } from '../../utils/onboardingStorage'
 import { dateStringVN, isSameDayVN, timeStringVN } from '../../utils/dateVN'
 import { productionOnDay, mergeUsage, madeOf, madeInPeriods } from '../../utils/production'
 import TodayProduction from './TodayProduction'
@@ -48,7 +49,7 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
     const { addressId, selectedAddress } = useAddress()
     const { isStaff, profile, isGuest } = useAuth()
     const { products, recipes, extraIngredients, productExtras, ingredientUnits, productionRows } = useProducts()
-    const { todayOrders, isLoadingHistory, handleLoadHistory } = useHistory()
+    const { todayOrders, todayExpenses, isLoadingHistory, handleLoadHistory } = useHistory()
     const confirm = useConfirm()
 
     const { scope, offset, customRange } = dateScope
@@ -56,7 +57,7 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
     const {
         todayISO, isTodayScope,
         shiftClosing, setShiftClosing, yesterdayClosing,
-        apiOrders, apiShiftClosings, prevShiftClosings, isAsyncReady,
+        apiOrders, apiShiftClosings, prevShiftClosings, isAsyncReady, todayPayments,
     } = useDailyReportData({ addressId, scope, offset, customRange, onError: showError })
 
     useEffect(() => {
@@ -165,11 +166,18 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
         () => (isTodayScope ? sumLiveRevenue(todayOrders, offlineToday) : 0),
         [isTodayScope, todayOrders, offlineToday]
     )
+    // Chênh lệch két hôm nay — cùng công thức thẻ "So sánh" ở /report (Thực thu = két + chi trong ca, trừ Doanh thu).
+    // Thẻ nghi vấn đặt cạnh số ly ước tính: két dư đúng tiền mấy ly đó là bằng chứng thứ 2. null = chưa nhập thực thu.
+    const cashDiff = useMemo(() => {
+        const cash = Number(shiftClosing?.actual_cash || 0), transfer = Number(shiftClosing?.actual_transfer || 0)
+        if (!isTodayScope || !isTodaysClosing || !(cash + transfer)) return null
+        const inShift = inShiftCashTotal(todayPayments, todayExpenses)
+        return cash + transfer + inShift - systemTotalRevenue
+    }, [isTodayScope, isTodaysClosing, shiftClosing, todayPayments, todayExpenses, systemTotalRevenue])
 
-    // ── Onboarding phase 4 (Kiểm kê tồn kho): hint Cà phê → Cacao, tick khi bấm Lưu ──
-    // Bắt đầu sau Nhật ký (viewedReport = đã bấm mũi tên "tiến" từ /history).
-    const { viewedReport } = useOnboardingProgress('journalProgress', { isGuest, addressId })
-    const hintInventory = isGuest && !!addressId && viewedReport && !isInventoryProgressDone(inventoryProgress)
+    // ── Guide bước 5 (Kiểm kê): hint dòng cà phê, tick khi bấm Lưu. Bắt đầu sau Kết ca (bước 4, /report). ──
+    const cashFlowProgress = useOnboardingProgress('cashFlowProgress', { isGuest, addressId })
+    const hintInventory = isGuest && !!addressId && isCashFlowProgressDone(cashFlowProgress) && !isInventoryProgressDone(inventoryProgress)
     // 3 câu hỏi lần lượt (mỗi lúc sáng 1 chỗ trên dòng cà phê): đã dùng bao nhiêu (Sử dụng) → máy tính
     // còn bao nhiêu (Lý thuyết) → mình đếm được bao nhiêu (Cuối kỳ).
     const hintStep: HintStep = !inventoryProgress.usedOpened ? 'used' : !inventoryProgress.theoryOpened ? 'theory' : 'count'
@@ -177,19 +185,44 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
         (step: 'used' | 'theory') => setInventoryProgress(prev => ({ ...prev, [step === 'used' ? 'usedOpened' : 'theoryOpened']: true })),
         [setInventoryProgress]
     )
-    const onHintValue = useCallback(
-        (theory: number) => setInventoryProgress(prev => (prev.theory === theory ? prev : { ...prev, theory })),
-        [setInventoryProgress]
-    )
     // NVL của bước onboarding: chỉ cà phê (đếm ly/nắp là cùng một thao tác).
     const coffee = isGuest ? findIngredientByLabel(inventory.ingredientsList, 'cà phê')?.ingredient : undefined
     const coffeeTyped = !!coffee && (inventory.inventoryInputs[coffee] ?? '') !== ''
-    // Gõ xong mà chưa bấm Lưu → dải guide đổi sang nhắc bấm Lưu, nút Lưu nhấp nháy.
-    const inventoryTyped = hintInventory && coffeeTyped
-    useEffect(() => {
-        if (inventoryTyped !== !!inventoryProgress.typed) setInventoryProgress(prev => ({ ...prev, typed: inventoryTyped }))
-    }, [inventoryTyped, inventoryProgress.typed, setInventoryProgress])
     const hintInventoryIngredient = hintInventory ? coffee ?? null : null
+
+    // Demo: khách chỉ tự đếm cà phê; các NVL/bao bì khác điền sẵn "số nhân viên đếm" = Lý thuyết − đúng phần của mấy
+    // ly pha không bấm bill (getGuestUnbilled) → Tổng hao hụt + thẻ "Nghi vấn bán thiếu ghi nhận" chỉ đúng món/số ly,
+    // khớp với số két dư ở Kết ca. Guide gợi ý số cà phê nhập = Lý thuyết − phần cà phê của mấy ly đó. 1 lần mỗi lần mở tab, ô đã có số thì giữ.
+    const prefilledRef = useRef(false)
+    useEffect(() => {
+        if (!hintInventory || !isTodayScope || prefilledRef.current || !inventory.stocksLoaded || !inventory.closingLoaded || !ordersToday.length) return
+        prefilledRef.current = true
+        const unbilled = getGuestUnbilled()?.usage || {}
+        for (const ing of inventory.ingredientsList) {
+            const key = ing.ingredient
+            const used = usedOf(usedMap, key)
+            if (used <= 0) continue
+            const o = inventory.openingInputs[key]
+            const { lyThuyet } = computeBalance({ restockValue: inventory.restockInputs[key], openingValue: o === '' ? undefined : o, openingFallback: inventory.openingStock[key] ?? 0, used })
+            const counted = String(Math.max(0, Math.round(lyThuyet - (unbilled[key] || 0))))
+            if (key === coffee) setInventoryProgress(prev => ({ ...prev, suggest: Number(counted) }))
+            else if ((inventory.inventoryInputs[key] ?? '') === '') inventory.onInventoryChange(key, counted)
+        }
+        setTimeout(() => blurSaveRef.current(), 0) // lưu luôn như rời ô — khỏi dải "chưa lưu" khi khách chưa kịp nhập cà phê
+    }, [hintInventory, isTodayScope, inventory, ordersToday.length, usedMap, coffee, setInventoryProgress])
+
+    // Tới ô Cuối kỳ cà phê: móm sẵn số gợi ý (suggest) — khách bấm vào ô là lưu (ColumnInput), như ô Tiền mặt ở Kết ca.
+    useEffect(() => {
+        if (hintInventory && hintStep === 'count' && coffee && inventoryProgress.suggest && !coffeeTyped) inventory.onInventoryChange(coffee, String(inventoryProgress.suggest))
+    }, [hintInventory, hintStep, coffee, coffeeTyped, inventoryProgress.suggest, inventory])
+
+    // Cà phê đã có số và đã lưu → tick bước sau ~1,2s (toast "Đã lưu" + số vừa lưu còn trên dòng) → dòng thu lại, cuộn
+    // xuống Tổng hao hụt. Effect (không setTimeout trong handleSave): rời trang giữa chừng thì lần sau vào vẫn tick được.
+    useEffect(() => {
+        if (!hintInventory || !coffeeTyped || inventory.isDirty) return
+        const t = setTimeout(() => setInventoryProgress(prev => ({ ...prev, coffee: true })), 1200)
+        return () => clearTimeout(t)
+    }, [hintInventory, coffeeTyped, inventory.isDirty, setInventoryProgress])
 
     const [isSaving, setIsSaving] = useState(false)
     const [openAudit, setOpenAudit] = useState(true)
@@ -206,7 +239,6 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
             const row = await inventory.pushInventory(profile?.id, systemTotalRevenue)
             if (!row) return // không có gì đổi (hoặc đang có push khác chạy) → isDirty giữ để thử lại
             showToast('Đã lưu kiểm kê tồn cuối ca', 'success')
-            if (coffeeTyped) setInventoryProgress(prev => ({ ...prev, coffee: true }))
             const [fresh] = await Promise.all([
                 fetchDailyReportContext(addressId),
                 inventory.reloadStocks(),
@@ -245,8 +277,7 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
     const layoutRef = useRef({ version: inventory.baselineVersion, snapshot: inventory.baselineSnapshot })
     if (!holdLayoutRef.current) layoutRef.current = { version: inventory.baselineVersion, snapshot: inventory.baselineSnapshot }
     const blurSaveRef = useRef(() => {})
-    // Guest giữ nút Lưu: bước onboarding dạy bấm Lưu.
-    blurSaveRef.current = () => { if (!isGuest && inventory.isDirty && !isSaving) { holdLayoutRef.current = true; handleSaveInventory() } }
+    blurSaveRef.current = () => { if (inventory.isDirty && !isSaving) { holdLayoutRef.current = true; handleSaveInventory() } }
     const onFieldBlur = useCallback(() => blurSaveRef.current(), [])
 
     // Sửa Cuối kỳ của 1 NGÀY QUÁ KHỨ — UPDATE thẳng inventory_report của phiếu ngày đó (không qua
@@ -285,10 +316,6 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
         window.addEventListener('beforeunload', handler)
         return () => window.removeEventListener('beforeunload', handler)
     }, [hasUnsaved])
-
-    // Bàn phím ảo không đẩy `position: fixed` lên → nhấc nút Lưu lên đúng phần bị che.
-    const vvBox = useVisualViewportBox()
-    const kbInset = vvBox ? Math.max(0, window.innerHeight - vvBox.height - vvBox.top) : 0
 
     // Hôm nay: chờ cả tồn kho/quầy (stocksLoaded) — không thì thẻ hiện sớm với map rỗng, Tổng hao hụt nháy 0đ rồi mới nhảy số thật.
     const isReady = !isLoadingHistory && isAsyncReady && (!isTodayScope || inventory.stocksLoaded)
@@ -333,12 +360,12 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
                         open={openAudit}
                         onToggleOpen={() => setOpenAudit(o => !o)}
                         hintIngredient={hintInventoryIngredient}
-                        hintStep={hintStep}
+                        // Cà phê đã lưu → tắt nhấp nháy ngay (dòng vẫn mở ~1,2s chờ tick, xem effect tick coffee) — khỏi tưởng chưa xong.
+                        hintStep={coffeeTyped && !inventory.isDirty ? null : hintStep}
                         onHintSeen={onHintSeen}
-                        onHintValue={onHintValue}
                     />
 
-                    {!isStaff && <MissingCupSuspicionCard candidates={missingCupCandidates} />}
+                    {!isStaff && <MissingCupSuspicionCard candidates={missingCupCandidates} cashDiff={cashDiff} />}
 
                     {!isGuest && (
                         <div className={`flex items-center justify-between gap-3 rounded-[14px] border px-3 py-2.5 ${changedSince ? 'bg-warning/10 border-warning/30' : confirmedAt ? 'bg-success/10 border-success/30' : 'bg-surface border-border/40'}`}>
@@ -390,22 +417,6 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
                 />
             )}
 
-            {isTodayScope && isGuest && inventory.isDirty && (
-                <div
-                    className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-40"
-                    style={kbInset ? { transform: `translateY(-${kbInset}px)` } : undefined}
-                >
-                    <div className={`flex justify-end px-4 pointer-events-auto ${kbInset ? 'mb-3' : 'mb-[72px]'}`}>
-                        <button
-                            onClick={() => { holdLayoutRef.current = false; handleSaveInventory() }}
-                            disabled={isSaving}
-                            className={`bg-primary text-black rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider hover:bg-primary/90 active:scale-95 transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed ${onboardingHintClass(inventoryTyped, 'solid')}`}
-                        >
-                            {isSaving ? 'Đang lưu...' : 'Lưu'}
-                        </button>
-                    </div>
-                </div>
-            )}
         </div>
     )
 }

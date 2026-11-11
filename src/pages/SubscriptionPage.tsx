@@ -25,12 +25,10 @@ export default function SubscriptionPage() {
 
     // Đang đọc server flag → chờ (tránh redirect nhầm trước khi biết trạng thái).
     if (loading) return null
-    // Monetization OFF (client build hoặc server app_config) → không có trang đăng ký.
-    if (!enabled) {
-        return <Navigate to="/pos" replace />
-    }
-
     const { preselectAddressId, from, locked, skipTo = '/pos', skipState } = location.state || {}
+    // Monetization OFF (client build hoặc server app_config) → không có trang đăng ký: đi tiếp tới đích (vd Danh mục
+    // của địa chỉ vừa tạo, đã chọn sẵn) thay vì /pos.
+    if (!enabled) return <Navigate to={skipTo} replace state={skipState} />
     const addr = addresses.find(a => a.id === preselectAddressId)
     const enter = addr
         ? () => { setSelectedAddress(addr); navigate(skipTo, { replace: skipTo === '/pos', state: skipState }) }

@@ -18,6 +18,7 @@ import { cacheKey as buildCacheKey, STORAGE_KEYS } from '../constants/storageKey
 import { writeJSON } from '../utils/storage'
 import { errorMessage } from '../utils/errorMessage'
 import { computeAccessGate } from '../utils/subscriptionStatus'
+import { useMonetizationEnabled } from '../hooks/useEntitlement'
 import type { Address, Row, UUID } from '../types/domain'
 
 // Module scope, KHÔNG phải useRef: page này unmount mỗi lần sang /pos, nên ref sẽ
@@ -31,6 +32,7 @@ export default function AddressSelectPage() {
     } = useAddress()
     const { cupsMap, revenueMap, prevCupsMap, prevRevenueMap, actualTotals, sessionsMap, subscriptionStatusMap, subscriptionRowsMap, subscriptionLoading, staffList, staffLoading, statsLoading, refreshStaff } = useAddressStats()
     const { signOut, profile, isStaff, isManager, isAdmin, isGuest } = useAuth()
+    const { enabled: monetization, loading: flagLoading } = useMonetizationEnabled()
     const navigate = useNavigate()
 
     const [activeTab, setActiveTab] = useState('branches')
@@ -154,7 +156,9 @@ export default function AddressSelectPage() {
     // Cổng gói: sắp/đã hết hạn → mở /subscription của địa chỉ (SubscriptionPage lo nút Bỏ qua; admin luôn bỏ qua được). Guest không qua cổng.
     // rowsOverride: địa chỉ vừa tạo chưa có trong subscriptionRowsMap → truyền [] (chưa đăng ký).
     function enter(addr: Address, path: string, state?: { from: string }, rowsOverride?: Row[]) {
-        const gate = isGuest ? 'ok' : computeAccessGate(rowsOverride ?? subscriptionRowsMap[addr.id])
+        // Tắt thu phí → không có cổng (rows [] của địa chỉ mới sẽ thành 'hard' sai, đi vòng /subscription mà không chọn địa chỉ).
+        // Chưa đọc xong cờ → coi như bật (SubscriptionPage tự chờ rồi cho qua nếu tắt).
+        const gate = isGuest || !(monetization || flagLoading) ? 'ok' : computeAccessGate(rowsOverride ?? subscriptionRowsMap[addr.id])
         if (gate === 'ok') {
             setSelectedAddress(addr)
             navigate(path, { replace: path === '/pos', state })
@@ -183,7 +187,8 @@ export default function AddressSelectPage() {
             setNewAddressName('')
             setNewShareCode('')
             setShowCreateModal(false)
-            handleSelect(addr, [])
+            // Địa chỉ mới (menu chép từ mẫu) → qua cổng gói rồi vào thẳng Danh mục để chỉnh menu/định lượng của quán.
+            enter(addr, '/category/overall', { from: '/addresses' }, [])
         } catch (err) {
             // Clone lỗi sau khi đã tạo địa chỉ → xoá địa chỉ nửa vời (mirror BackupModal).
             if (createdId && code) {

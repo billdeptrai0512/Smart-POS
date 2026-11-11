@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useHistory } from '../contexts/HistoryContext'
 import { useProducts } from '../contexts/ProductContext'
-import { useNavigate, useLocation, Navigate } from 'react-router-dom'
+import { useNavigate, useLocation, Navigate, Link } from 'react-router-dom'
 import { formatVNDInput, parseVNDInput } from '../utils'
-import { aggregateOrderStats, buildExtraMaps, splitExpenses } from '../utils/reportStats'
+import { aggregateOrderStats, buildExtraMaps, splitExpenses, inShiftCashTotal } from '../utils/reportStats'
 import { getPendingOrders } from '../hooks/useOfflineSync'
 import { fetchDailyReportContext, fetchIngredientStocks, invalidateDailyContext, editIngredientRestock, fetchIngredientRestockHistory, insertShiftClosing, updateShiftClosing } from '../services/orderService'
 import { buildCashPayload } from '../services/reportService'
+import { getGuestUnbilled } from '../services/localRepository'
 import { useIngredientCatalog } from '../hooks/useIngredientCatalog'
 import { useDailyReportData } from '../hooks/useDailyReportData'
 import { calculateEstimatedConsumption, splitCogsByCategory, calculateLossValue, buildRecipeIngredientSet, isLiveOrder, openingSeed, pack2Of, orderItemsOf, sumLiveRevenue } from '../utils/inventory'
@@ -15,9 +16,10 @@ import { useCounterCalc } from '../hooks/useCounterCalc'
 import { calcRangeWithLabel } from '../utils/rangeCalc'
 import { restockInitialFrom } from '../utils/restockInitial'
 import { ingredientLabel, getIngredientUnit } from '../utils/ingredients'
-import { readOnboardingState, DEFAULT_ONBOARDING_STATE, isCashFlowProgressDone, isInventoryProgressDone } from '../utils/onboardingStorage'
+import { readOnboardingState, writeOnboardingState, DEFAULT_ONBOARDING_STATE, isCashFlowProgressDone, isInventoryProgressDone } from '../utils/onboardingStorage'
 import { useOnboardingProgressPersist } from '../hooks/useOnboardingProgressPersist'
-import { isRecipeStepActive } from '../components/common/onboarding/steps'
+import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
+import { onboardingHintClass } from '../utils/onboardingHint'
 import { dateStringVN, isSameDayVN } from '../utils/dateVN'
 import { overlayProduction } from '../utils/production'
 import { useDateScope } from '../hooks/useDateScope'
@@ -161,25 +163,15 @@ export default function DailyReportPage() {
     // and only synced to localStorage for HistoryPage to classify subsequent expenses
     // as "Sau ca".
 
-    // Onboarding phase 3 "Báo cáo dòng tiền" + phase 4 "Báo cáo tồn kho" progress — xem
-    // onboarding/steps.ts. Cờ chỉ set true (không revert) nên không tái xuất
-    // hiện khi dữ liệu hôm sau reset. cash/transfer set trong handleSaveCashflow (đòi hỏi bấm
-    // "Lưu"); coffee set ngay khi gõ (không cần lưu) — xem khối render-time-adjust bên dưới.
-    const [initialOnboardingState] = useState(() =>
-        isGuest && addressId ? readOnboardingState(addressId) : DEFAULT_ONBOARDING_STATE
+    // Guide khách dùng thử bước 4 "Kết ca" — xem onboarding/steps.ts. cash/transfer set trong handleSaveCashflow;
+    // cờ chỉ set true (không revert) nên không tái xuất hiện khi dữ liệu hôm sau reset.
+    const [cashFlowProgress, setCashFlowProgress] = useState(() =>
+        (isGuest && addressId ? readOnboardingState(addressId) : DEFAULT_ONBOARDING_STATE).cashFlowProgress
     )
-    const [cashFlowProgress, setCashFlowProgress] = useState(initialOnboardingState.cashFlowProgress)
-    // inventoryProgress do tab Kiểm kê của /inventory ghi — ở đây chỉ đọc để biết lúc nào bắt đầu hint nhập thực thu.
-    const { inventoryProgress } = initialOnboardingState
+    // journalProgress (HistoryPage ghi) + inventoryProgress (tab Kiểm kê ghi) — ở đây chỉ đọc để biết lúc nào hint.
+    const journalProgress = useOnboardingProgress('journalProgress', { isGuest, addressId })
+    const inventoryProgress = useOnboardingProgress('inventoryProgress', { isGuest, addressId })
     useOnboardingProgressPersist('cashFlowProgress', cashFlowProgress, { isGuest, addressId })
-    // Việc "Xem báo cáo lợi nhuận" của phase 3 (sau khi nhập thực thu): tick khi user tự bấm sang tab Lợi nhuận.
-    const [journalProgress, setJournalProgress] = useState(initialOnboardingState.journalProgress)
-    useOnboardingProgressPersist('journalProgress', journalProgress, { isGuest, addressId })
-    const { viewedProfit } = journalProgress
-    useEffect(() => {
-        if (!isGuest || !addressId || view !== VIEW_PROFIT || viewedProfit || !isCashFlowProgressDone(cashFlowProgress)) return
-        setJournalProgress(prev => ({ ...prev, viewedProfit: true }))
-    }, [isGuest, addressId, view, viewedProfit, cashFlowProgress])
 
     // Báo cáo chỉ còn nhập thực thu (tiền mặt + chuyển khoản) nên không mở kênh realtime kiểm kê —
     // realtime thuộc tab Kiểm kê của /inventory. Catalog NVL chỉ để biết ca đã đếm đủ chưa (cờ "Sau ca").
@@ -241,20 +233,35 @@ export default function DailyReportPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [cashEditable, cashClosing, todayISO, shiftClosing?.id, shiftClosing?.closed_at])
 
-    // Hint spotlight cho phase 4 (Kết ca) — xem CashFlowCard; chỉ sau khi đã đếm tồn ở /inventory (phase 3).
-    const showOnboardingHints = isGuest && !!addressId
-    const inventoryDone = isInventoryProgressDone(inventoryProgress)
-    // Sáng ô còn thiếu; CashFlowCard tự cuộn thẻ Thực thu vào màn hình.
-    const hintCash = showOnboardingHints && inventoryDone && !cashFlowProgress.cash
-    const hintTransfer = showOnboardingHints && inventoryDone && !cashFlowProgress.transfer
-    const cashFlowDone = isCashFlowProgressDone(cashFlowProgress)
-
-    // Phase 5 "Điều chỉnh công thức" không còn nút riêng trong guide — hint thẳng vào mũi tên
-    // "tiến" ở header, đi xuyên page tới /category qua menuSequence.ts (xem onboarding/steps.ts).
-    // Chờ viewedProfit để không sáng cùng lúc với tab Lợi nhuận.
-    // recipeProgress do RecipeIngredientPage.tsx ghi — đọc lại từ initialOnboardingState (đã
-    // đọc localStorage 1 lần ở trên cho cashFlowProgress/inventoryProgress rồi, khỏi đọc thêm).
-    const hintGoToRecipes = showOnboardingHints && isRecipeStepActive(cashFlowDone && viewedProfit, initialOnboardingState.recipeProgress)
+    // Hint Kết ca (CashFlowCard) — sau khi đi từ Nhật ký sang (viewedReport). Sáng ô còn thiếu; CashFlowCard tự cuộn
+    // thẻ Thực thu vào màn hình. Xong thì sáng mũi tên "tiến" sang Tồn kho (bước 5 Kiểm kê).
+    const showOnboardingHints = isGuest && !!addressId && journalProgress.viewedReport
+    const hintCash = showOnboardingHints && !cashFlowProgress.cash
+    const hintTransfer = showOnboardingHints && cashFlowProgress.cash && !cashFlowProgress.transfer
+    // Móm sẵn số cho khách dùng thử (expectCash/expectTransfer, effect bên dưới) vào ô đang sáng — từng ô một, để lần
+    // lưu của ô này không tick luôn ô kia (progress tick theo ô có số lúc lưu). Bấm vào ô là lưu (MoneyInputRow).
+    useEffect(() => {
+        if (hintCash && !cashInput && cashFlowProgress.expectCash) setCashInput(formatVNDInput(String(cashFlowProgress.expectCash)))
+        else if (hintTransfer && !transferInput && cashFlowProgress.expectTransfer) setTransferInput(formatVNDInput(String(cashFlowProgress.expectTransfer)))
+    }, [hintCash, hintTransfer, cashInput, transferInput, cashFlowProgress.expectCash, cashFlowProgress.expectTransfer])
+    const hintGoToInventory = showOnboardingHints && isCashFlowProgressDone(cashFlowProgress) && !isInventoryProgressDone(inventoryProgress)
+    // Bước cuối: nhập kho xong quay về đây → cuộn tới Thực chi (khoản nhập kho vừa chi); ~2,5s
+    // sau tick xong → dải "Hoàn thành" hiện.
+    const restockProgress = useOnboardingProgress('restockProgress', { isGuest, addressId })
+    const hintNet = isGuest && !!addressId && restockProgress.bought && !restockProgress.viewedNet
+    useEffect(() => {
+        if (!hintNet || !addressId) return
+        const t = setTimeout(() => writeOnboardingState(addressId, { restockProgress: { bought: true, viewedNet: true } }), 2500)
+        return () => clearTimeout(t)
+    }, [hintNet, addressId])
+    // Đã xem Thực chi (lần này sau ~2,5s, hoặc quay lại từ trang khác) → cuộn xuống CTA đăng ký ở cuối trang.
+    const ctaRef = useRef<HTMLAnchorElement>(null)
+    const scrollToCta = isGuest && restockProgress.bought && restockProgress.viewedNet
+    useEffect(() => {
+        if (!scrollToCta) return
+        const t = setTimeout(() => ctaRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' }), 500)
+        return () => clearTimeout(t)
+    }, [scrollToCta])
 
     // Week/month scopes show the per-day/per-week bar chart instead of the hourly line.
     // "Range" = khoảng NHIỀU NGÀY. Biểu đồ đường cộng dồn theo GIỜ chỉ có nghĩa cho 1
@@ -376,6 +383,18 @@ export default function DailyReportPage() {
         () => splitExpenses(displayExpenses),
         [displayExpenses]
     )
+
+    // Guide Kết ca: số tiền đọc cho khách nhập sao cho Chênh lệch (CashFlowCard) = +tiền mấy ly pha không bấm bill
+    // (getGuestUnbilled — khách trả tiền vào két nhưng không có đơn → két dư). Kiểm kê sẽ hụt đúng mấy ly đó.
+    // CK ≈ 40% doanh thu; tiền mặt = phần còn lại − chi trong ca + tiền ly không bill.
+    useEffect(() => {
+        if (!isGuest || !isTodayScope || isCashFlowProgressDone(cashFlowProgress) || totalRevenue <= 0) return
+        const inShift = inShiftCashTotal(todayPayments, todayExpenses)
+        const expectTransfer = Math.round(totalRevenue * 0.4 / 1000) * 1000
+        const expectCash = totalRevenue - expectTransfer - inShift + (getGuestUnbilled()?.value || 0)
+        if (expectCash <= 0 || (expectCash === cashFlowProgress.expectCash && expectTransfer === cashFlowProgress.expectTransfer)) return
+        setCashFlowProgress(prev => ({ ...prev, expectCash, expectTransfer }))
+    }, [isGuest, isTodayScope, cashFlowProgress, totalRevenue, todayPayments, todayExpenses])
     // Chi phí gắn nhãn nhóm "Ngoài kinh doanh" — KHÔNG vào lợi nhuận (tiền ra ngoài
     // hoạt động KD). Phải trừ khỏi P&L. Bỏ qua đúng theo luật của buildCategoryBreakdown:
     // NVL refill (is_refill & !free_form) + adjustment; free-form refill (sau ca) VẪN xét
@@ -648,7 +667,7 @@ export default function DailyReportPage() {
                 scope={scope}
                 onBack={() => guardLeave(() => goToMenuStep('report', -1, { navigate, backTo, scopeState: dateNavState, wizard: location.state?.wizard }))}
                 onForward={() => goToMenuStep('report', +1, { navigate, backTo, scopeState: dateNavState, wizard: location.state?.wizard })}
-                hintForward={hintGoToRecipes}
+                hintForward={hintGoToInventory}
                 canGoForward={canGoForwardPeriod}
                 onOffsetPrev={() => guardLeave(goOffsetPrev)}
                 onOffsetNext={() => guardLeave(goOffsetNext)}
@@ -664,7 +683,7 @@ export default function DailyReportPage() {
                 onShiftRange={(d) => guardLeave(() => shiftRange(d))}
                 canShiftRangeForward={canShiftRangeForward}
                 onPresetSelect={(p) => guardLeave(() => applyPreset(p))}
-                belowTabs={<ReportViewFilter value={view} onChange={setView} isStaff={isStaff} hintProfit={showOnboardingHints && cashFlowDone && !viewedProfit} />}
+                belowTabs={<ReportViewFilter value={view} onChange={setView} isStaff={isStaff} />}
             />
 
             <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-6 pb-6 space-y-4 bg-bg">
@@ -718,6 +737,7 @@ export default function DailyReportPage() {
                                 onInputBlur={handleSaveCashflow}
                                 hintCash={hintCash}
                                 hintTransfer={hintTransfer}
+                                hintNet={hintNet}
                                 onEditExpense={setEditingExpense}
                                 onEditRestockPayment={handleEditRestockPayment}
                                 printInfo={{ addressName: selectedAddress?.name, dateLabel: rangeLabel, revenue: totalRevenue, cups: totalCups, printerIp: selectedAddress?.counter_printer_ip }}
@@ -727,6 +747,13 @@ export default function DailyReportPage() {
                             />
                         )}
 
+                        {/* Guide: CTA cuối của demo nằm cuối trang — khách cuộn qua Thực chi/Thực nhận là gặp (dải trên đỉnh ẩn ở
+                            trang này, OnboardingGuide). Hiện ngay khi nhập kho xong, không chờ tick viewedNet; thế chỗ 2 nút cuối trang. */}
+                        {isGuest && restockProgress.bought ? (
+                            <Link ref={ctaRef} to="/signup" className={`m-3 py-3.5 rounded-[14px] bg-primary text-white text-center text-[14px] font-black uppercase tracking-wide active:scale-[0.98] transition ${onboardingHintClass(true, 'solid')}`}>
+                                Hoàn thành! Đăng ký tài khoản
+                            </Link>
+                        ) : (
                         <div className="flex items-center justify-center gap-2 p-3">
                             <button onClick={() => setShowSupportModal(true)} className={FOOT_BTN}>Hỗ trợ / góp ý</button>
                             {/* In báo cáo dòng tiền cuối ca — tờ in dựng trong CashFlowCard nên
@@ -735,6 +762,7 @@ export default function DailyReportPage() {
                                 <button onClick={() => setPrintPreview(true)} className={FOOT_BTN}>In báo cáo</button>
                             )}
                         </div>
+                        )}
                     </div>
                 )}
             </main>

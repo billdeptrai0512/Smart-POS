@@ -80,6 +80,10 @@ export function splitExpenses(expenses?: Row[] | null) {
 //   shiftExpenses  : expenses non-refill của ngày ("chi trong ca" ad-hoc, không có payment riêng)
 //   afterShiftExpenses : expenses is_refill + free_form ("Sau chốt ca", vd đồ cúng) — tiền
 //                        mặt tiêu SAU khi đếm tiền, KHÔNG có payment riêng → trừ Thực nhận.
+// Tiền chi trong ca cộng vào Thực thu (thẻ So sánh): payments + chi phí non-refill. Kiểm kê và guide Kết ca dùng chung.
+export const inShiftCashTotal = (payments?: Row[] | null, expenses?: Row[] | null) =>
+    computeCashFlowTotals({ payments: payments || [], shiftExpenses: (expenses || []).filter(e => !e.is_refill) }).actualTotal
+
 export function computeCashFlowTotals({
     liveCash = 0,
     liveTransfer = 0,

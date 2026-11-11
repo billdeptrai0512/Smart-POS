@@ -17,10 +17,9 @@ import { useStats } from '../contexts/StatsContext'
 import { useHistory } from '../contexts/HistoryContext'
 import { useConfirm } from '../contexts/ConfirmContext'
 import { useAuth } from '../contexts/AuthContext'
-import { readOnboardingState, writeOnboardingState, DEFAULT_ONBOARDING_STATE, isInventoryProgressDone } from '../utils/onboardingStorage'
+import { readOnboardingState, writeOnboardingState, DEFAULT_ONBOARDING_STATE } from '../utils/onboardingStorage'
 import { useOnboardingProgressPersist } from '../hooks/useOnboardingProgressPersist'
 import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
-import { orderStep, isRecipeStepActive } from '../components/common/onboarding/steps'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
 import OrdersList from '../components/HistoryPage/OrdersList'
 import SalesCard from '../components/DailyReportPage/SalesCard'
@@ -52,13 +51,13 @@ export default function HistoryPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
-    // Onboarding: "Xem nhật ký" only counts once step "Tạo đơn" is done (drinks picked AND
-    // sent — see onboarding/steps.ts); visiting /history before that doesn't tick it, so the order
+    // Onboarding: "Xem nhật ký" only counts once step "Bán hàng" is done (order sent — see
+    // onboarding/steps.ts); visiting /history before that doesn't tick it, so the order
     // matters, not just "has this page ever been opened".
     useEffect(() => {
         if (!isGuest || !addressId) return
         const { orderProgress } = readOnboardingState(addressId)
-        if (!orderProgress.viewedHistory && orderStep.items({ orderProgress }).every(i => i.done)) {
+        if (!orderProgress.viewedHistory && orderProgress.sent >= 1) {
             writeOnboardingState(addressId, { orderProgress: { ...orderProgress, viewedHistory: true } })
         }
     }, [isGuest, addressId])
@@ -79,10 +78,11 @@ export default function HistoryPage() {
     // lại mỗi render vì user có thể bấm qua tab đó bất cứ lúc nào (render-time-adjust, cùng
     // pattern với useOrderOnboardingProgress.ts). Persist dùng chung
     // useOnboardingProgressPersist với orderProgress.
-    // Cả 3 cờ chỉ tick khi bước "Tạo đơn" đã xong: guide đi tuần tự, ghé /history sớm (khi còn đang
+    // Cả 3 cờ chỉ tick khi bước "Bán hàng" đã xong: guide đi tuần tự, ghé /history sớm (khi còn đang
     // tạo đơn) mà tick luôn thì tới lượt bước Nhật ký guide nhảy cóc qua việc user chưa từng làm.
     const orderStored = useOnboardingProgress('orderProgress', { isGuest, addressId })
-    const orderDone = orderStep.items({ orderProgress: orderStored }).every(i => i.done)
+    const finalStep = useOnboardingProgress('restockProgress', { isGuest, addressId }).bought // bước cuối → sáng đường về Báo cáo
+    const orderDone = orderStored.sent >= 1
     const [journalProgress, setJournalProgress] = useState(() => {
         const stored = isGuest && addressId ? readOnboardingState(addressId).journalProgress : DEFAULT_ONBOARDING_STATE.journalProgress
         return orderDone && activeTab === 'sales' && !stored.viewedIncome ? { ...stored, viewedIncome: true } : stored
@@ -92,15 +92,7 @@ export default function HistoryPage() {
     }
     useOnboardingProgressPersist('journalProgress', journalProgress, { isGuest, addressId })
     // Hint tuần tự: tab Chi phí trước, rồi mũi tên "tiến" sang trang Báo cáo (Báo cáo là trang riêng).
-    const journalHint = !isGuest ? null : !journalProgress.viewedExpense ? 'expense' : !journalProgress.viewedReport ? 'report' : null
-
-    // Phase 5 "Điều chỉnh công thức" không còn nút riêng trong guide — hint thẳng vào mũi tên
-    // "tiến" ở header (như DailyReportPage.tsx), cho user quay lại /history rồi đi tiếp tới
-    // /category qua menuSequence.ts. inventoryProgress/recipeProgress không thuộc trang này —
-    // đọc read-only qua useOnboardingProgress (xem onboarding/steps.ts).
-    const inventoryProgress = useOnboardingProgress('inventoryProgress', { isGuest, addressId })
-    const recipeProgress = useOnboardingProgress('recipeProgress', { isGuest, addressId })
-    const hintGoToRecipes = isGuest && isRecipeStepActive(isInventoryProgressDone(inventoryProgress), recipeProgress)
+    const journalHint = !(isGuest && orderDone) ? null : !journalProgress.viewedExpense ? 'expense' : !journalProgress.viewedReport ? 'report' : null
 
     // Date selection (scope/offset/customRange + handlers) lives in the shared
     // hook so /history and /report stay in lock-step. Seeded from nav state
@@ -396,7 +388,7 @@ export default function HistoryPage() {
                 canGoForward={canGoForwardPeriod}
                 onBack={() => goToMenuStep(activeTab, -1, { navigate, backTo, wizard: location.state?.wizard })}
                 onForward={handleForward}
-                hintForward={journalHint === 'report' || hintGoToRecipes}
+                hintForward={journalHint === 'report' || (isGuest && finalStep)}
                 activeTab={activeTab}
                 hintTab={journalHint === 'expense' ? 'expense' : null}
                 onTabSelect={setActiveTab}
@@ -461,7 +453,7 @@ export default function HistoryPage() {
                         <button
                             onClick={() => { if (scope === 'day') setExpenseDate(dayInputValue); setShowAddModal(true) }}
                             aria-label="Thêm chi phí"
-                            className="bg-primary rounded-[12px] px-4 py-2.5 flex items-center justify-center text-[13px] font-bold uppercase tracking-wider text-bg hover:bg-primary/90 active:scale-95 transition-all shadow-sm"
+                            className="bg-danger rounded-[12px] px-4 py-2.5 flex items-center justify-center text-[13px] font-bold uppercase tracking-wider text-bg hover:bg-danger/90 active:scale-95 transition-all shadow-sm"
                         >
                             <Plus size={18} />
                         </button>

@@ -133,7 +133,10 @@ export function usePrepNotice() {
     // Món hết giữa ca vừa lấy trong lần mở modal này → { ingredient: { qty, warehouse } }. Giữ món ở lại danh sách làm dòng
     // "Đã lấy" đến khi đóng modal (settle); bấm lại dòng đó = hoàn tác đúng số đã lấy.
     const [confirmed, setConfirmed] = useState<PrepConfirmed>({})
-    const settle = useCallback(() => setConfirmed({}), [])
+    // Món soạn đầu ca: số "Tồn kho" tính ngay lúc bấm (kho hiện − phần vừa lấy / + phần hoàn tác) thay vì chờ lưu + tải lại
+    // (~0,5–1s, số nhảy trễ sau khi viên đã đổi). Giữ tới khi đóng modal, lúc đó số server đã khớp.
+    const [frozenWh, setFrozenWh] = useState<Record<string, number>>({})
+    const settle = useCallback(() => { setConfirmed({}); setFrozenWh({}) }, [])
 
     const allItems = useMemo(() => {
         if (!ready) return []
@@ -148,7 +151,10 @@ export function usePrepNotice() {
     // Thành phẩm không "lấy từ kho" mà là LÀM: tách khỏi checklist Lấy, hiện ở danh sách riêng với lượng còn phải làm
     // (cần − đã sản xuất hôm nay; mẻ sản xuất là tiêu hao âm của thành phẩm nên cộng vào "cần").
     const { batchKeys } = useProducts()
-    const items = useMemo(() => allItems.filter(it => !batchKeys.has(it.ingredient)), [allItems, batchKeys])
+    const items = useMemo(
+        () => allItems.filter(it => !batchKeys.has(it.ingredient))
+            .map(it => (it.kind !== 'depleted' && frozenWh[it.ingredient] != null ? { ...it, warehouse: frozenWh[it.ingredient] } : it)),
+        [allItems, batchKeys, frozenWh])
     const batchItems = useMemo(
         () => allItems.filter(it => batchKeys.has(it.ingredient))
             .map(it => ({ ...it, need: r1((it.need ?? 0) + (common.producedMap[it.ingredient] ?? 0)) }))
@@ -165,11 +171,16 @@ export function usePrepNotice() {
     // ref luôn trỏ bản mới nhất để timer đọc đúng state hiện tại.
     const pushRef = useRef<(() => Promise<void>) | null>(null)
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const tickRef = useRef(0) // tăng mỗi lần bấm Lấy — biết có lần bấm mới chen vào lúc đang lưu không
     pushRef.current = async () => {
         if (!inventory.isDirty) return
+        const tick = tickRef.current
         try {
             const row = await inventory.pushInventory(profile?.id, systemTotalRevenue)
             if (row) await inventory.reloadStocks() // kho dự trữ đã trừ → số "Tồn kho" trong modal tươi lại
+            // Lưu xong, server đã khớp → bỏ số tạm (số tạm chỉ sống trong lúc chờ lưu). Có lần bấm mới chen vào thì giữ,
+            // lần lưu sau sẽ dọn. Lưu lỗi: giữ số tạm — khớp với viên "Đã lấy" vẫn chờ lưu lại, toast lỗi đã báo.
+            if (row && tick === tickRef.current) setFrozenWh({})
         } catch (err) {
             showError(err, 'Lưu nhập thêm từ kho')
         }
@@ -211,6 +222,9 @@ export function usePrepNotice() {
             const fill = it.warehouse != null ? Math.min(fillQty, it.warehouse) : fillQty
             if (!filled && !(fill > 0)) return noStock()
             next = filled ? '' : fill
+            const wh = it.warehouse
+            tickRef.current++
+            if (wh != null) setFrozenWh(f => ({ ...f, [ingredient]: Math.max(0, r1(filled ? wh + Number(restockInputs[ingredient] || 0) : wh - fill)) }))
         }
         inventory.onRestockChange(ingredient, String(next))
         if (next !== '' && skipped[ingredient]) inventory.onSkipToggle(ingredient, false) // nhập thêm ⇄ bỏ qua loại trừ nhau

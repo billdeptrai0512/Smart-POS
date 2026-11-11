@@ -5,8 +5,8 @@ import { onboardingHintClass } from '../../utils/onboardingHint'
 import { ICON_BTN } from './ModalShell'
 
 // Header dùng chung cho /inventory (Tồn kho) và /category (Công thức) — chỉ khác tiêu đề,
-// đơn vị đếm ("loại" vs "món") và bộ tab. subtitle (tuỳ chọn) thay dòng đếm — vd. chọn ngày của Kiểm kê. hintBack/hintForward: onboarding gợi ý bấm mũi tên
-// tới trang kế (Công thức sau Tồn kho; Tồn kho sau Công thức) — xem onboarding/steps.ts.
+// đơn vị đếm ("loại" vs "món") và bộ tab. subtitle (tuỳ chọn) thay dòng đếm — vd. chọn ngày của Kiểm kê. hintTab/hintBack: onboarding
+// gợi ý bấm tab / mũi tên lùi — xem onboarding/steps.ts.
 interface Props {
     title: string
     count?: number
@@ -19,10 +19,9 @@ interface Props {
     onTabSelect?: (key: string) => void
     hintTab?: string | null
     hintBack?: boolean
-    hintForward?: boolean
 }
 
-export default function MenuPageHeader({ title, count, unitLabel, subtitle, onBack, onForward, tabs, activeTab, onTabSelect, hintTab, hintBack, hintForward }: Props) {
+export default function MenuPageHeader({ title, count, unitLabel, subtitle, onBack, onForward, tabs, activeTab, onTabSelect, hintTab, hintBack }: Props) {
     return (
         <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
             <div className="flex items-center gap-3">
@@ -42,7 +41,7 @@ export default function MenuPageHeader({ title, count, unitLabel, subtitle, onBa
                 {onForward && (
                     <button
                         onClick={onForward}
-                        className={`${ICON_BTN} ${onboardingHintClass(hintForward)}`}
+                        className={ICON_BTN}
                         title="Tiếp"
                     >
                         <ArrowRight size={20} strokeWidth={2.5} />

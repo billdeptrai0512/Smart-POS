@@ -13,9 +13,7 @@ export function onboardingHintClass(active: unknown, variant = 'default') {
     return variant === 'solid' ? 'onboarding-hint-solid' : variant === 'soft' ? 'onboarding-hint-soft' : 'onboarding-hint'
 }
 
-// Shared by every onboarding step that matches a target by name (product/extra names) —
-// used by MenuGrid.tsx and useOrderOnboardingProgress.ts, kept in one place so the matching
-// rule (trim + lowercase) can't drift between them.
+// trim + lowercase cho so khớp theo tên.
 export function norm(s?: string | null) {
     return (s || '').trim().toLowerCase()
 }

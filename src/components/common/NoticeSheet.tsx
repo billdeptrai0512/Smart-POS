@@ -1,10 +1,13 @@
 import type { ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
+import { onboardingHintClass } from '../../utils/onboardingHint'
 import { BottomSheet } from './ModalShell'
 
 // Bottom-sheet của dải notice (PrepPinBar, WarehousePrepNotice): icon + tiêu đề bên trái, số đếm + nút X
 // bên phải, danh sách ngay bên dưới. Header đứng yên (nút X luôn trong tầm tay), chỉ danh sách cuộn.
-interface Props { icon: ReactNode; title: string; count: number | string; onClose: () => void; children: ReactNode }
+// hintClose: guide khách dùng thử sáng nút X khi việc trong sheet đã xong.
+interface Props { icon: ReactNode; title: string; count: number | string; onClose: () => void; children: ReactNode; hintClose?: boolean }
 
 // Thân sheet tính bất đồng bộ: lỗi → nút "Thử lại"; đang tính → chữ chờ; xong thì vẽ children.
 export function SheetBody({ error, loading, onRetry, children }: { error: unknown; loading: boolean; onRetry: () => void; children: ReactNode }) {
@@ -36,8 +39,10 @@ function SheetSkeleton() {
     )
 }
 
-export default function NoticeSheet({ icon, title, count, onClose, children }: Props) {
-    return (
+// Portal ra body: dải notice nằm TRONG header POS (relative z-20 = stacking context riêng), không portal thì sheet z-[100]
+// bị kẹt ở tầng 20 của header và nút ✕/số lượng (z-20) trên thẻ món đè lên sheet.
+export default function NoticeSheet({ icon, title, count, onClose, children, hintClose = false }: Props) {
+    return createPortal(
         <BottomSheet
             onClose={onClose}
             panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl flex flex-col animate-slide-up max-h-[85dvh] overflow-hidden"
@@ -49,12 +54,13 @@ export default function NoticeSheet({ icon, title, count, onClose, children }: P
                 <button
                     onClick={onClose}
                     aria-label="Đóng"
-                    className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/60 text-text-secondary hover:text-text transition-all shrink-0"
+                    className={`w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/60 text-text-secondary hover:text-text transition-all shrink-0 ${onboardingHintClass(hintClose, 'solid')}`}
                 >
                     <X size={16} />
                 </button>
             </div>
             <div className="min-h-0 overflow-y-auto px-5 pt-1 pb-8">{children}</div>
-        </BottomSheet>
+        </BottomSheet>,
+        document.body,
     )
 }

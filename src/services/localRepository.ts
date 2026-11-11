@@ -3,9 +3,10 @@
  * Manages all "Guest Mode" data in LocalStorage.
  * Mimics Supabase CRUD operations for products, recipes, orders, etc.
  */
-import { dateStringVN, startOfDayVN } from '../utils/dateVN'
+import { dateStringVN, startOfDayVN, addDaysVN } from '../utils/dateVN'
 import { ONBOARDING_STORAGE_PREFIX } from '../utils/onboardingStorage'
-import { RECIPE_TARGET_PRODUCT } from '../components/common/onboarding/steps'
+import { generateDemoOrders, type Budget } from '../utils/demoDay'
+import { ingredientLabel } from '../utils/ingredients'
 import type { Row, Product } from '../types/domain'
 import { readJSON, writeJSON } from '../utils/storage'
 
@@ -30,6 +31,8 @@ const KEYS = {
     EXPENSE_CATEGORIES: 'guest_expense_categories',
     EXPENSE_PAYMENTS: 'guest_expense_payments',
     TABLES: 'guest_tables',
+    // { budget: tồn kho+quầy của mẫu theo NVL, day: ngày đã sinh ngày bán giả, unbilled: món + số ly pha không bấm bill } — xem seedGuestDemoDay.
+    DEMO_DAY: 'guest_demo_day',
     IS_GUEST: 'pos_is_guest'
 };
 
@@ -84,15 +87,7 @@ export const initializeGuestFromGlobal = (data: Row) => {
         set(KEYS.PRODUCTS, data.products.map((p: Row) => ({ ...p, owner_address_id: addressId, is_active: true })));
     }
     if (data.recipes) {
-        // Công thức bước onboarding "Công thức" để trống cả 4 dòng; điền sẵn ly/nắp/đường để khách chỉ
-        // phải nhập cà phê (xem onboarding/steps.ts) — 4 ô nhập cùng một thao tác.
-        const target = (data.products || []).find((p: Row) => (p.name || '').trim().toLowerCase() === RECIPE_TARGET_PRODUCT);
-        const prefill: Record<string, number> = { cup: 1, lid: 1, 'đường': 5 };
-        set(KEYS.RECIPES, data.recipes.map((r: Row) => ({
-            ...r,
-            address_id: addressId,
-            ...(target && r.product_id === target.id && !r.amount && prefill[r.ingredient] ? { amount: prefill[r.ingredient] } : {}),
-        })));
+        set(KEYS.RECIPES, data.recipes.map((r: Row) => ({ ...r, address_id: addressId })));
     }
     if (data.extras) {
         set(KEYS.PRODUCT_EXTRAS, data.extras.map((e: Row) => ({ ...e, address_id: addressId })));
@@ -101,7 +96,18 @@ export const initializeGuestFromGlobal = (data: Row) => {
         set(KEYS.EXTRA_INGREDIENTS, data.extraIngredients.map((i: Row) => ({ ...i })));
     }
 
-    set(KEYS.ORDERS, []);
+    // 3 ngày cùng thứ các tuần trước (cả ngày, giờ theo dáng cao điểm — demoTimes) → dự báo của dải "Cần chuẩn bị" (HISTORY_OFFSETS_TODAY) có số
+    // ngay từ đầu ca. Ngày hôm nay chỉ sinh khi khách gửi đơn đầu tiên (seedGuestDemoDay).
+    const budget: Budget = {};
+    for (const s of data.stocks || []) {
+        if (s?.ingredient) budget[s.ingredient] = (Number(s.warehouse_stock) || 0) + (Number(s.counter_stock) || 0);
+    }
+    set(KEYS.DEMO_DAY, { budget, day: null });
+    const demoInput = { products: data.products || [], recipes: data.recipes || [], ingredients: data.ingredients || [], extras: data.extras || [], extraIngredients: data.extraIngredients || [], budget, addressId };
+    set(KEYS.ORDERS, [7, 14, 21].flatMap(d => {
+        const from = addDaysVN(new Date(), -d).getTime();
+        return generateDemoOrders({ ...demoInput, from, to: from + 24 * 3600_000 });
+    }));
 
     // Seed expenses with synthetic refill rows so the playground inherits the default's
     // warehouse stock — fetchLocalIngredientStocks reads Σ refill_qty to compute warehouse.
@@ -143,21 +149,24 @@ export const initializeGuestFromGlobal = (data: Row) => {
         created_at: new Date().toISOString()
     });
     seededExpenses.push(
-        // Số nhỏ cho vừa quy mô 2 đơn demo (73k): chi phí trong ca (10k) quyết định số tiền ở bước
-        // "Kết ca" của guide — xem steps.ts.
+        // Chi trong ca (10k tiền mặt) trừ vào tiền mặt phải có ở bước "Kết ca" của guide — xem steps.ts.
         demoExpense('Nhân viên ăn sáng', 10000, 'Chi phí khác', false),
         demoExpense('Thuê mặt bằng', 20000, 'Thuê mặt bằng', true),
     );
     set(KEYS.EXPENSES, seededExpenses);
+    // Thanh toán gắn theo phiếu chi — phiếu vừa reset thì thanh toán của lượt dùng thử trước thành "Trả NCC" mồ côi
+    // trong Thực chi của lượt mới (seed không tạo thanh toán nào).
+    set(KEYS.EXPENSE_PAYMENTS, []);
 
     // Seed a "yesterday" shift closing carrying the counter portion, so counter_stock
     // (quầy) shows up split from warehouse_stock instead of everything landing in kho
     // tổng, and Daily Report / Nhật ký have a real closing to carry forward as opening.
     // restock=0 (no transfer flow to fake); opening=remaining (no sales to fake for a
     // shift that never happened) keeps hao hụt math at 0 instead of a fake negative.
+    // Cả món quầy = 0 (demo "một ngày của quán" bắt đầu quầy trống): có dòng thì Kiểm kê hiện Đầu kỳ "0", không phải "–".
     const seededReport = (data.stocks || [])
-        .filter((s: Row) => s && s.ingredient && Number(s.counter_stock) > 0)
-        .map((s: Row) => ({ ingredient: s.ingredient, opening: Number(s.counter_stock), restock: 0, remaining: Number(s.counter_stock) }));
+        .filter((s: Row) => s && s.ingredient)
+        .map((s: Row) => ({ ingredient: s.ingredient, opening: Number(s.counter_stock) || 0, restock: 0, remaining: Number(s.counter_stock) || 0 }));
     set(KEYS.SHIFT_CLOSINGS, seededReport.length ? [{
         id: generateId(),
         address_id: addressId,
@@ -295,6 +304,60 @@ export const fetchLocalExtraIngredients = (extraIds: string[] | null = null) => 
         map[i.extra_id].push(i);
     });
     return map;
+};
+
+// Ngày bán giả: chạy ĐÚNG 1 lần mỗi lượt dùng thử, ngay trước đơn đầu tiên khách gửi — số đơn theo tồn mẫu, giờ rải
+// theo dáng cao điểm (demoTimes) từ 6h sáng tới giờ hiện tại; vào trước 6h thì từ 0h. Không sinh lại ngày hôm sau: tồn mẫu
+// (budget) giả định kho đầy, trong khi kho của lượt này đã lấy ra quầy hết → sinh lại là quầy âm.
+// Còn ngày demo chờ sinh → đơn kế tiếp sẽ sinh cả ngày (POS nạp lại tổng ngày + Nhật ký đúng lần đó).
+export const guestDemoDayPending = () => { const s = readJSON<{ day: string | null } | null>(KEYS.DEMO_DAY, null); return !!s && !s.day; };
+export const seedGuestDemoDay = () => {
+    const state = readJSON<{ budget: Budget; day: string | null } | null>(KEYS.DEMO_DAY, null);
+    const today = dateStringVN();
+    if (!state || state.day) return;
+    const now = Date.now();
+    const dayStart = startOfDayVN().getTime();
+    // Khung bán 5–8 tiếng tới lúc khách bấm đơn (mở cửa 6h; chưa đủ 5 tiếng thì lùi về trước 6h, không qua 0h), giờ
+    // đầu khung coi như 6h mở cửa → luôn có cao điểm sáng dù khách vào demo lúc nào.
+    const open = dayStart + 6 * 3600_000;
+    const span = Math.min(8 * 3600_000, Math.max(5 * 3600_000, now - open));
+    const from = Math.max(dayStart, now - span);
+    const generated = generateDemoOrders({
+        products: get(KEYS.PRODUCTS), recipes: get(KEYS.RECIPES), ingredients: get(KEYS.INGREDIENT_COSTS),
+        extras: get(KEYS.PRODUCT_EXTRAS), extraIngredients: get(KEYS.EXTRA_INGREDIENTS),
+        budget: state.budget, addressId: DEMO_ADDRESS_ID, from, to: Math.max(from, now - 60_000), shift: open - from,
+    });
+    set(KEYS.ORDERS, [...get(KEYS.ORDERS), ...generated]);
+    // Kịch bản "pha bán không bấm bill": 1–3 ly của 1 món có cà phê (khách tự đếm cà phê) đã bán trong ngày. Két dư
+    // đúng tiền mấy ly đó (Kết ca), nguyên liệu hụt đúng định lượng mấy ly đó (Kiểm kê) → thẻ "Nghi vấn bán thiếu
+    // ghi nhận" chỉ đích danh món + số ly. Xem getGuestUnbilled.
+    // Số ly tối đa còn pha được từ phần quầy còn lại, chừa 1 ly cho đơn của chính khách.
+    const recipes = get(KEYS.RECIPES);
+    const extraIngs = get(KEYS.EXTRA_INGREDIENTS);
+    const left: Budget = { ...state.budget };
+    for (const it of generated.flatMap(o => o.order_items)) {
+        for (const r of recipes) if (r.product_id === it.product_id) left[r.ingredient] = (left[r.ingredient] || 0) - Number(r.amount || 0) * it.quantity;
+        for (const e of extraIngs) if (it.extra_ids.includes(e.extra_id)) left[e.ingredient] = (left[e.ingredient] || 0) - Number(e.amount || 0) * it.quantity;
+    }
+    const maxQty = (pid: string) => Math.min(3, ...recipes.filter(r => r.product_id === pid && Number(r.amount) > 0)
+        .map(r => Math.floor((left[r.ingredient] || 0) / Number(r.amount)) - 1));
+    const sold = new Set(generated.flatMap(o => o.order_items.map((i: Row) => i.product_id)));
+    const pool = get(KEYS.PRODUCTS).filter(p => sold.has(p.id) && Number(p.price) > 0 && maxQty(p.id) >= 1
+        && recipes.some(r => r.product_id === p.id && Number(r.amount) > 0 && ingredientLabel(r.ingredient).toLowerCase() === 'cà phê'));
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    const unbilled = pick ? { productId: pick.id, qty: 1 + Math.floor(Math.random() * maxQty(pick.id)) } : null;
+    set(KEYS.DEMO_DAY, { ...state, day: today, unbilled });
+};
+
+// Món + số ly pha không bấm bill của ngày demo hôm nay, kèm giá và lượng NVL đã dùng cho mấy ly đó.
+export const getGuestUnbilled = () => {
+    const state = readJSON<{ day: string | null; unbilled?: { productId: string; qty: number } | null } | null>(KEYS.DEMO_DAY, null);
+    const u = state?.day === dateStringVN() ? state.unbilled : null;
+    const product = u && get(KEYS.PRODUCTS).find(p => p.id === u.productId);
+    if (!u || !product) return null;
+    const usage: Record<string, number> = {};
+    for (const r of get(KEYS.RECIPES)) if (r.product_id === u.productId && Number(r.amount) > 0) usage[r.ingredient] = (usage[r.ingredient] || 0) + Number(r.amount) * u.qty;
+    return { qty: u.qty, value: u.qty * Number(product.price), usage };
 };
 
 export const submitLocalOrder = (order: Row) => {

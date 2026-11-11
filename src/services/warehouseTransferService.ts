@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabaseClient'
+import * as localRepo from './localRepository'
 import type { UUID } from '../types/domain'
 import { dateStringVN } from '../utils/dateVN'
 
@@ -18,7 +19,8 @@ export async function fetchWarehouseTransfer(groupId: UUID, forDate: string) {
 
 // Hàng kho tổng ĐÃ SOẠN cho MỘT chi nhánh vào ngày `forDate` (dòng đã xác nhận ở "Soạn cho ngày mai") → { [ingredient]: { qty, packed, by } }.
 // Địa chỉ ngoài nhóm kho chung / chưa có = {}. Ném khi lỗi (caller tự nuốt).
-export async function fetchTransferToAddress(addressId: UUID, forDate: string) {
+export async function fetchTransferToAddress(addressId: UUID, forDate: string): Promise<Record<string, { qty: number; packed: boolean; by?: string }>> {
+    if (localRepo.isGuest()) return {} // demo không có nhóm kho chung
     const { data, error } = await supabase
         .from('warehouse_transfer_items')
         .select('ingredient, qty, packed_by_name, warehouse_transfers!inner(for_date)')

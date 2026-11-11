@@ -32,7 +32,7 @@ export default function PasswordInput({
                 required={required}
                 autoComplete={autoComplete}
                 placeholder={label ? ' ' : placeholder}
-                className={`peer w-full px-4 py-3 pr-11 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all disabled:opacity-50 ${className}`}
+                className={`peer w-full px-4 py-3 pr-11 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all disabled:opacity-50 aria-[invalid=true]:border-danger aria-[invalid=true]:ring-2 aria-[invalid=true]:ring-danger/30 ${className}`}
                 {...rest}
             />
             {label && (

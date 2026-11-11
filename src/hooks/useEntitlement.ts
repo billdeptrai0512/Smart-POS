@@ -5,6 +5,7 @@ import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { ALL_TIER } from '../constants/monetization'
 import { onTabReturn } from '../utils/tabVisibility'
+import { readJSON, writeJSON } from '../utils/storage'
 
 // app_config chỉ RLS cho role `authenticated` (xem 20260511_monetization_phase1.sql)
 // → nếu query bắn đi TRƯỚC KHI supabase-js gắn xong access token của session (ngay
@@ -26,6 +27,11 @@ import { onTabReturn } from '../utils/tabVisibility'
 let _serverFlag: boolean | undefined
 let _serverFlagPromise: Promise<boolean | undefined> | null = null
 let _serverFlagAuthed: boolean | undefined
+// Lần đọc (đã đăng nhập) gần nhất trên máy này — cờ dùng chung toàn hệ thống, không theo tài khoản. Mở app / vừa đăng nhập
+// thì hiện ngay theo số này trong lúc đọc lại server (thay vì chờ). Admin vừa lật cờ thì sai tối đa tới khi đọc xong — như
+// fail-open sẵn có: SubscriptionGuard / SubscriptionPage đọc lại và sửa đường đi.
+const FLAG_CACHE_KEY = 'monetization_flag_cache'
+const cachedFlag = () => readJSON<boolean | undefined>(FLAG_CACHE_KEY, undefined)
 export function loadServerFlag(authed: boolean) {
     if (_serverFlagPromise && _serverFlagAuthed === authed) return _serverFlagPromise
     if (_serverFlagAuthed !== authed) _serverFlag = undefined
@@ -34,6 +40,7 @@ export function loadServerFlag(authed: boolean) {
         .then((v) => {
             // Lần đọc cũ (trạng thái đăng nhập trước) về muộn không được đè giá trị mới.
             if (_serverFlagPromise === p) _serverFlag = v
+            if (authed && v !== undefined) writeJSON(FLAG_CACHE_KEY, v)
             return v
         })
         .catch(() => { if (_serverFlagPromise === p) _serverFlagPromise = null; return undefined })
@@ -47,8 +54,14 @@ export function loadServerFlag(authed: boolean) {
  * @returns {{ enabled: boolean, loading: boolean }}
  */
 export function useMonetizationEnabled() {
-    const { hasSession, isGuest } = useAuth()
-    const [flag, setFlag] = useState(_serverFlag)
+    const { user, hasSession, isGuest } = useAuth()
+    // Giá trị gắn với trạng thái đăng nhập lúc đọc: vừa đăng ký xong (khách → có tài khoản) mà hook mới mount dùng lại
+    // false của lần đọc bằng anon key thì /subscription tưởng thu phí đang tắt, cho qua thẳng Danh mục rồi bị guard đá về
+    // /addresses. Lệch trạng thái → dùng số đã nhớ của lần đọc có đăng nhập (cachedFlag); chưa có thì coi như đang tải.
+    // Đã có user mà session chưa gắn xong (mở app / vừa đăng ký) vẫn tính là "đăng nhập" để dùng được số đã nhớ.
+    const key = hasSession || (user && !isGuest) ? true : isGuest ? false : null
+    const [read, setRead] = useState({ authed: _serverFlagAuthed, v: _serverFlag })
+    const flag = key === null ? undefined : read.authed === key ? read.v : key ? cachedFlag() : undefined
 
     useEffect(() => {
         // Guest không có session thật (xem AuthContext) → sẽ không bao giờ authenticated,
@@ -64,7 +77,7 @@ export function useMonetizationEnabled() {
             // Mạng chết hẳn thì dừng ở đây, không quay vòng gọi DB.
             if (v === undefined) {
                 if (retry) retryId = setTimeout(() => loadServerFlag(hasSession).then(apply(false)), 2000)
-            } else setFlag(v)
+            } else setRead({ authed: hasSession, v })
         }
         loadServerFlag(hasSession).then(apply(true))
         // "Thử lại đúng 1 lần" ở trên chỉ cứu lần đọc đầu — hook này gắn ở các Provider

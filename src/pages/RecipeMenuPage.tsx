@@ -14,6 +14,7 @@ import { normalizeSearchText, normalizeIngredientKey, sortIngredients, getIngred
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
+import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
 import { upsertProductPrice, insertProduct, updateProductSortOrder, updateProductName, removeProductFromAddress, upsertIngredientCost, setIngredientsGroup } from '../services/orderService'
 import { parseVNDInput } from '../utils'
 import { useToast } from '../hooks/useToast'
@@ -29,11 +30,6 @@ import { upsertRecipes } from '../services/recipeService'
 import { goToMenuStep } from '../utils/menuSequence'
 import { useTabRoute } from '../hooks/useTabRoute'
 import { RECIPE_TABS, DISCOUNT_TAB } from '../constants/menuTabs'
-import { norm } from '../utils/onboardingHint'
-import { isRecipeProgressDone, isCashFlowProgressDone, readOnboardingState, DEFAULT_ONBOARDING_STATE } from '../utils/onboardingStorage'
-import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
-import { useOnboardingProgressPersist } from '../hooks/useOnboardingProgressPersist'
-import { RECIPE_TARGET_PRODUCT } from '../components/common/onboarding/steps'
 import type { Row } from '../types/domain'
 import { groupRecipesByProduct } from '../utils/inventory'
 
@@ -97,28 +93,8 @@ export default function RecipeMenuPage() {
     const { products, batchProducts, toppings, recipes, ingredientCosts, ingredientUnits, ingredientGroups, discountPrograms, refreshProducts } = useProducts()
     const { addressId, selectedAddress } = useAddress()
     const { isManager, isAdmin, isGuest } = useAuth()
+    const finalStep = useOnboardingProgress('restockProgress', { isGuest, addressId }).bought // guide bước cuối → sáng ‹ về Tồn kho → Báo cáo
     const canEdit = isManager || isAdmin
-
-    // Onboarding phase 5 (Công thức) — hint thẻ "Cà phê đen" cho tới khi đã điền định lượng
-    // + tạo tùy chọn thêm.
-    // recipeProgress do trang này ghi viewedMenu/viewedRecipes (cùng pattern RecipeIngredientPage):
-    // chỉ tính khi đã xong Kết ca (nhập thực thu + xem lợi nhuận) — nếu không guide nhảy qua bước đang đứng.
-    // viewedRecipes cần viewedMenu trước.
-    const cashFlowProgress = useOnboardingProgress('cashFlowProgress', { isGuest, addressId })
-    const { viewedProfit } = useOnboardingProgress('journalProgress', { isGuest, addressId })
-    const shiftCloseDone = isCashFlowProgressDone(cashFlowProgress) && viewedProfit
-    const [recipeProgress, setRecipeProgress] = useState(() =>
-        (isGuest && addressId ? readOnboardingState(addressId) : DEFAULT_ONBOARDING_STATE).recipeProgress
-    )
-    useOnboardingProgressPersist('recipeProgress', recipeProgress, { isGuest, addressId })
-    const cafeDenProduct = useMemo(
-        () => (isGuest ? products.find(p => norm(p.name) === RECIPE_TARGET_PRODUCT) : null),
-        [isGuest, products]
-    )
-    const hintCafeDen = isGuest && !!cafeDenProduct && !isRecipeProgressDone(recipeProgress)
-    // 1 id duy nhất để so ở cả 2 nhánh render (kéo-thả/list) thay vì lặp lại
-    // `hintCafeDen && product.id === cafeDenProduct?.id` ở từng chỗ.
-    const hintCafeDenId = hintCafeDen ? cafeDenProduct!.id : null
 
     // Chỉ Admin được sắp xếp menu mặc định (chưa chọn địa chỉ) — giống rule cũ của saveSortOrder.
     const canSort = canEdit && !!(addressId || isAdmin)
@@ -131,10 +107,6 @@ export default function RecipeMenuPage() {
     // Tab nằm trên URL: /category/overall = Menu (menu chia theo danh mục, lọc theo danh mục, kéo-thả sắp xếp),
     // /category/recipes = Công thức (chi tiết từng món, tìm kiếm, thêm công thức, topping).
     const [view, setView] = useTabRoute('/category')
-    if (isGuest && addressId) {
-        if (shiftCloseDone && view === 'overall' && !recipeProgress.viewedMenu) setRecipeProgress(prev => ({ ...prev, viewedMenu: true }))
-        if (recipeProgress.viewedMenu && view === 'recipes' && !recipeProgress.viewedRecipes) setRecipeProgress(prev => ({ ...prev, viewedRecipes: true }))
-    }
     // Lọc danh mục ở tab Menu: 'all' | 'none' (món chưa thuộc mục nào) | id của mục (divider). Id lạ (mục đã xoá) rơi về 'all'.
     const [categoryFilter, setCategoryFilter] = useState('all')
     const restored = useRef(saved)
@@ -394,12 +366,12 @@ export default function RecipeMenuPage() {
                         triggerClassName="mt-1 gap-1 pl-5 text-[11px] leading-4 text-text/80 uppercase tabular-nums"
                     />
                 ) : undefined}
+                hintBack={isGuest && finalStep}
                 onBack={() => goToMenuStep('recipes', -1, { navigate, backTo, wizard: location.state?.wizard })}
                 onForward={() => goToMenuStep('recipes', +1, { navigate, backTo, wizard: location.state?.wizard })}
                 tabs={RECIPE_TABS}
                 activeTab={view}
                 onTabSelect={setView}
-                hintTab={hintCafeDen && view !== 'recipes' ? 'recipes' : undefined}
             />
 
             <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-4 pb-8 space-y-3 bg-bg">
@@ -467,7 +439,6 @@ export default function RecipeMenuPage() {
                                     rememberList()
                                     navigate(`/category/recipes/${product.id}`, { state: location.state })
                                 }}
-                                hint={kind === 'main' && product.id === hintCafeDenId}
                             />
                         ))}
                         {(kind === 'topping' ? searchedToppings : kind === 'batch' ? searchedBatches : searchedProducts).length === 0 && (

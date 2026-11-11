@@ -371,7 +371,7 @@ export default function BranchGrid({
                                     targetName={addr.name}
                                     description={
                                         <p className="text-text-secondary text-xs leading-relaxed">
-                                            Xoá toàn bộ dữ liệu của <span className="font-bold text-text">{addr.name}</span> — menu, công thức, nguyên liệu, đơn hàng, chi phí, gói đăng ký. <span className="text-danger font-bold">Không thể hoàn tác.</span>
+                                            Xóa toàn bộ dữ liệu bao gồm: danh mục, công thức, nguyên liệu, nhật ký, gói đăng ký.<br /><span className="text-danger font-bold">Không thể hoàn tác.</span>
                                         </p>
                                     }
                                     warning={addr.warehouse_group_id && addresses.some(a => a.id !== addr.id && a.warehouse_group_id === addr.warehouse_group_id) && (

@@ -198,6 +198,7 @@ export async function submitOrder(
 ): Promise<{ id: string | null }> {
     invalidateReportCache(addressId)
     if (localRepo.isGuest()) {
+        localRepo.seedGuestDemoDay() // đơn đầu tiên của khách → sinh cả ngày bán trước đó (1 lần/ngày)
         return localRepo.submitLocalOrder({
             id,
             total,

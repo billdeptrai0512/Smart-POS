@@ -8,7 +8,7 @@ import MenuDivider from '../common/MenuDivider'
 import { computeExtrasAfterIdx } from '../../utils/menuGridLayout'
 import { resolveDiscountedPrice, type DiscountProgram } from '../../utils/discountPrograms'
 import type { CartExtra, CartItem, CartTopping, Row, UUID } from '../../types/domain'
-import { onboardingHintClass, norm } from '../../utils/onboardingHint'
+import { onboardingHintClass } from '../../utils/onboardingHint'
 
 // The WHOLE card is the tap surface.
 //   tap (any card)  → add one of that item to the cart (onAdd); extras bar opens
@@ -23,13 +23,12 @@ interface ProductCardProps {
     qty: number
     onAdd: (product: Row) => void
     onRemove: (product: Row) => void
-    hint: boolean
     discountedPrice: number | null
+    hint?: boolean
 }
 
-const ProductCard = memo(function ProductCard({ product, qty, onAdd, onRemove, hint, discountedPrice }: ProductCardProps) {
+const ProductCard = memo(function ProductCard({ product, qty, onAdd, onRemove, discountedPrice, hint = false }: ProductCardProps) {
     const held = qty > 0
-    const hintClass = onboardingHintClass(hint)
     const [pulseKey, setPulseKey] = useState(0)        // bump per tap-add → replays the confirm pulse
     const suppressClick = useRef(false)               // swallow the click that trails a pointerup add
 
@@ -70,7 +69,7 @@ const ProductCard = memo(function ProductCard({ product, qty, onAdd, onRemove, h
             className={`menu-btn relative rounded-[1.5rem] p-3 sm:p-4 text-left min-h-[100px] flex flex-col justify-between cursor-pointer transition-all duration-300 focus:outline-none focus-visible:ring-4 focus-visible:ring-primary/30 ${held
                 ? 'bg-surface border-2 border-primary shadow-[0_8px_24px_var(--color-primary-glow)]'
                 : 'bg-surface border border-border/60 shadow-sm hover:border-text/30 hover:shadow-md hover:bg-surface-hover'
-                } ${hintClass}`}
+                } ${onboardingHintClass(hint)}`}
         >
             {/* Glow Effect */}
             {held && <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none" />}
@@ -143,16 +142,14 @@ interface ExtrasPopoverProps {
     onToggleExtra: (extra: CartExtra) => void
     onToggleStickyExtra: (extra: CartExtra) => void
     onToggleTopping: (topping: CartTopping) => void
-    hintExtraName: string | null
 }
 
-function ExtrasPopover({ activeProductId, extras, toppings, activeItem, enabledStickyExtraIds, onToggleExtra, onToggleStickyExtra, onToggleTopping, hintExtraName }: ExtrasPopoverProps) {
+function ExtrasPopover({ activeProductId, extras, toppings, activeItem, enabledStickyExtraIds, onToggleExtra, onToggleStickyExtra, onToggleTopping }: ExtrasPopoverProps) {
     const { sticky, normal } = useMemo(() => {
         const s: CartExtra[] = [], n: CartExtra[] = []
         for (const e of extras) (e.is_sticky ? s : n).push(e)
         return { sticky: s, normal: n }
     }, [extras])
-    const hintClassFor = (ex: CartTopping) => onboardingHintClass(hintExtraName && norm(ex.name) === hintExtraName)
 
     // Tapping the bottom card drops the bar below the fold. Pull it into view when
     // the active item changes — `nearest` stays put if it's already visible.
@@ -160,12 +157,11 @@ function ExtrasPopover({ activeProductId, extras, toppings, activeItem, enabledS
     useEffect(() => { ref.current?.scrollIntoView({ block: 'nearest' }) }, [activeProductId])
 
     const renderExtraButton = (ex: CartTopping, { on, onClick }: { on: boolean; onClick: () => void }) => {
-        const hintClass = hintClassFor(ex)
         return (
             <button
                 key={ex.id}
                 onClick={onClick}
-                className={`shrink-0 h-[34px] px-3 rounded-[10px] border font-bold text-[12px] whitespace-nowrap focus:outline-none transition-all shadow-sm uppercase flex items-center gap-1.5 ${on ? 'bg-warning/10 border-warning/50 text-warning' : 'bg-surface-light border-border/80 text-text-secondary hover:text-text'} ${hintClass}`}
+                className={`shrink-0 h-[34px] px-3 rounded-[10px] border font-bold text-[12px] whitespace-nowrap focus:outline-none transition-all shadow-sm uppercase flex items-center gap-1.5 ${on ? 'bg-warning/10 border-warning/50 text-warning' : 'bg-surface-light border-border/80 text-text-secondary hover:text-text'}`}
             >
                 {on && <span className="w-1.5 h-1.5 rounded-full bg-warning mb-[1px]" />}
                 {ex.name}
@@ -208,11 +204,11 @@ interface MenuGridProps {
     onToggleTopping: (topping: CartTopping) => void
     enabledStickyExtraIds?: string[]
     onToggleStickyExtra: (extra: CartExtra) => void
-    hintProductId?: UUID | null
-    hintExtraName?: string | null
+    // Guide khách dùng thử: các món cần bấm (useOrderOnboardingProgress).
+    hintProductIds?: string[]
 }
 
-export default function MenuGrid({ products, cart, activeItem, onAddItem, onRemoveItem, productExtras, productToppings, productDiscounts, tableName, onToggleExtra, onToggleTopping, enabledStickyExtraIds = [], onToggleStickyExtra, hintProductId, hintExtraName = null }: MenuGridProps) {
+export default function MenuGrid({ products, cart, activeItem, onAddItem, onRemoveItem, productExtras, productToppings, productDiscounts, tableName, onToggleExtra, onToggleTopping, enabledStickyExtraIds = [], onToggleStickyExtra, hintProductIds = [] }: MenuGridProps) {
     const navigate = useNavigate()
     const { isManager, isAdmin } = useAuth()
     const { loading, loadError } = useProducts()
@@ -305,8 +301,8 @@ export default function MenuGrid({ products, cart, activeItem, onAddItem, onRemo
                 qty={cartQtyMap.get(product.id) || 0}
                 onAdd={onAddItem}
                 onRemove={onRemoveItem}
-                hint={product.id === hintProductId}
                 discountedPrice={resolveDiscountedPrice(product.price, productDiscounts?.[product.id], tableName)}
+                hint={hintProductIds.includes(product.id)}
             />
         ))
         if (idx === extrasAfterIdx) {
@@ -321,7 +317,6 @@ export default function MenuGrid({ products, cart, activeItem, onAddItem, onRemo
                     onToggleExtra={onToggleExtra}
                     onToggleStickyExtra={onToggleStickyExtra}
                     onToggleTopping={onToggleTopping}
-                    hintExtraName={hintExtraName}
                 />
             )
         }

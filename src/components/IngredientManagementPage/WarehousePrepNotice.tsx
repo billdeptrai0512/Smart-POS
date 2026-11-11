@@ -16,6 +16,8 @@ import { buildTodayBoughtMap } from '../../utils/prepToday'
 import { dateStringVN } from '../../utils/dateVN'
 import { formatVND } from '../../utils/money'
 import { ingredientLabel } from '../../utils/ingredients'
+import { writeOnboardingState } from '../../utils/onboardingStorage'
+import { useOnboardingProgress } from '../../hooks/useOnboardingProgress'
 import HubBuyNotice, { HubBuyBody } from './HubBuyNotice'
 import NoticeBar from '../common/NoticeBar'
 import NoticeSheet from '../common/NoticeSheet'
@@ -26,7 +28,8 @@ import type { Row } from '../../types/domain'
 // Dải notice "Bổ sung tồn kho" ở đỉnh /inventory (Tồn kho): NVL/bao bì cần MUA thêm để đủ bán ngày
 // mai (target = max(dự báo mai, tồn tối thiểu) − tổng tồn kho + quầy). Bấm → danh sách; nút "Mua N …"
 // mở RestockModal (cùng form Nhập kho của trang chi tiết), bấm tên → trang chi tiết. Mua đủ thì món chuyển xuống đáy với viên "Đã mua N" (tiến độ x/y, vẫn hiện đến hết ngày).
-// Chỉ chủ/quản lý (nhập kho là thao tác ghi chi phí + kho); guest/offline ẩn như dải ở /pos.
+// Chỉ chủ/quản lý (nhập kho là thao tác ghi chi phí + kho); offline ẩn như dải ở /pos.
+// hint: bước cuối guide khách dùng thử (onboarding/steps.ts) — khách nhập kho mẫu 1 món, app nhập nốt phần còn lại, xong bước.
 // Bấm tên nguyên liệu → sang trang chi tiết (trang cha unmount); cờ module này cho lần mount kế
 // (back về /inventory) mở lại đúng bảng — cùng kiểu cache `saved` của IngredientManagementPage.
 let reopenSheet = false
@@ -37,22 +40,23 @@ const debtSnapshots = new Map<string, IngredientDebt[]>()
 interface Props {
     onRestocked?: () => unknown
     onOpenIngredient?: (ingredient: string, tab?: 'history', sinceISO?: string) => void
+    hint?: boolean
 }
 
-export default function WarehousePrepNotice({ onRestocked, onOpenIngredient }: Props) {
-    const { isGuest, isManager, isAdmin } = useAuth()
+export default function WarehousePrepNotice({ onRestocked, onOpenIngredient, hint }: Props) {
+    const { isManager, isAdmin } = useAuth()
     const { addressId, warehouseRole } = useAddress()
     const { isOnline } = useStats()
     // Nhóm đã có kho tổng: số "cần mua" của từng chi nhánh so riêng với CÙNG 1 kho chung nên sai → kho tổng tính gộp cả nhóm
     // (HubBuyNotice), chi nhánh thành viên không mua hàng nên ẩn.
-    if (!((isManager || isAdmin) && !isGuest && isOnline && addressId) || warehouseRole === 'member' || warehouseRole === 'pending') return null
+    if (!((isManager || isAdmin) && isOnline && addressId) || warehouseRole === 'member' || warehouseRole === 'pending') return null
     return warehouseRole === 'hub'
         ? <HubBuyNotice onRestocked={onRestocked} />
-        : <Notice key={addressId} addressId={addressId} onRestocked={onRestocked} onOpenIngredient={onOpenIngredient} />
+        : <Notice key={addressId} addressId={addressId} onRestocked={onRestocked} onOpenIngredient={onOpenIngredient} hint={hint} />
 }
 
-function Notice({ addressId, onRestocked, onOpenIngredient }: Props & { addressId: string }) {
-    const { profile } = useAuth()
+function Notice({ addressId, onRestocked, onOpenIngredient, hint }: Props & { addressId: string }) {
+    const { profile, isGuest } = useAuth()
     const { refreshProducts } = useProducts()
     const { refreshTodayExpenses } = useHistory()
     // Cùng đường tính với dải "Việc cần làm" ở /addresses (useGroupPrep + buildHubBuyItems) → hai nơi luôn khớp.
@@ -73,6 +77,9 @@ function Notice({ addressId, onRestocked, onOpenIngredient }: Props & { addressI
     const progress = total > 0 ? `${doneCount}/${total}` : debts.length || (prep.error ? '!' : 0)
     const show = total > 0 || debts.length > 0 || !!prep.error
     const [open, setOpen] = useState(reopenSheet)
+    const [hinted, setHinted] = useState(false)
+    const restockProgress = useOnboardingProgress('restockProgress', { isGuest, addressId })
+    const openSheet = () => { setOpen(true); setHinted(true) }
     useEffect(() => { reopenSheet = false }, [])
     const loadDebts = useCallback(
         () => fetchIngredientDebts(addressId).then(d => { debtSnapshots.set(addressId, d); setDebts(d) }).catch(err => console.error('fetchIngredientDebts', err)),
@@ -98,7 +105,8 @@ function Notice({ addressId, onRestocked, onOpenIngredient }: Props & { addressI
                     icon={<Package size={15} className="text-primary shrink-0" />}
                     label="Bổ sung tồn kho"
                     count={progress}
-                    onClick={() => setOpen(true)} // chưa xong / lỗi: HubBuyBody tự hiện khung chờ / nút Thử lại
+                    onClick={openSheet} // chưa xong / lỗi: HubBuyBody tự hiện khung chờ / nút Thử lại
+                    hint={hint && !hinted && !open}
                 />
             )}
             <Toast toast={payToast} />
@@ -109,6 +117,7 @@ function Notice({ addressId, onRestocked, onOpenIngredient }: Props & { addressI
                     title="Bổ sung tồn kho"
                     count={progress}
                     onClose={() => setOpen(false)}
+                    hintClose={restockProgress.bought && !restockProgress.viewedNet} // guide: nhập kho xong → sáng nút Đóng
                 >
                     {debts.length > 0 && (
                         <>
@@ -137,7 +146,12 @@ function Notice({ addressId, onRestocked, onOpenIngredient }: Props & { addressI
                         bought={bought}
                         minAsFloor
                         onOpenIngredient={onOpenIngredient && (ingredient => { reopenSheet = true; onOpenIngredient(ingredient) })}
-                        onAfterRestock={() => Promise.all([refreshProducts?.(), refreshTodayExpenses?.(), onRestocked?.(), loadDebts(), loadBought()])}
+                        onAfterRestock={(bought) => {
+                            showToast(bought.length > 1 ? `Đã nhập kho ${bought.length} món` : `Đã nhập kho ${ingredientLabel(bought[0])}`, 'success')
+                            if (hint) writeOnboardingState(addressId, { restockProgress: { bought: true, viewedNet: false } })
+                            return Promise.all([refreshProducts?.(), refreshTodayExpenses?.(), onRestocked?.(), loadDebts(), loadBought()])
+                        }}
+                        demoAutoBuy={hint}
                     />
                 </NoticeSheet>
             )}

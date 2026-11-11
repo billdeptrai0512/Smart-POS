@@ -14,6 +14,7 @@ import NoticeBar from '../common/NoticeBar'
 import NoticeSheet, { SheetBody } from '../common/NoticeSheet'
 import ShiftPrepCard from '../DailyReportPage/ShiftPrepCard'
 import RestockModal from './RestockModal'
+import type { Row } from '../../types/domain'
 
 // "Bổ sung tồn kho" của KHO TỔNG trong nhóm kho chung (thay cho bản tính riêng từng địa chỉ — vốn sai khi cả nhóm dùng chung 1 kho),
 // cùng giao diện card "Mua" như bản thường: cần mua = tồn tối thiểu + tổng dự báo rút ngày mai của MỌI địa chỉ trong nhóm − kho còn,
@@ -47,10 +48,14 @@ function Sheet({ addressId, addresses: all, onClose, onRestocked }: { addressId:
 }
 
 export type Prep = ReturnType<typeof useGroupPrep>
+// Demo tự mua: số lượng (đơn vị gốc) × giá vốn, làm tròn nghìn.
+const demoCost = (qty: number, cfg?: Row) => Math.round(qty * (Number(cfg?.unit_cost) || 0) / 1000) * 1000
 
 // Phần danh sách "Mua" + phiếu Nhập kho, không kèm khung sheet — nhúng được vào chỗ khác (vd. dòng mở rộng ở /addresses).
-export function HubBuyBody({ addressId, prep, bought, minAsFloor, skipped, onSkip, onOpenIngredient, onAfterRestock }: { addressId: string; prep: Prep; bought?: UsageMap; minAsFloor?: boolean; skipped?: Record<string, boolean>; onSkip?: (ingredient: string) => void; onOpenIngredient?: (ingredient: string) => void; onAfterRestock?: () => unknown }) {
-    const { profile } = useAuth()
+// demoAutoBuy (guide khách dùng thử): sáng nút Mua của món đầu; khách nhập kho mẫu 1 món xong thì app tự nhập nốt các món còn
+// lại (đủ số gợi ý, giá vốn hiện tại, trả tiền mặt sau chốt) — làm mẫu 1 lần là đủ hiểu, khỏi bắt điền 7 phiếu.
+export function HubBuyBody({ addressId, prep, bought, minAsFloor, skipped, onSkip, onOpenIngredient, onAfterRestock, demoAutoBuy }: { addressId: string; prep: Prep; bought?: UsageMap; minAsFloor?: boolean; skipped?: Record<string, boolean>; onSkip?: (ingredient: string) => void; onOpenIngredient?: (ingredient: string) => void; onAfterRestock?: (bought: string[]) => unknown; demoAutoBuy?: boolean }) {
+    const { profile, isGuest } = useAuth()
     const { plan, pool, cfgOf, error, reload } = prep
     const [restock, setRestock] = useState<{ ingredient: string; qty: number | null } | null>(null)
     const cashClosedToday = useCashClosedToday(addressId, !!restock)
@@ -70,6 +75,8 @@ export function HubBuyBody({ addressId, prep, bought, minAsFloor, skipped, onSki
                     emptyTitle="Kho tổng đủ cho mai!"
                     emptyHint="Không cần đi chợ đắp thêm cho ngày mai."
                     items={items}
+                    hintNext={demoAutoBuy}
+                    expandDone={isGuest} // dùng thử: khỏi gom "Đã mua đủ (N)", thấy lại từng món vừa nhập
                     onRestock={(ingredient, qty) => setRestock({ ingredient, qty: qty > 0 ? qty : null })}
                 />
             </SheetBody>
@@ -81,6 +88,8 @@ export function HubBuyBody({ addressId, prep, bought, minAsFloor, skipped, onSki
                     packUnit={cfg?.pack_unit}
                     pack2={pack2Of(cfg)}
                     initialQty={restock.qty}
+                    // qty theo đơn vị mặc định của modal (bịch/hộp nếu có pack_size) × giá vốn, làm tròn nghìn.
+                    demoSubtotal={demoAutoBuy && restock.qty ? demoCost(restock.qty * (cfg?.pack_size && cfg?.pack_unit ? Number(cfg.pack_size) : 1), cfg) || null : null}
                     cashClosedToday={cashClosedToday}
                     onClose={() => setRestock(null)}
                     onConfirm={async ({ ingredient: ing, qty, subtotal, discount, extraCost, paid, paymentMethod, cashPhase, purchaseDate }) => {
@@ -89,8 +98,22 @@ export function HubBuyBody({ addressId, prep, bought, minAsFloor, skipped, onSki
                             subtotal, discount, extraCost, paid, paymentMethod, cashPhase, purchaseDate,
                             ...(wh != null ? { beforeStock: wh } : {}),
                         })
+                        const bought = [ing] // tên NVL đã nhập lần này — trang cha báo lại (toast)
+                        if (demoAutoBuy) {
+                            for (const it of items) {
+                                if (it.ingredient === ing || it.done) continue
+                                const q = it.fillQty || it.need || 0
+                                if (q <= 0) continue
+                                bought.push(it.ingredient)
+                                const before = lookupByLabel<number | null>(it.ingredient, pool, null)
+                                await processIngredientRestock(addressId, it.ingredient, q, profile?.name ?? null, {
+                                    subtotal: demoCost(q, cfgOf[it.ingredient]), paymentMethod: 'cash',
+                                    ...(before != null ? { beforeStock: before } : {}),
+                                })
+                            }
+                        }
                         // Kho đổi → tươi lại số kho nhóm, giá vốn (context sản phẩm), chi phí hôm nay và list tồn của trang cha.
-                        await Promise.all([reload(), onAfterRestock?.()])
+                        await Promise.all([reload(), onAfterRestock?.(bought)])
                         return result
                     }}
                 />

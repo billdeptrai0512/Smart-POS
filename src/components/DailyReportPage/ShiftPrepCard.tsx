@@ -1,8 +1,9 @@
-import { Fragment, useState, type ReactNode } from 'react'
+import { Fragment, useState, useEffect, useRef, type ReactNode } from 'react'
 import type { PrepItem } from '../../utils/prepToday'
 import { Check, X, RotateCcw, Pencil, ChevronUp, ChevronDown } from 'lucide-react'
 import { ingredientLabel } from '../../utils/ingredients'
 import { formatPackCount, formatPackedQty, unitTiersOf } from '../../utils/inventory'
+import { onboardingHintClass } from '../../utils/onboardingHint'
 
 // Viên thuốc CTA dùng chung cho cả 2 card (Lấy / Mua) — màu theo trạng thái do từng nơi ghép thêm.
 const PILL = 'shrink-0 min-h-[44px] min-w-[124px] px-3 flex items-center justify-center gap-1 rounded-xl text-[12px] font-black transition'
@@ -28,6 +29,10 @@ interface Props {
     packVerb: string
     // Card Mua: gộp 4 ô (lưới 2×2) thành 1 hàng 3 nhãn — Tồn kho | Tối thiểu | Cần rút ra quầy (số = `have`).
     threeFields?: boolean
+    // Guide khách dùng thử: nút "Lấy"/"Mua" của món đầu tiên chưa xử lý nhấp nháy (và cuộn tới) — xong nhảy món kế.
+    hintNext?: boolean
+    // Không gom món đã mua đủ vào dòng "Đã mua đủ (N)" — khách dùng thử vừa nhập kho phải thấy lại từng món.
+    expandDone?: boolean
 }
 
 // PrepItem có nhiều số tuỳ chọn (mỗi nguồn danh sách điền một phần) — chuẩn hoá về 0 một lần ở đầu
@@ -61,6 +66,8 @@ export default function ShiftPrepCard({
     // nếu có pack_size, không thì "<packVerb> X <đơn vị>".
     packVerb,
     threeFields = false,
+    hintNext = false,
+    expandDone = false,
 }: Props) {
     // Có onToggle = dạng checklist "Lấy/Soạn" (Chuẩn bị hôm nay, Soạn cho ngày mai); có thêm onSkip thì mới có nút ✕ bỏ qua.
     const skipMode = typeof onToggle === 'function'
@@ -83,7 +90,13 @@ export default function ShiftPrepCard({
     const split = skipMode && ordered.some(isUrgent) && ordered.some(it => !isUrgent(it))
     // Card Mua: món đã mua đủ gom thành 1 dòng "Đã mua đủ (N)" ở đáy, mặc định đóng — vẫn nằm trong items nên mẫu số tiến độ
     // đứng yên suốt ngày, chỉ không chiếm ~155px mỗi món. Bấm dòng đó để xem lại từng món.
-    const [doneOpen, setDoneOpen] = useState(false)
+    const [doneToggled, setDoneToggled] = useState(false)
+    const doneOpen = expandDone || doneToggled
+    const nextKey = hintNext ? ordered.find(it => !checked[it.ingredient] && !skipped[it.ingredient] && !it.done)?.ingredient : undefined
+    const nextRef = useRef<HTMLElement | null>(null)
+    const refIfNext = (ingredient: string) => (el: HTMLElement | null) => { if (ingredient === nextKey) nextRef.current = el }
+    // Cuộn cả DÒNG (không chỉ viên thuốc) vào giữa — 'nearest' trên viên chỉ kéo tới mép viên, dòng cuối vẫn khuất dưới đáy sheet.
+    useEffect(() => { nextRef.current?.parentElement?.scrollIntoView({ block: 'center', behavior: 'smooth' }) }, [nextKey])
     const doneCount = skipMode ? 0 : ordered.filter(it => it.done).length
 
     return (
@@ -168,8 +181,8 @@ export default function ShiftPrepCard({
                                             )}
                                         </div>
                                         <div className="text-[11px] text-text-dim mt-0.5">
-                                            {/* Tồn kho chỉ để biết còn đủ hàng mà lấy; xử lý xong rồi thì số đó chỉ còn gây nhiễu. */}
-                                            {(!muted || it.taken != null) && it.warehouse != null && (
+                                            {/* Tồn kho luôn hiện: trước khi lấy để biết đủ hàng không, lấy xong để thấy kho vơi đi. */}
+                                            {it.warehouse != null && (
                                                 <span className="block">
                                                     Tồn kho: <span className={(muted ? it.warehouse === 0 : shortfall) ? 'text-danger font-bold' : ''}>{fmt(it.warehouse)}</span>
                                                 </span>
@@ -185,13 +198,14 @@ export default function ShiftPrepCard({
                                             )}
                                             {it.reason && <span className="block text-warning font-bold">{it.reason}</span>}
                                             {meta?.over && <span className="block text-danger font-bold">Vượt kho — chỉ lấy tối đa {fmt(meta.out)}</span>}
+                                            {/* Đã lấy thêm → cùng dòng: "0 g + 1 bịch" (phần vừa lấy tô xanh). */}
                                             <span className="block">
                                                 {it.haveLabel || haveLabel}: {it.tare > 0 && <>{it.tare} + </>}{fmt(it.have)}
+                                                {muted && it.restock > 0 && <span className="text-success font-bold"> + {fmt(it.restock)}</span>}
                                             </span>
                                             {/* Món đã xử lý → kể tiếp hành trình trong ca (mỗi số một dòng) để số cuối ca không đứng một mình.
                                                 Món còn chờ lấy chỉ có dòng đầu ca (đã đếm 0 mà nút vẫn "Lấy" thì "cuối ca" gây mâu thuẫn). */}
                                             {isDone && it.by && it.sent == null && <span className="block">Đã soạn bởi {it.by}</span>}
-                                            {muted && it.restock > 0 && <span className="block">Đã lấy thêm: +{fmt(it.restock)}</span>}
                                             {muted && it.counted != null && <span className="block">Tồn quầy cuối ca: {it.tare > 0 && <>{it.tare} + </>}{fmt(it.counted)}</span>}
                                         </div>
                                     </div>
@@ -251,7 +265,7 @@ export default function ShiftPrepCard({
                                             <Pencil size={16} />
                                         </span>
                                     )}
-                                    <span className={`self-center ${PILL} ${
+                                    <span ref={refIfNext(it.ingredient)} className={`self-center ${PILL} ${onboardingHintClass(it.ingredient === nextKey, 'solid')} ${
                                         isDone ? 'bg-success/15 text-success'
                                             : isSkipped ? 'bg-border/30 text-text-dim'
                                                 : 'bg-primary/10 text-primary'}`}>
@@ -276,10 +290,11 @@ export default function ShiftPrepCard({
                             </span>
                         ) : (
                             <button
+                                ref={refIfNext(it.ingredient)}
                                 type="button"
                                 onClick={restock}
                                 title="Nhập kho"
-                                className={`self-center ${PILL} bg-primary/10 text-primary active:scale-95`}
+                                className={`self-center ${PILL} bg-primary/10 text-primary active:scale-95 ${onboardingHintClass(it.ingredient === nextKey, 'solid')}`}
                             >
                                 {ctaLabel}
                             </button>
@@ -287,10 +302,10 @@ export default function ShiftPrepCard({
                         const firstDone = !!it.done && !ordered[i - 1]?.done
                         return (
                             <Fragment key={it.ingredient}>
-                            {firstDone && (
+                            {firstDone && !expandDone && (
                                 <button
                                     type="button"
-                                    onClick={() => setDoneOpen(o => !o)}
+                                    onClick={() => setDoneToggled(o => !o)}
                                     aria-expanded={doneOpen}
                                     className="w-full py-2.5 border-b border-border/20 last:border-0 flex items-center gap-2 text-success text-[12px] font-black uppercase tracking-wide active:scale-[0.99] transition"
                                 >

@@ -3,7 +3,6 @@ import { formatVND } from '../../utils'
 import type { Row } from '../../types/domain'
 import type { RecipeRow } from '../../utils/inventory'
 import { ingredientLabel, getIngredientUnit, normalizeIngredientKey } from '../../utils/ingredients'
-import { onboardingHintClass } from '../../utils/onboardingHint'
 import { useAuth } from '../../contexts/AuthContext'
 
 interface Props {
@@ -14,14 +13,13 @@ interface Props {
     onClick?: () => void
     dragHandle?: ReactNode
     sortMode?: boolean
-    hint?: boolean
     /** Nhãn giá bán (mặc định "Giá bán"; topping dùng "Giá cộng thêm"). */
     priceLabel?: string
 }
 
 const SYMBOL_UNITS = new Set(['g', 'ml', 'l', 'kg', 'oz', 'mg'])
 
-export default function ProductCard({ product, prodRecipes, cost, ingredientUnits, onClick, dragHandle, sortMode = false, hint = false, priceLabel = 'Giá bán' }: Props) {
+export default function ProductCard({ product, prodRecipes, cost, ingredientUnits, onClick, dragHandle, sortMode = false, priceLabel = 'Giá bán' }: Props) {
     const { isStaff } = useAuth()
     const isOrphan = prodRecipes.length === 0
     const notCup = product.count_as_cup === false
@@ -29,7 +27,7 @@ export default function ProductCard({ product, prodRecipes, cost, ingredientUnit
     return (
         <div
             onClick={onClick}
-            className={`bg-surface border ${isOrphan && !sortMode ? 'border-danger/30 bg-danger/5' : 'border-border/60'} rounded-[1.5rem] transition-all shadow-sm ${sortMode ? 'px-4 py-3 min-h-16 flex items-center justify-between gap-2' : 'p-4 flex flex-col justify-between gap-2 cursor-pointer hover:border-text/30 hover:shadow-md active:scale-[0.98]'} ${onboardingHintClass(hint)}`}
+            className={`bg-surface border ${isOrphan && !sortMode ? 'border-danger/30 bg-danger/5' : 'border-border/60'} rounded-[1.5rem] transition-all shadow-sm ${sortMode ? 'px-4 py-3 min-h-16 flex items-center justify-between gap-2' : 'p-4 flex flex-col justify-between gap-2 cursor-pointer hover:border-text/30 hover:shadow-md active:scale-[0.98]'}`}
         >
             <div className="flex flex-col gap-1.5 min-w-0">
                 <h3 className="font-black text-[15px] leading-tight text-text break-words line-clamp-2">
