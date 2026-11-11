@@ -86,11 +86,11 @@ export default function POSPage() {
                     enterKey={enterKey}
                     showOnboardingHint={showHistoryHint}
                     notice={<>
-                        {/* POS không hiện dải guide (dải Bạn cần chuẩn bị / Tạo đơn / Nhật ký tự sáng) — chỉ chạy ngầm để ghi phễu. */}
-                        <OnboardingGuide silent />
                         {/* Pill bàn cùng hàng với "Chuẩn bị hôm nay" ("Mang đi" khi chưa chọn bàn); pill vừa khít tên bàn (tối đa 50%, dài thì truncate), bar kia lấy phần còn lại; bar kia ẩn thì pill giãn full-width.
                             Ẩn ở dine-split: lưới bàn đã hiện sẵn bên cạnh. Chạm = mở lưới bàn để đổi. */}
                         <div className="flex gap-2 [&>button]:rounded-[14px] [&>button]:w-auto [&>button]:min-w-0 [&>button:first-child]:flex-1">
+                            {/* Pill guide (sáng): ẩn ở bước Chuẩn bị (pill dưới đã sáng), xong rồi mới hiện bước kế. Luôn mount để ghi phễu. */}
+                            <OnboardingGuide onPos />
                             <PrepPinBar />
                             <button
                                 type="button"

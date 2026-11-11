@@ -21,8 +21,8 @@ export const STEPS: Step[] = [
     },
     {
         title: 'Bán hàng',
-        items: ({ orderProgress: { sent, ready } }) => [
-            { label: ready ? 'Bấm "Tạo đơn"' : 'Bán thử 1 đơn: cà phê đen + cà phê sữa', done: sent >= 1 },
+        items: ({ orderProgress: { sent } }) => [
+            { label: 'KOPHiN xin chào ạ!', done: sent >= 1 },
         ],
     },
     {

@@ -198,11 +198,14 @@ export default function ShiftPrepCard({
                                             )}
                                             {it.reason && <span className="block text-warning font-bold">{it.reason}</span>}
                                             {meta?.over && <span className="block text-danger font-bold">Vượt kho — chỉ lấy tối đa {fmt(meta.out)}</span>}
-                                            {/* Đã lấy thêm → cùng dòng: "0 g + 1 bịch" (phần vừa lấy tô xanh). */}
-                                            <span className="block">
-                                                {it.haveLabel || haveLabel}: {it.tare > 0 && <>{it.tare} + </>}{fmt(it.have)}
-                                                {muted && it.restock > 0 && <span className="text-success font-bold"> + {fmt(it.restock)}</span>}
-                                            </span>
+                                            {/* Đã lấy thêm → kể 3 dòng: đầu kỳ / nhập thêm (xanh) / hiện có (= đầu kỳ + nhập thêm). */}
+                                            {muted && it.restock > 0 ? (<>
+                                                <span className="block">Tồn quầy đầu kỳ: {it.tare > 0 && <>{it.tare} + </>}{fmt(it.have)}</span>
+                                                <span className="block text-success font-bold">Nhập thêm: + {fmt(it.restock)}</span>
+                                                <span className="block">Tồn quầy hiện có: {it.tare > 0 && <>{it.tare} + </>}{fmt(it.have + it.restock)}</span>
+                                            </>) : (
+                                                <span className="block">{it.haveLabel || haveLabel}: {it.tare > 0 && <>{it.tare} + </>}{fmt(it.have)}</span>
+                                            )}
                                             {/* Món đã xử lý → kể tiếp hành trình trong ca (mỗi số một dòng) để số cuối ca không đứng một mình.
                                                 Món còn chờ lấy chỉ có dòng đầu ca (đã đếm 0 mà nút vẫn "Lấy" thì "cuối ca" gây mâu thuẫn). */}
                                             {isDone && it.by && it.sent == null && <span className="block">Đã soạn bởi {it.by}</span>}

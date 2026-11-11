@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react'
-import { CircleAlert } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAddress } from '../../contexts/AddressContext'
 import { useStats } from '../../contexts/StatsContext'
@@ -58,9 +57,9 @@ function PinBar({ addressId }: { addressId: string }) {
 
             {open && (
                 <NoticeSheet
-                    icon={<CircleAlert size={18} className="text-primary shrink-0" />}
+                    icon={<span className="shrink-0 text-[16px] font-black text-primary tabular-nums">{doneCount}/{total}</span>}
                     title="Bạn cần chuẩn bị"
-                    count={`${doneCount}/${total}`}
+                    count=""
                     onClose={() => { setOpen(false); settle() }}
                     hintClose={isGuest && allTaken} // không gate prep.done: hook sống, lấy đủ là done ngay → nút Đóng phải sáng đúng lúc đó
                 >

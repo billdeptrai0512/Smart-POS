@@ -213,6 +213,16 @@ body {
   animation: onboarding-hint-solid 1.6s ease-in-out infinite;
 }
 
+/* Vẫy tay chào (icon bước "KOPHiN xin chào" trên POS): lắc qua lại quanh cổ tay. */
+@keyframes wave-hand {
+  0%, 100% { transform: rotate(-14deg); }
+  50% { transform: rotate(14deg); }
+}
+.wave-hand {
+  transform-origin: 50% 85%;
+  animation: wave-hand 0.8s ease-in-out infinite;
+}
+
 .order-item-btn {
   transition: transform 50ms ease, background-color 50ms ease;
 }

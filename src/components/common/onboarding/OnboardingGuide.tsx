@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
-import { Lightbulb } from 'lucide-react'
+import { Link, useLocation } from 'react-router-dom'
+import { Hand, Lightbulb } from 'lucide-react'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useAddress } from '../../../contexts/AddressContext'
 import { trackGuestOnboardingStage } from '../../../services/onboardingFunnelService'
@@ -14,10 +14,11 @@ import { STEPS } from './steps'
 // trên tổng (done/total); không liệt kê cả checklist vì mỗi việc đã có spotlight nhấp nháy ngay trên
 // nút/món cần bấm. Hết các bước → dải thành nút đăng ký tài khoản thật (guest data chỉ sống trong
 // localStorage).
-// silent: chỉ ghi phễu, không vẽ dải (POS — các nút cần bấm đã tự sáng).
-export default function OnboardingGuide({ silent = false }: { silent?: boolean }) {
+// onPos: POS chỉ hiện dải ở bước 2 (Bán hàng: "KOPHiN xin chào") — bước 1 pill "Bạn cần chuẩn bị" đã tự sáng, từ bước 3 trở đi các nút cần bấm tự sáng. Pill nằm chung hàng với pill bàn (không số bước, không thanh tiến độ).
+export default function OnboardingGuide({ onPos = false }: { onPos?: boolean }) {
     const { isGuest } = useAuth()
     const { addressId } = useAddress()
+    const onHistory = useLocation().pathname.startsWith('/history')
 
     // Mọi tiến độ nằm trong localStorage — writeOnboardingState phát ONBOARDING_EVENT sau mỗi
     // lần ghi, guide (mount 1 lần ở layout) nghe để đọc lại.
@@ -46,13 +47,13 @@ export default function OnboardingGuide({ silent = false }: { silent?: boolean }
     }, [stageReached, isGuest, addressId])
 
     // idx -1 = xong hết: không dải — CTA đăng ký nằm cuối Báo cáo (DailyReportPage), các trang khác sáng đường về đó.
-    if (silent || !isGuest || !addressId || idx === -1) return null
+    if ((onPos && idx !== 1) || (onHistory && idx === 1) || !isGuest || !addressId || idx === -1) return null
 
     // Nền cam nhạt + icon để tách hẳn khỏi header (bg-surface) ngay bên dưới — cùng
     // màu nền với header thì dải bị đọc như 1 phần header và dễ bị lướt qua.
     // max-w-lg mx-auto w-full: cùng bề rộng khung trang (các trang bọc nội dung bằng max-w-lg mx-auto) —
     // màn rộng thì dải không tràn ra ngoài header.
-    const bar = 'shrink-0 flex items-center gap-2.5 min-h-10 py-1.5 px-4 text-[14px] w-full max-w-lg mx-auto'
+    const bar = `shrink-0 flex items-center gap-2.5 min-h-10 py-1.5 px-4 text-[14px] w-full max-w-lg mx-auto ${onPos ? `flex-1 min-w-0 !w-auto h-10 !min-h-0 !py-0 rounded-[14px]` : ''}`
 
     const items = STEPS[idx].items(local)
     const flat = STEPS.flatMap(s => s.items(local))
@@ -63,8 +64,10 @@ export default function OnboardingGuide({ silent = false }: { silent?: boolean }
     const label = current?.label ?? ''
     return (
         <div className={`${bar} relative bg-primary/15 text-text`}>
-            <span className="shrink-0 grid place-items-center size-6 rounded-full bg-primary/20 text-primary"><Lightbulb size={14} /></span>
-            <span className="shrink-0 text-[11px] font-black tabular-nums text-primary">{idx + 1}/{STEPS.length}</span>
+            {onPos
+                ? <Hand size={18} className="shrink-0 text-primary wave-hand" />
+                : <span className="shrink-0 grid place-items-center size-6 rounded-full bg-primary/20 text-primary"><Lightbulb size={14} /></span>}
+            {!onPos && <span className="shrink-0 text-[11px] font-black tabular-nums text-primary">{idx + 1}/{STEPS.length}</span>}
             {/* Chữ gõ dần (Typewriter); bản ẩn cùng nội dung giữ chỗ để dải không đổi chiều cao lúc đang gõ. */}
             <span className="flex-1 relative uppercase tracking-wider text-[12px] font-black">
                 <span className="invisible line-clamp-2">{label}</span>
@@ -77,7 +80,7 @@ export default function OnboardingGuide({ silent = false }: { silent?: boolean }
                 </Link>
             )}
             {/* Thanh tiến độ mảnh dưới đáy dải: khách thấy còn bao xa. */}
-            <span className="absolute bottom-0 left-0 h-0.5 bg-primary transition-all duration-500" style={{ width: `${(idx / STEPS.length) * 100}%` }} />
+            {!onPos && <span className="absolute bottom-0 left-0 h-0.5 bg-primary transition-all duration-500" style={{ width: `${(idx / STEPS.length) * 100}%` }} />}
         </div>
     )
 }
