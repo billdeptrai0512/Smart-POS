@@ -129,7 +129,7 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
     // (tồn quầy đã trừ/cộng nó qua productionAfterCount) — không cắt thì thành phẩm làm ra sau xác nhận hiện hụt đúng bằng mẻ.
     const productionMap = useMemo(() => {
         if (!isTodayScope) return {}
-        const prod = { ...productionOnDay(productionRows, todayISO) }
+        const prod = productionOnDay(productionRows, todayISO)
         for (const at of new Set(confirmedByIng.values())) {
             const before = productionOnDay(productionRows.filter(p => new Date(p.created_at).getTime() < at), todayISO)
             for (const [ing, t] of confirmedByIng) if (t === at) prod[ing] = usedOf(before, ing)
