@@ -125,19 +125,27 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
     )
     // Hôm nay: tiêu hao từ đơn + ròng của mẻ sản xuất (nguyên liệu gốc +, thành phẩm −).
     // NVL đã xác nhận chỉ tính đơn trước giờ xác nhận CỦA NÓ; NVL đếm lại sau đó (mất confirmed_at) tính đủ đơn tới giờ.
+    // Mẻ sản xuất cắt theo giờ xác nhận RIÊNG của NVL y như đơn: mẻ SAU giờ đó không nằm trong số đã đếm
+    // (tồn quầy đã trừ/cộng nó qua productionAfterCount) — không cắt thì thành phẩm làm ra sau xác nhận hiện hụt đúng bằng mẻ.
+    const productionMap = useMemo(() => {
+        if (!isTodayScope) return {}
+        const prod = { ...productionOnDay(productionRows, todayISO) }
+        for (const at of new Set(confirmedByIng.values())) {
+            const before = productionOnDay(productionRows.filter(p => new Date(p.created_at).getTime() < at), todayISO)
+            for (const [ing, t] of confirmedByIng) if (t === at) prod[ing] = usedOf(before, ing)
+        }
+        return prod
+    }, [isTodayScope, productionRows, todayISO, confirmedByIng])
     const usedMap = useMemo(() => {
         const used = { ...calculateEstimatedConsumption(ordersToday.flatMap(o => o.items), recipes, extraIngredients) }
         for (const at of new Set(confirmedByIng.values())) {
             const before = calculateEstimatedConsumption(ordersToday.filter(o => o.at < at).flatMap(o => o.items), recipes, extraIngredients)
             for (const [ing, t] of confirmedByIng) if (t === at) used[ing] = usedOf(before, ing)
         }
-        return isTodayScope ? mergeUsage(used, productionOnDay(productionRows, todayISO)) : used
-    }, [ordersToday, confirmedByIng, recipes, extraIngredients, isTodayScope, productionRows, todayISO])
+        return isTodayScope ? mergeUsage(used, productionMap) : used
+    }, [ordersToday, confirmedByIng, recipes, extraIngredients, isTodayScope, productionMap])
     // Phần thành phẩm làm ra hôm nay (dương) — cộng vào "Nhập thêm" khi hiển thị để Sử dụng chỉ còn phần bán.
-    const madeMap = useMemo(
-        () => isTodayScope ? madeOf(productionOnDay(productionRows, todayISO)) : {},
-        [isTodayScope, productionRows, todayISO]
-    )
+    const madeMap = useMemo(() => madeOf(productionMap), [productionMap])
     const periodMadeMap = useMemo(() => madeInPeriods(productionRows, inventory.openingPeriods, todayISO), [productionRows, inventory.openingPeriods, todayISO])
     // Cắt đơn theo giờ xác nhận RIÊNG của từng NVL — cùng mốc với usedMap, để "Đã sử dụng" và danh sách mũi tên không lệch nhau.
     const consumptionBreakdown = useMemo(() => {
