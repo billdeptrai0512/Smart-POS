@@ -11,7 +11,7 @@ import { overlayProduction } from '../utils/production'
 import { fetchReportByRange } from '../services/orderService'
 import type { Inputs } from '../utils/prepToday'
 import type { ExtraIngredients, MissingCupCandidate, RecipeRow, UsageMap } from '../utils/inventory'
-import type { Row } from '../types/domain'
+import type { CartExtra, Row } from '../types/domain'
 
 interface History { shiftClosings: Row[]; orders: Row[]; addressId: string | null }
 const EMPTY_HISTORY: History = { shiftClosings: [], orders: [], addressId: null }
@@ -28,11 +28,11 @@ const NO_CANDIDATES: ReturnType<typeof attachRepeatHistory<MissingCupCandidate>>
 export function useMissingCupSuspicion({
     enabled, addressId,
     ingredientsList, inventoryInputs, restockInputs, openingInputs, openingStock,
-    usedMap, recipes, extraIngredients, products,
+    usedMap, recipes, extraIngredients, products, productExtras, cashDiff,
 }: {
     enabled: boolean; addressId: string | null; ingredientsList?: Row[]
     inventoryInputs: Inputs; restockInputs: Inputs; openingInputs: Inputs; openingStock: UsageMap; usedMap: UsageMap
-    recipes: RecipeRow[]; extraIngredients: ExtraIngredients; products: Row[] | null
+    recipes: RecipeRow[]; extraIngredients: ExtraIngredients; products: Row[] | null; productExtras: Record<string, CartExtra[]>; cashDiff: number | null
 }) {
     // 14 ngày gần đây (KHÔNG gồm hôm nay) chỉ để dò "lặp lại nhiều ngày" — xem
     // attachRepeatHistory. Tách riêng khỏi useDailyReportData vì hook đó chỉ fetch
@@ -94,15 +94,15 @@ export function useMissingCupSuspicion({
     // nên nó đứng yên suốt lúc nhân viên kiểm kê. Gộp 1 memo thì mỗi phím gõ quét lại
     // cả 14 ngày (haoHutByIngredient đổi theo từng keystroke) — lag thấy rõ trên máy yếu.
     const dayCandidateSets = useMemo(
-        () => buildDayCandidateSets({ ingredientsList, historicalDailyHaoHut, recipes, products, noiseByIngredient: ingredientNoise }),
-        [ingredientsList, historicalDailyHaoHut, recipes, products, ingredientNoise],
+        () => buildDayCandidateSets({ ingredientsList, historicalDailyHaoHut, recipes, products, noiseByIngredient: ingredientNoise, extraIngredients, productExtras }),
+        [ingredientsList, historicalDailyHaoHut, recipes, products, ingredientNoise, extraIngredients, productExtras],
     )
     // `enabled` chặn cả phần TÍNH, không chỉ fetch: người gõ kiểm kê nhiều nhất là
     // nhân viên, mà nhân viên chính là ca enabled=false — trước đây vẫn quét toàn bộ
     // công thức mỗi phím gõ rồi vứt kết quả đi.
     return useMemo(() => {
         if (!enabled) return NO_CANDIDATES
-        const today = findMissingCupCandidates({ ingredientsList, haoHutByIngredient, recipes, products, noiseByIngredient: ingredientNoise })
+        const today = findMissingCupCandidates({ ingredientsList, haoHutByIngredient, recipes, products, noiseByIngredient: ingredientNoise, extraIngredients, productExtras, cashDiff })
         return attachRepeatHistory(today, dayCandidateSets)
-    }, [enabled, ingredientsList, haoHutByIngredient, recipes, products, ingredientNoise, dayCandidateSets])
+    }, [enabled, ingredientsList, haoHutByIngredient, recipes, products, ingredientNoise, extraIngredients, productExtras, cashDiff, dayCandidateSets])
 }

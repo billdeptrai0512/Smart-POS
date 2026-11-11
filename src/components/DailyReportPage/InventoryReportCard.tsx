@@ -54,6 +54,8 @@ interface Props {
     // onHintSeen báo guide khi khách bấm xem 2 chỗ đầu (xem onboarding/steps.ts).
     hintStep?: HintStep | null
     onHintSeen?: (step: 'used' | 'theory') => void
+    // Chen ngay trên "Tổng hao hụt" (vd dòng Xác nhận kiểm kê của tab).
+    beforeTotal?: ReactNode
 }
 export type HintStep = 'used' | 'theory' | 'count'
 
@@ -103,7 +105,7 @@ export default function InventoryReportCard({
     // Nguyên liệu đang được onboarding phase 4 gợi ý bấm vào — xem DailyReportPage.tsx
     // (hintCoffeeIngredient) + onboarding/steps.ts.
     hintIngredient = null,
-    hintStep = null, onHintSeen,
+    hintStep = null, onHintSeen, beforeTotal,
 }: Props) {
     // Sort by status priority so staff sees "Chưa nhập" first, then anomalies,
     // then matched rows at the bottom. Tie-break by display name for stability.
@@ -282,6 +284,7 @@ export default function InventoryReportCard({
                         </CollapsibleCard>
                     )
                 })}
+                {beforeTotal}
                 {totalRow && <div className="bg-surface rounded-[20px] px-3 py-3 border border-border/60 shadow-sm">{totalRow}</div>}
             </>
         )
@@ -296,6 +299,7 @@ export default function InventoryReportCard({
             onToggle={() => onToggleOpen?.()}
         >
             <div className="flex flex-col">{sortedList.map(renderRow)}</div>
+            {beforeTotal}
             {totalRow && <div className="pt-3 mt-1 border-t border-border/40">{totalRow}</div>}
         </CollapsibleCard>
     )
