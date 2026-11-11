@@ -200,7 +200,7 @@ export default function RecipeMenuPage() {
         const key = normalizeIngredientKey(name)
         if (key in ingredientCosts) { showToast(`Đã có nguyên liệu "${name}"`, 'warning'); return }
         await insertProduct(name, 0, addressId, false, batchYield)
-        await upsertIngredientCost(key, 0, addressId, unit, { category: 'main' })
+        await upsertIngredientCost(key, 0, addressId, unit, { category: 'main', displayName: name })
         // Vào sẵn nhóm "Bán thành phẩm/Topping" của địa chỉ nếu có (khớp theo tên); không có → Chưa phân nhóm.
         const group = ingredientGroups?.find(g => g.section === 'main' && normalizeSearchText(g.name).includes('thanh pham'))
         if (group && addressId) await setIngredientsGroup([key], addressId, group.id)
@@ -214,7 +214,7 @@ export default function RecipeMenuPage() {
     const handleCreateTopping = (name: string, price: number, unit: string, source: ToppingSource | null) => withSaving('Tạo topping', async () => {
         const key = normalizeIngredientKey(name)
         // Trùng tên nguyên liệu / thành phẩm có sẵn → dùng luôn dòng đó, không ghi đè giá vốn.
-        if (!source && !(key in ingredientCosts)) await upsertIngredientCost(key, 0, addressId, unit)
+        if (!source && !(key in ingredientCosts)) await upsertIngredientCost(key, 0, addressId, unit, { displayName: name })
         await insertTopping(name, price, addressId, source ?? { ingredient: key, amount: 1 })
         refreshProducts?.()
         setCreateOpen(false)

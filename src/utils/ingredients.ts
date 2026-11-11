@@ -103,7 +103,7 @@ export function getIngredientUnit(key: string, storedUnit?: string | null, ingre
 // = chọn từ danh sách có sẵn, unit khác null = gõ tên mới qua IngredientPicker), đăng ký
 // ingredient_costs cho nguyên liệu THẬT SỰ mới (còn thiếu cost) rồi trả về các key chưa có
 // trong công thức hiện tại — caller tự upsert (batch hay từng dòng) + chèn vào state.
-interface NewIngredient { key: string; unit: string | null; category?: string | null }
+interface NewIngredient { key: string; unit: string | null; category?: string | null; displayName?: string }
 export async function registerNewIngredients(
     toAdd: NewIngredient[],
     { existingKeys, ingredientCosts, addressId, upsertIngredientCost }: {
@@ -111,9 +111,9 @@ export async function registerNewIngredients(
         upsertIngredientCost: (key: string, cost: number, addressId: string | null, unit: string, extra: Record<string, unknown>) => Promise<unknown>
     },
 ) {
-    for (const { key, unit, category } of toAdd) {
+    for (const { key, unit, category, displayName } of toAdd) {
         if (unit !== null && !(key in ingredientCosts)) {
-            await upsertIngredientCost(key, 0, addressId, unit, category ? { category } : {})
+            await upsertIngredientCost(key, 0, addressId, unit, { ...(category ? { category } : {}), ...(displayName ? { displayName } : {}) })
         }
     }
     return toAdd.filter(t => !existingKeys.has(t.key))

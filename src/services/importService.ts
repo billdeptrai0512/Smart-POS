@@ -160,8 +160,8 @@ interface ImportPlan {
     products: Array<{ name: string; price: number }>
     productUpdates: Array<{ name: string; price: number }>
     // group: có khi sheet có cột "Nhóm" ('' = bỏ nhóm); undefined = giữ nhóm hiện tại
-    ingredients: Array<{ key: string; unitCost: number; unit: string; category: 'main' | 'packaging'; group?: string; attrs?: IngredientAttrs }>
-    ingredientUpdates: Array<{ key: string; unitCost: number; unit: string; category: 'main' | 'packaging'; group?: string; attrs?: IngredientAttrs }>
+    ingredients: Array<{ key: string; unitCost: number; unit: string; category: 'main' | 'packaging'; group?: string; attrs?: IngredientAttrs; displayName?: string }>
+    ingredientUpdates: Array<{ key: string; unitCost: number; unit: string; category: 'main' | 'packaging'; group?: string; attrs?: IngredientAttrs; displayName?: string }>
     toppings: Array<{ name: string; price: number; unit: string }>
     toppingUpdates: Array<{ name: string; price: number }>
     recipes: Array<{ productName: string; ingredient: string; amount: number; unit: string | null }>
@@ -277,7 +277,7 @@ export function resolveImportPlan(parsed: ParsedWorkbook, existing: ExistingData
         const costRaw = row['Giá vốn/đơn vị']
         const cost = costRaw === '' || costRaw == null ? 0 : toNumber(costRaw)
         if (cost == null) { blockingErrors.push(`${line} ("${name}"): Giá vốn/đơn vị không hợp lệ`); return }
-        const entry: ImportPlan['ingredients'][number] = { key, unitCost: cost, unit: normName(row['Đơn vị']) || 'đv', category: mapCategory(row['Loại']) }
+        const entry: ImportPlan['ingredients'][number] = { key, unitCost: cost, unit: normName(row['Đơn vị']) || 'đv', category: mapCategory(row['Loại']), displayName: name }
         if ('Nhóm' in row) entry.group = normName(row['Nhóm'])
         const { attrs, badHeader } = parseIngredientAttrs(row)
         if (badHeader) { blockingErrors.push(`${line} ("${name}"): ${badHeader} không hợp lệ`); return }
@@ -339,7 +339,7 @@ export function resolveImportPlan(parsed: ParsedWorkbook, existing: ExistingData
         const key = normalizeIngredientKey(name)
         if (!allIngredientKeys.has(key)) {
             allIngredientKeys.add(key)
-            ingredients.push({ key, unitCost: 0, unit: unit || 'đv', category: 'main' })
+            ingredients.push({ key, unitCost: 0, unit: unit || 'đv', category: 'main', displayName: name })
         }
         return key
     }
@@ -532,12 +532,12 @@ async function commitImportPlanSequential(plan: ImportPlan, addressId: UUID | nu
     })
 
     await runWithConcurrency([...plan.ingredients, ...plan.ingredientUpdates], CONCURRENCY, async (ing) => {
-        await upsertIngredientCost(ing.key, ing.unitCost, addressId, ing.unit, { category: ing.category, ...ing.attrs })
+        await upsertIngredientCost(ing.key, ing.unitCost, addressId, ing.unit, { category: ing.category, displayName: ing.displayName, ...ing.attrs })
     })
 
     await runWithConcurrency(plan.toppings, CONCURRENCY, async (t) => {
         const key = normalizeIngredientKey(t.name)
-        if (toppingStockKey(plan, t.name) === key) await upsertIngredientCost(key, 0, addressId, t.unit) // có nguồn → không tạo tồn riêng
+        if (toppingStockKey(plan, t.name) === key) await upsertIngredientCost(key, 0, addressId, t.unit, { displayName: t.name }) // có nguồn → không tạo tồn riêng
         const row = await insertTopping(t.name, t.price, addressId)
         toppingByName.set(normKey(t.name), row.id)
     })
@@ -605,6 +605,20 @@ async function commitIngredientAttrs(plan: ImportPlan, addressId: UUID | null) {
         for (const { key, col } of INGREDIENT_ATTR_COLUMNS) if (key in i.attrs!) row[col] = i.attrs![key]
         return row
     })
+    if (!rows.length) return
+    const { error } = await supabase.from('ingredient_costs').upsert(rows, { onConflict: 'ingredient,address_id' })
+    if (error) throw error
+}
+
+// Tên hiển thị (giữ hoa/thường, "BTP…") cũng không nằm trong RPC → upsert theo lô riêng (khác bộ cột với attrs nên không gộp được).
+// Topping không nguồn có dòng tồn cùng tên → cũng gán tên.
+async function commitIngredientDisplayNames(plan: ImportPlan, addressId: UUID | null) {
+    const toppingRows = plan.toppings
+        .filter(t => toppingStockKey(plan, t.name) === normalizeIngredientKey(t.name))
+        .map(t => ({ key: normalizeIngredientKey(t.name), displayName: t.name }))
+    const rows = [...plan.ingredients, ...plan.ingredientUpdates, ...toppingRows]
+        .filter(i => i.displayName)
+        .map(i => ({ ingredient: i.key, address_id: addressId, display_name: i.displayName }))
     if (!rows.length) return
     const { error } = await supabase.from('ingredient_costs').upsert(rows, { onConflict: 'ingredient,address_id' })
     if (error) throw error
@@ -701,6 +715,7 @@ export async function commitImportPlan(plan: ImportPlan, addressId: UUID | null,
     const { error } = await supabase.rpc('bulk_import_menu', { p_address_id: addressId, p_plan: payload })
     if (error) throw error
     await commitIngredientAttrs(plan, addressId)
+    await commitIngredientDisplayNames(plan, addressId)
     await commitDiscounts(plan, addressId, existing, payload.discountLinks)
     await runWithConcurrency(payload.toppingSources, CONCURRENCY, t => updateToppingSource(t.toppingId, { ingredient: t.ingredient, amount: t.amount }))
 }

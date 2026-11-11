@@ -307,14 +307,14 @@ export default function RecipeIngredientPage() {
         })
     }
 
-    async function handleAddExtraIngredients(extraId: string, { key, unit, category }: CustomIngredient) {
+    async function handleAddExtraIngredients(extraId: string, { key, unit, category, displayName }: CustomIngredient) {
         const present = (extraIngs[extraId] || []).some(ei => ei.ingredient === key)
         await withSaving('Thêm nguyên liệu vào tùy chọn', async () => {
             // Same guard as the base recipe: don't zero an impact/cost that already exists.
             if (!present) await upsertExtraIngredient(extraId, key, 0, unit)
             // A brand-new ingredient created here must exist in ingredient_costs (with its
             // category) too, else it won't show in /inventory or the chip list.
-            if (!(key in ingredientCosts)) await upsertIngredientCost(key, 0, addressId, unit, { category })
+            if (!(key in ingredientCosts)) await upsertIngredientCost(key, 0, addressId, unit, { category, displayName })
             if (!present) {
                 setExtraIngs(prev => ({
                     ...prev,

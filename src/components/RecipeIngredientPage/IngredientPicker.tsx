@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export interface NewIngredientInput { key: string; unit: string }
+export interface NewIngredientInput { key: string; unit: string; displayName: string }
 
 interface Props {
     existingIngredients?: string[]
@@ -24,7 +24,7 @@ export default function IngredientPicker({ existingIngredients = [], label = 'Th
 
     const submit = () => {
         if (!trimmed) return
-        onConfirm({ key: trimmed.toLowerCase().replace(/\s+/g, '_'), unit: unit || 'đv' })
+        onConfirm({ key: trimmed.toLowerCase().replace(/\s+/g, '_'), unit: unit || 'đv', displayName: trimmed.replace(/\s+/g, ' ') })
     }
 
     return (

@@ -4,7 +4,7 @@ import { ingredientLabel, normalizeSearchText } from '../../utils/ingredients'
 import { SignedBox, SIGNED_INPUT_CLASS } from './SignedMoneyInput'
 import IngredientPicker from './IngredientPicker'
 
-export interface CustomIngredient { key: string; unit: string; category: string }
+export interface CustomIngredient { key: string; unit: string; category: string; displayName?: string }
 
 interface Props {
     entries: { ingredient: string; amount: number }[]
