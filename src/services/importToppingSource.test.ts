@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resolveImportPlan, type ExistingData, type ParsedWorkbook } from './importService'
+import { resolveImportPlan, buildBulkPayload, type ExistingData, type ParsedWorkbook } from './importService'
 
 const existing: ExistingData = { products: [], toppings: [{ id: 't1', name: 'Trân châu' }], ingredientCosts: { đường: {}, trân_châu_nấu: {} }, extras: [], discountPrograms: [] }
 const parsed = (toppings: Record<string, unknown>[]): ParsedWorkbook => ({
@@ -17,5 +17,13 @@ describe('import Excel: nguồn tồn kho của topping', () => {
         ]), existing)
         expect(plan.toppingSources).toEqual([{ toppingName: 'Trân châu', ingredient: 'trân_châu_nấu', amount: 30 }])
         expect(warnings).toHaveLength(3)
+    })
+
+    it('topping mới có nguồn không sinh dòng tồn trùng tên; không nguồn thì vẫn có dòng cùng tên', () => {
+        const { plan } = resolveImportPlan(parsed([
+            { 'Tên topping': 'Kem muối', 'Giá bán': 5000, 'Nguồn tồn kho': 'Trân châu nấu', 'Lượng mỗi phần': 50 },
+            { 'Tên topping': 'Flan', 'Giá bán': 5000 },
+        ]), existing)
+        expect(buildBulkPayload(plan, existing).toppings.map(t => t.ingredientKey)).toEqual(['trân_châu_nấu', 'flan'])
     })
 })
