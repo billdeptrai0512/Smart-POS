@@ -23,7 +23,8 @@ interface Props {
 
 export default function MenuPageHeader({ title, count, unitLabel, subtitle, onBack, onForward, tabs, activeTab, onTabSelect, hintTab, hintBack }: Props) {
     return (
-        <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
+        <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 px-4 lg:px-8">
+            <div className="flex flex-col gap-3 lg:max-w-[1280px] lg:mx-auto">
             <div className="flex items-center gap-3">
                 <button
                     onClick={onBack}
@@ -50,6 +51,7 @@ export default function MenuPageHeader({ title, count, unitLabel, subtitle, onBa
             </div>
 
             <MenuTabsBar tabs={tabs} activeTab={activeTab} onSelect={onTabSelect} hintTab={hintTab} />
+            </div>
         </header>
     )
 }

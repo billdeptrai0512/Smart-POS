@@ -345,7 +345,7 @@ export default function IngredientManagementPage() {
     }
 
     return (
-        <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
+        <div className="flex flex-col h-full max-w-lg lg:max-w-none mx-auto bg-bg relative">
             <Toast toast={toast} />
 
             {/* "Bổ sung tồn kho" hiện ở cả 2 tab (kiểm kê xong là thấy ngay cần mua gì, khỏi sang Lưu trữ); "Soạn cho ngày mai"
@@ -390,7 +390,7 @@ export default function IngredientManagementPage() {
                 }}
             />
 
-            <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-4 pb-8 bg-bg">
+            <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-4 pb-8 bg-bg lg:px-8"><div className="lg:max-w-[1280px] lg:mx-auto">
                 {activeView === 'management' ? (
                     <InventoryAuditTab
                         dateScope={dateScope}
@@ -401,7 +401,7 @@ export default function IngredientManagementPage() {
                         showError={showError}
                     />
                 ) : (<>
-                <div className="mb-3 flex items-stretch gap-2 h-11">
+                <div className="mb-3 flex items-stretch gap-2 h-11 lg:mb-4">
                     {(groupChips.length > 0 || canManage) && (
                         <Dropdown
                             ariaLabel="Lọc theo nhóm"
@@ -414,7 +414,7 @@ export default function IngredientManagementPage() {
                                 { value: 'all', label: 'Tổng cộng', count: allIngredients.length, divider: true },
                             ]}
                             align="left"
-                            className="shrink-0 w-[34%] max-w-[170px]"
+                            className="shrink-0 w-[34%] max-w-[170px] lg:w-48 lg:max-w-none"
                             triggerClassName="h-full px-3 rounded-[12px] bg-surface border border-border/60 text-[14px] hover:border-primary/40"
                         />
                     )}
@@ -455,7 +455,7 @@ export default function IngredientManagementPage() {
                     />
                 )}
 
-                <div className="flex flex-col gap-2.5">
+                <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 md:gap-3 lg:grid-cols-3 2xl:grid-cols-4">
                     {!stocksLoaded && [0, 1, 2, 3, 4].map(i => <Skeleton key={i} className="h-[120px] rounded-[14px]" />)}
                     {stocksLoaded && visibleIngredients.map(ingredient => {
                         const cfg = configByIngredient.get(ingredient)
@@ -478,7 +478,7 @@ export default function IngredientManagementPage() {
                         )
                     })}
                     {stocksLoaded && visibleIngredients.length === 0 && (
-                        <p className="text-text-secondary text-[13px] text-center py-6">
+                        <p className="col-span-full text-text-secondary text-[13px] text-center py-6">
                             {search.trim()
                                 ? 'Không tìm thấy nguyên liệu nào.'
                                 : allIngredients.length === 0 ? 'Chưa có nguyên liệu nào.' : 'Chưa có nguyên liệu trong nhóm này.'}
@@ -486,6 +486,7 @@ export default function IngredientManagementPage() {
                     )}
                 </div>
                 </>)}
+            </div>
             </main>
 
             {showCreateModal && (

@@ -352,7 +352,7 @@ export default function RecipeIngredientPage() {
     if (td.topping) {
         const topping = td.topping
         return (
-            <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
+            <div className="flex flex-col h-full max-w-lg lg:max-w-4xl mx-auto bg-bg relative">
                 <Toast toast={toast} />
                 <EditableEntityHeader
                     name={topping.name}
@@ -413,7 +413,7 @@ export default function RecipeIngredientPage() {
     }
 
     return (
-        <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
+        <div className="flex flex-col h-full max-w-lg lg:max-w-4xl mx-auto bg-bg relative">
             <Toast toast={toast} />
 
             {isBatch ? (

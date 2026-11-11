@@ -25,7 +25,7 @@ export default function ExpensePanel({ isReadOnly, isLoading, expenses, expenseC
     const catById = useMemo(() => new Map(expenseCategories.map(c => [c.id, c])), [expenseCategories])
 
     return (
-        <main className="flex-1 overflow-y-auto px-4 py-4 pb-4 space-y-3 bg-bg">
+        <main className="flex-1 overflow-y-auto px-4 py-4 pb-4 bg-bg lg:px-8"><div className="space-y-3 lg:space-y-4 lg:max-w-[1280px] lg:mx-auto">
             {isLoading ? (
                 <div className="flex flex-col gap-3 animate-pulse">
                     <div className="bg-surface-light rounded-[20px] h-20 w-full" />
@@ -44,6 +44,7 @@ export default function ExpensePanel({ isReadOnly, isLoading, expenses, expenseC
                         leftLabel="Phát sinh" unit="chi phí" rightLabel="Tổng cộng" rightTone="text-danger"
                     />
                 </div>
+                <div className="grid gap-3 items-start md:grid-cols-2 lg:grid-cols-3">
                 {expenses.map(expense => (
                     <ExpenseCard
                         key={expense.id}
@@ -52,7 +53,9 @@ export default function ExpensePanel({ isReadOnly, isLoading, expenses, expenseC
                         onEdit={isReadOnly ? null : onEditExpense}
                     />
                 ))}
+                </div>
             </>)}
+            </div>
         </main>
     )
 }

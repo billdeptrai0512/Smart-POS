@@ -79,7 +79,7 @@ export default function InventorySummaryPage() {
     if (locked) return <Navigate to="/subscription" replace state={{ preselectAddressId: addressId, from: '/inventory/stocking' }} />
 
     return (
-        <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
+        <div className="flex flex-col h-full max-w-lg lg:max-w-6xl mx-auto bg-bg relative">
             <IngredientDetailHeader
                 title="Tổng hợp nhập kho"
                 onBack={() => navigate('/inventory/stocking')}
@@ -151,7 +151,8 @@ export default function InventorySummaryPage() {
                     </div>
 
                     <span className={`${LABEL} px-1 mt-1`}>{list.length} nguyên liệu</span>
-                                        {list.map(r => {
+                    <div className="grid gap-3 lg:grid-cols-2">
+                    {list.map(r => {
                         const cfg = cfgByKey.get(r.ingredient)
                         const unit = getIngredientUnit(r.ingredient, ingredientUnits[r.ingredient])
                         // Số chính = đơn vị nhỏ nhất (như Nhật ký / Thông tin); "= 20 bịch" chỉ là gợi ý nhỏ.
@@ -183,6 +184,7 @@ export default function InventorySummaryPage() {
                             </button>
                         )
                     })}
+                    </div>
                     </>)}
                 </>)}
             </main>

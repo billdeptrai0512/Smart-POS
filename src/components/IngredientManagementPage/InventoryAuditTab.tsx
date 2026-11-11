@@ -327,7 +327,7 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
     const isReady = !isLoadingHistory && isAsyncReady && (!isTodayScope || inventory.stocksLoaded)
 
     return (
-        <div className="flex flex-col gap-3">
+        <div className={`flex flex-col gap-3 lg:mx-auto ${isTodayScope ? '' : 'lg:max-w-4xl'}`}>
             {!isReady ? (
                 // Hình dạng như nội dung thật (2 thẻ nhóm + thẻ tổng) để lúc hiện ra không nhảy chiều cao.
                 <div className="flex flex-col gap-3 animate-pulse">
@@ -389,9 +389,8 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
                                 </button>
                             </div>
                         )}
+                        afterTotal={!isStaff && <MissingCupSuspicionCard candidates={missingCupCandidates} cash={cashDiff == null ? null : { diff: cashDiff, system: systemTotalRevenue }} />}
                     />
-
-                    {!isStaff && <MissingCupSuspicionCard candidates={missingCupCandidates} cash={cashDiff == null ? null : { diff: cashDiff, system: systemTotalRevenue }} />}
                 </div>
             ) : isDayScope ? (
                 // Ngày cũ: chủ/quản lý + có phiếu chốt (có id để UPDATE) → sửa được Cuối kỳ. Staff

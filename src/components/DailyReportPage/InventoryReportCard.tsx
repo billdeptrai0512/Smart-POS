@@ -56,6 +56,8 @@ interface Props {
     onHintSeen?: (step: 'used' | 'theory') => void
     // Chen ngay trên "Tổng hao hụt" (vd dòng Xác nhận kiểm kê của tab).
     beforeTotal?: ReactNode
+    // Dưới Tổng hao hụt, cùng cột (laptop: cột phải dính).
+    afterTotal?: ReactNode
 }
 export type HintStep = 'used' | 'theory' | 'count'
 
@@ -105,7 +107,7 @@ export default function InventoryReportCard({
     // Nguyên liệu đang được onboarding phase 4 gợi ý bấm vào — xem DailyReportPage.tsx
     // (hintCoffeeIngredient) + onboarding/steps.ts.
     hintIngredient = null,
-    hintStep = null, onHintSeen, beforeTotal,
+    hintStep = null, onHintSeen, beforeTotal, afterTotal,
 }: Props) {
     // Sort by status priority so staff sees "Chưa nhập" first, then anomalies,
     // then matched rows at the bottom. Tie-break by display name for stability.
@@ -267,7 +269,8 @@ export default function InventoryReportCard({
     // Có nhóm → mỗi nhóm là 1 card riêng (không còn card bọc "Nguyên liệu đã sử dụng"); open/onToggleOpen của cha bỏ qua.
     if (sections) {
         return (
-            <>
+            <div className="flex flex-col gap-3 lg:grid lg:grid-cols-[minmax(0,1fr)_460px] lg:items-start lg:gap-4">
+                <div className="flex flex-col gap-3 min-w-0">
                 {sections.map(sec => {
                     const done = sec.items.filter(i => { const v = inventoryInputs[i.ingredient]; return v !== undefined && v !== '' }).length
                     const secOpen = toggled[sec.id] ?? sec.id === defaultOpenId
@@ -284,13 +287,21 @@ export default function InventoryReportCard({
                         </CollapsibleCard>
                     )
                 })}
-                {beforeTotal}
-                {totalRow && <div className="bg-surface rounded-[20px] px-3 py-3 border border-border/60 shadow-sm">{totalRow}</div>}
-            </>
+                </div>
+                {/* Laptop+: cột phải dính đầu khung cuộn — Xác nhận + Tổng hao hụt luôn thấy khi đếm. */}
+                {(beforeTotal || totalRow || afterTotal) && (
+                    <div className="flex flex-col gap-3 lg:sticky lg:top-0">
+                        {beforeTotal}
+                        {totalRow && <div className="bg-surface rounded-[20px] px-3 py-3 border border-border/60 shadow-sm">{totalRow}</div>}
+                        {afterTotal}
+                    </div>
+                )}
+            </div>
         )
     }
 
     return (
+        <>
         <CollapsibleCard
             icon={<ClipboardList size={15} className="text-primary shrink-0" />}
             title="Nguyên liệu đã sử dụng"
@@ -302,6 +313,8 @@ export default function InventoryReportCard({
             {beforeTotal}
             {totalRow && <div className="pt-3 mt-1 border-t border-border/40">{totalRow}</div>}
         </CollapsibleCard>
+        {afterTotal}
+        </>
     )
 }
 

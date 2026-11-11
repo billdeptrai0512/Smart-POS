@@ -58,7 +58,7 @@ export default function OrdersList({
     // Tổng cộng/biểu đồ ở `summary` vẫn tính trên toàn bộ đơn.
     const [shown, setShown] = useState(PAGE_SIZE)
     return (
-        <main className="flex-1 overflow-y-auto px-4 py-5 pb-4 space-y-3 bg-bg">
+        <main className="flex-1 overflow-y-auto px-4 py-5 pb-4 bg-bg lg:px-8"><div className="space-y-3 lg:space-y-4 lg:max-w-[1280px] lg:mx-auto">
             {/* Card đầu danh sách — nằm trong luồng cuộn bình thường như mọi card khác,
                 chỉ cần luôn là item ĐẦU TIÊN nên đơn mới không bao giờ chèn lên trên nó. */}
             {summary}
@@ -92,6 +92,7 @@ export default function OrdersList({
                 </div>
             ) : (
                 <>
+                    <div className="grid gap-3 items-start md:grid-cols-2 lg:grid-cols-3">
                     {orders.slice(0, shown).map(order => (
                         <OrderCard
                             key={order.id}
@@ -104,6 +105,7 @@ export default function OrdersList({
                             isNew={justArrivedIds?.has(order.id) || false}
                         />
                     ))}
+                    </div>
                     {orders.length > shown && (
                         <button
                             type="button"
@@ -115,6 +117,7 @@ export default function OrdersList({
                     )}
                 </>
             )}
+            </div>
         </main>
     )
 }

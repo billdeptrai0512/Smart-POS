@@ -492,7 +492,7 @@ export default function IngredientDetailPage() {
         : `1 ${unit} = ${formatVND(cost)}`
 
     return (
-        <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
+        <div className="flex flex-col h-full max-w-lg lg:max-w-4xl mx-auto bg-bg relative">
             <Toast toast={toast} />
 
             <IngredientDetailHeader

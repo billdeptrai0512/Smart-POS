@@ -336,7 +336,7 @@ export default function RecipeMenuPage() {
     const searchedToppings = useMemo(() => searchByName(toppings), [toppings, search]) // eslint-disable-line react-hooks/exhaustive-deps
 
     return (
-        <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
+        <div className="flex flex-col h-full max-w-lg lg:max-w-none mx-auto bg-bg relative">
             <Toast toast={toast} />
 
             {canEdit && !isGuest && (
@@ -377,7 +377,7 @@ export default function RecipeMenuPage() {
                 onTabSelect={setView}
             />
 
-            <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-4 pb-8 space-y-3 bg-bg">
+            <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-4 pb-8 bg-bg lg:px-8"><div className="space-y-3 lg:space-y-4 lg:max-w-[1280px] lg:mx-auto">
                 {view === 'recipes' && (
                     <div className="flex items-stretch gap-2 h-11">
                         <Dropdown
@@ -423,7 +423,7 @@ export default function RecipeMenuPage() {
                 )}
 
                 {view === 'recipes' ? (
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
                         {kind === 'topping' ? searchedToppings.map(t => (
                             <ProductCard
                                 key={t.id}
@@ -445,7 +445,7 @@ export default function RecipeMenuPage() {
                             />
                         ))}
                         {(kind === 'topping' ? searchedToppings : kind === 'batch' ? searchedBatches : searchedProducts).length === 0 && (
-                            <p className="col-span-2 text-text-secondary text-[13px] text-center py-6">
+                            <p className="col-span-full text-text-secondary text-[13px] text-center py-6">
                                 {search.trim() ? 'Không tìm thấy kết quả nào.' : { main: 'Chưa có công thức nào.', batch: 'Chưa có bán thành phẩm nào (nước cốt, trân châu nấu…).', topping: 'Chưa có topping nào (ví dụ: Trân châu, Kem muối...).' }[kind]}
                             </p>
                         )}
@@ -473,7 +473,7 @@ export default function RecipeMenuPage() {
                                         </DragRow>
                                     )}
                                     {section.items.length > 0 && !(section.divider && collapsedIds.has(section.divider.id)) && (
-                                        <div className="grid grid-cols-2 gap-3">
+                                        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
                                             {section.items.map(product => (
                                                 <DragRow key={product.id} id={product.id} enabled={canSort} lit={litIds.has(product.id)}>
                                                     <ProductCard {...cardProps(product)} dragHandle={canSort ? <GripVertical size={18} className="shrink-0 text-text-secondary/70" aria-hidden /> : undefined} sortMode />
@@ -495,6 +495,7 @@ export default function RecipeMenuPage() {
                         </DragOverlay>
                     </DndContext>
                 )}
+            </div>
             </main>
 
             {createOpen && (
