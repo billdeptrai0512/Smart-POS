@@ -25,7 +25,7 @@ describe('resolveImportPlan', () => {
         expect(blockingErrors).toEqual([])
         expect(warnings).toEqual([])
         expect(plan.products).toEqual([{ name: 'Cà Phê Sữa', price: 20000 }])
-        expect(plan.ingredients).toEqual([{ key: 'sữa_đặc', unitCost: 100, unit: 'ml', category: 'main' }])
+        expect(plan.ingredients).toEqual([{ key: 'sữa_đặc', displayName: 'Sữa đặc', unitCost: 100, unit: 'ml', category: 'main' }])
         expect(plan.recipes).toEqual([{ productName: 'Cà Phê Sữa', ingredient: 'sữa_đặc', amount: 30, unit: 'ml' }])
     })
 
@@ -62,7 +62,7 @@ describe('resolveImportPlan', () => {
             recipes: [{ 'Tên món': 'Trà Đá', 'Tên nguyên liệu': 'Đá viên', 'Số lượng': 5, 'Đơn vị': 'viên' }],
         }), existing)
         expect(blockingErrors).toEqual([])
-        expect(plan.ingredients).toEqual([{ key: 'đá_viên', unitCost: 0, unit: 'viên', category: 'main' }])
+        expect(plan.ingredients).toEqual([{ key: 'đá_viên', displayName: 'Đá viên', unitCost: 0, unit: 'viên', category: 'main' }])
     })
 
     it('gom Topping áp dụng món theo topping thay vì tạo 1 dòng/liên kết', () => {
