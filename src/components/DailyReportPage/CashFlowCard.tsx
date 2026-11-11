@@ -39,6 +39,7 @@ interface Props {
     payments?: Row[]
     expenseCategories?: ExpenseCategory[]
     children?: ReactNode
+    footer?: ReactNode // đặt dưới Thực nhận
     editable?: boolean
     cashInput?: string
     transferInput?: string
@@ -80,6 +81,7 @@ export default function CashFlowCard({
     expenseCategories = [],  // nhãn chi phí — nhóm section Vận hành theo tên nhãn
     // Khối doanh thu (SalesCard + biểu đồ) render phía trên panel Thực thu.
     children,
+    footer,
     // Inline-edit props (today scope on /report). When `editable` is true the
     // Tiền mặt / Chuyển khoản rows become text inputs; rời ô (blur) là tự lưu.
     editable = false,
@@ -507,6 +509,7 @@ export default function CashFlowCard({
                     <PanelRow label="Chuyển khoản" value={money(takeHomeTransfer)} valueClassName={cashNotEntered ? 'text-text-dim' : takeHomeTransfer < 0 ? 'text-danger' : 'text-text'} />
                 </div>
             </ReportPanel>
+            {footer}
             </div>
         </div>
     )

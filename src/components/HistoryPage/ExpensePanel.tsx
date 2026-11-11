@@ -25,26 +25,26 @@ export default function ExpensePanel({ isReadOnly, isLoading, expenses, expenseC
     const catById = useMemo(() => new Map(expenseCategories.map(c => [c.id, c])), [expenseCategories])
 
     return (
-        <main className="flex-1 overflow-y-auto px-4 py-4 pb-4 bg-bg lg:px-8"><div className="space-y-3 lg:space-y-4 lg:max-w-[1280px] lg:mx-auto">
+        <main className="flex-1 overflow-y-auto px-4 py-4 pb-4 bg-bg lg:px-8"><div className="grid gap-3 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:gap-4 lg:items-start lg:max-w-[1280px] lg:mx-auto">
             {isLoading ? (
-                <div className="flex flex-col gap-3 animate-pulse">
+                <div className="flex flex-col gap-3 animate-pulse lg:col-span-2">
                     <div className="bg-surface-light rounded-[20px] h-20 w-full" />
                     <div className="bg-surface-light rounded-[20px] h-20 w-full" />
                 </div>
             ) : expenses.length === 0 ? (
-                <div className="text-center text-text-secondary text-[13px] py-10 bg-surface-light rounded-xl border border-border/40">
+                <div className="text-center text-text-secondary text-[13px] py-10 bg-surface-light rounded-xl border border-border/40 lg:col-span-2">
                     Chưa có chi phí nào.
                 </div>
             ) : (<>
-                {/* Thẻ tổng kết — cùng bố cục tab Bán hàng */}
-                <div className="bg-surface rounded-[24px] p-5 shadow-sm border border-border/60">
+                {/* Thẻ tổng kết — cùng bố cục tab Bán hàng; laptop+: cột trái dính, danh sách chi phí cột phải. */}
+                <div className="bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 lg:sticky lg:top-0">
                     <CupsRevenueSummary
                         cups={expenses.length}
                         revenue={expenses.reduce((sum, e) => sum + (e.amount || 0), 0)}
                         leftLabel="Phát sinh" unit="chi phí" rightLabel="Tổng cộng" rightTone="text-danger"
                     />
                 </div>
-                <div className="grid gap-3 items-start md:grid-cols-2 lg:grid-cols-3">
+                <div className="flex flex-col gap-3">
                 {expenses.map(expense => (
                     <ExpenseCard
                         key={expense.id}

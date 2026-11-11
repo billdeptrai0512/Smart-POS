@@ -659,6 +659,21 @@ export default function DailyReportPage() {
 
     const restockCfg = editingRestock && (ingredientsList || []).find(i => i.ingredient === editingRestock.ingredient)
 
+    // Cuối trang; tab Dòng tiền đặt trong CashFlowCard (cột phải, dưới Thực nhận).
+    // Guide: CTA cuối của demo nằm cuối trang — khách cuộn qua Thực chi/Thực nhận là gặp (dải trên đỉnh ẩn ở
+    // trang này, OnboardingGuide). Hiện ngay khi nhập kho xong, không chờ tick viewedNet; thế chỗ 2 nút cuối trang.
+    const footer = isGuest && restockProgress.bought ? (
+        <Link ref={ctaRef} to="/signup" className={`m-3 py-3.5 rounded-[14px] bg-primary text-white text-center text-[14px] font-black uppercase tracking-wide active:scale-[0.98] transition ${onboardingHintClass(true, 'solid')}`}>
+            Hoàn thành! Đăng ký tài khoản
+        </Link>
+    ) : (
+        <div className="flex items-center justify-center gap-2 p-3">
+            <button onClick={() => setShowSupportModal(true)} className={FOOT_BTN}>Hỗ trợ / góp ý</button>
+            {/* In báo cáo dòng tiền cuối ca — tờ in dựng trong CashFlowCard nên chỉ có khi tab đang hiện Dòng tiền. */}
+            {view === VIEW_CASHFLOW && <button onClick={() => setPrintPreview(true)} className={FOOT_BTN}>In báo cáo</button>}
+        </div>
+    )
+
     return (
         <div className="flex flex-col h-full max-w-lg lg:max-w-none mx-auto bg-bg relative">
             <HistoryHeader
@@ -746,27 +761,13 @@ export default function DailyReportPage() {
                                 printPreview={printPreview}
                                 onPreviewClose={() => setPrintPreview(false)}
                                 onPrintError={e => showError(e, 'In báo cáo')}
+                                footer={footer}
                             />
                         )}
 
                         </div>
 
-                        {/* Guide: CTA cuối của demo nằm cuối trang — khách cuộn qua Thực chi/Thực nhận là gặp (dải trên đỉnh ẩn ở
-                            trang này, OnboardingGuide). Hiện ngay khi nhập kho xong, không chờ tick viewedNet; thế chỗ 2 nút cuối trang. */}
-                        {isGuest && restockProgress.bought ? (
-                            <Link ref={ctaRef} to="/signup" className={`m-3 py-3.5 rounded-[14px] bg-primary text-white text-center text-[14px] font-black uppercase tracking-wide active:scale-[0.98] transition ${onboardingHintClass(true, 'solid')}`}>
-                                Hoàn thành! Đăng ký tài khoản
-                            </Link>
-                        ) : (
-                        <div className="flex items-center justify-center gap-2 p-3">
-                            <button onClick={() => setShowSupportModal(true)} className={FOOT_BTN}>Hỗ trợ / góp ý</button>
-                            {/* In báo cáo dòng tiền cuối ca — tờ in dựng trong CashFlowCard nên
-                                chỉ có khi tab đang hiện Dòng tiền. */}
-                            {(view === VIEW_ALL || view === VIEW_CASHFLOW) && (
-                                <button onClick={() => setPrintPreview(true)} className={FOOT_BTN}>In báo cáo</button>
-                            )}
-                        </div>
-                        )}
+                        {view !== VIEW_CASHFLOW && footer}
                     </div>
                 )}
                 </div>
