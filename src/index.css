@@ -389,6 +389,11 @@ body {
   text-align: center;
 }
 
+.pwa-update-progress {
+  width: 100%;
+  accent-color: var(--color-primary);
+}
+
 .pwa-update-btn:active {
   background: var(--color-primary-hover);
   transform: scale(0.96);

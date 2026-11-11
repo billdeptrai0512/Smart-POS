@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
-import { hasNewVersion, reloadForNewVersion } from '../../utils/staleChunk'
+import { hasNewVersion, prefetchNewVersion, reloadForNewVersion } from '../../utils/staleChunk'
 
 export default function PWAUpdatePrompt() {
     const [updating, setUpdating] = useState(false)
     const [stale, setStale] = useState(false)
+    const [progress, setProgress] = useState(0)
     useRegisterSW({
         // autoUpdate: SW mới tự skipWaiting + claim, plugin mặc định reload ngay giữa phiên → mất giỏ
         // hàng chưa gửi. Chỉ báo banner, để nhân viên tự bấm lúc rảnh.
@@ -38,13 +39,19 @@ export default function PWAUpdatePrompt() {
         <div className="pwa-update-banner">
             <div className="pwa-update-content">
                 <span className="pwa-update-text">Đã có phiên bản mới !</span>
-                {/* reloadForNewVersion false = đang cooldown, không reload → trả nút về bấm lại được */}
+                {updating && <progress className="pwa-update-progress" value={progress} max={100} />}
                 <button
                     className="pwa-update-btn"
                     disabled={updating}
-                    onClick={() => setUpdating(reloadForNewVersion())}
+                    onClick={async () => {
+                        setUpdating(true)
+                        setProgress(0)
+                        await prefetchNewVersion(setProgress)
+                        // reloadForNewVersion false = đang cooldown, không reload → trả nút về bấm lại được
+                        if (!reloadForNewVersion()) setUpdating(false)
+                    }}
                 >
-                    {updating ? 'Đang cập nhật…' : 'Cập nhật'}
+                    {updating ? `Đang cập nhật… ${progress}%` : 'Cập nhật'}
                 </button>
             </div>
         </div>

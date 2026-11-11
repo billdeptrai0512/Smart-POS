@@ -25,6 +25,19 @@ export async function hasNewVersion() {
   }
 }
 
+// Tải trước file bản mới (danh sách từ precache manifest trong /sw.js) → báo tiến độ + làm ấm cache HTTP; lỗi thì bỏ qua.
+// ponytail: tiến độ theo số file, không theo byte.
+export async function prefetchNewVersion(onProgress: (pct: number) => void) {
+  try {
+    const sw = await (await fetch(`/sw.js?_v=${Date.now()}`, { cache: 'no-store' })).text()
+    const urls = [...new Set([...sw.matchAll(/url:"([^"]+)"/g)].map(m => '/' + m[1]))]
+    let done = 0
+    await Promise.all(urls.map(u =>
+      fetch(u).then(r => r.arrayBuffer()).catch(() => {}).finally(() => onProgress(Math.round(++done / urls.length * 100)))
+    ))
+  } catch { /* offline / không có sw.js */ }
+}
+
 // Gỡ SW cũ trước khi reload — không thì nó vẫn phát index.html precache cũ và lỗi lặp lại.
 // Cooldown chặn vòng lặp reload nếu server thật sự hỏng. Trả về false khi không reload.
 export function reloadForNewVersion() {
