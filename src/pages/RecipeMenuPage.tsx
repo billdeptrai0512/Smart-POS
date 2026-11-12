@@ -25,7 +25,7 @@ import ProductCard from '../components/RecipeMenuPage/ProductCard'
 import CreateProductForm from '../components/RecipeMenuPage/CreateProductForm'
 import CreateBatchForm from '../components/RecipeMenuPage/CreateBatchForm'
 import CreateToppingForm from '../components/RecipeMenuPage/CreateToppingForm'
-import { insertTopping, fetchToppingIngredients, type ToppingSource } from '../services/toppingService'
+import { insertTopping, fetchToppingIngredients, toppingSourcesOf, type ToppingSource } from '../services/toppingService'
 import { upsertRecipes } from '../services/recipeService'
 import { goToMenuStep } from '../utils/menuSequence'
 import { useTabRoute } from '../hooks/useTabRoute'
@@ -130,6 +130,10 @@ export default function RecipeMenuPage() {
         return () => { cancelled = true }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [kind, toppingKey])
+    // Topping có nguồn tồn kho (source_*) → công thức = đúng 1 dòng nguồn (nguồn thay hẳn topping_ingredients, như lúc trừ kho); không thì topping_ingredients.
+    const toppingRows = (t: Row): Row[] => t.source_ingredient
+        ? toppingSourcesOf([t as never])[t.id] as Row[]
+        : toppingIngs[t.id] || []
     // Nút + tạo đúng loại đang lọc (kind); createOpen = đang mở form tạo.
     const [createOpen, setCreateOpen] = useState(false)
     const [showImportModal, setShowImportModal] = useState(false)
@@ -428,8 +432,8 @@ export default function RecipeMenuPage() {
                             <ProductCard
                                 key={t.id}
                                 product={t}
-                                prodRecipes={(toppingIngs[t.id] || []) as never}
-                                cost={(toppingIngs[t.id] || []).reduce((sum, r) => sum + r.amount * (ingredientCosts[r.ingredient] || 0), 0)}
+                                prodRecipes={toppingRows(t) as never}
+                                cost={toppingRows(t).reduce((sum, r) => sum + r.amount * (ingredientCosts[r.ingredient] || 0), 0)}
                                 ingredientUnits={ingredientUnits}
                                 priceLabel="Giá cộng thêm"
                                 onClick={() => { rememberList(); navigate(`/category/recipes/${t.id}`, { state: location.state }) }}
