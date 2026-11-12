@@ -389,9 +389,7 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
                                     <p className={`text-[12px] font-bold ${changedSince ? 'text-warning' : confirmedAt ? 'text-success' : 'text-text'}`}>
                                         {changedSince ? `Có số mới sau lần xác nhận ${timeStringVN(confirmedAt!)}` : confirmedAt ? `Đã xác nhận kiểm kê lúc ${timeStringVN(confirmedAt)}` : 'Chưa xác nhận kiểm kê'}
                                     </p>
-                                    <p className="text-[11px] text-text-dim">
-                                        {inventory.isDirty ? 'Đang có thay đổi chưa lưu' : !allCounted ? 'Đếm hết nguyên liệu để xác nhận' : 'Đơn mới sau giờ xác nhận trừ vào tồn quầy'}
-                                    </p>
+                                    {(inventory.isDirty || !allCounted) && <p className="text-[11px] text-text-dim">{inventory.isDirty ? 'Đang có thay đổi chưa lưu' : 'Đếm hết nguyên liệu để xác nhận'}</p>}
                                 </div>
                                 <button
                                     type="button"

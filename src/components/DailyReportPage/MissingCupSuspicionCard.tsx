@@ -1,4 +1,5 @@
-import { Fragment } from 'react'
+import { Fragment, useState } from 'react'
+import { ChevronDown } from 'lucide-react'
 import { ingredientLabel, getIngredientUnit } from '../../utils/ingredients'
 import { useProducts } from '../../contexts/ProductContext'
 import { formatVND } from '../../utils'
@@ -17,6 +18,7 @@ const fmtN = (x: number) => Math.round(x * 10) / 10
 
 export default function MissingCupSuspicionCard({ candidates = [], cash = null }: { candidates?: RepeatedMissingCupCandidate[]; cash?: Cash | null }) {
     const { ingredientUnits } = useProducts()
+    const [open, setOpen] = useState(true) // thu gọn → chỉ còn tiêu đề + số ly
     // Món lặp lại nhiều ngày đáng tin hơn (attachRepeatHistory đã sort lên đầu), rồi tới % khớp.
     const c = candidates[0]
     if (!c) return null
@@ -53,10 +55,14 @@ export default function MissingCupSuspicionCard({ candidates = [], cash = null }
 
     return (
         <div className="bg-surface rounded-[20px] px-3 py-3 border border-warning/30 shadow-sm">
-            <div className="flex items-center justify-between gap-2">
+            <button type="button" onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between gap-2">
                 <span className="text-[14px] font-black text-text uppercase">Khả năng bấm thiếu</span>
-                <span className="text-[14px] font-black tabular-nums text-warning truncate">{n} ly</span>
-            </div>
+                <span className="flex items-center gap-2 min-w-0">
+                    <span className="text-[14px] font-black tabular-nums text-warning truncate">{n} ly</span>
+                    <ChevronDown size={16} className={`shrink-0 text-text-dim transition-transform ${open ? 'rotate-180' : ''}`} />
+                </span>
+            </button>
+            {open && (<>
             <div className="mt-2 pt-2 border-t border-border/40 flex flex-col gap-1.5">
                 {c.cups.slice(0, MAX_CUPS).map((cup, i) => equation(i, cup.rows, cup.name, cup.price))}
                 {c.cups.length > MAX_CUPS && <span className="text-[11px] text-text-dim">… và {c.cups.length - MAX_CUPS} ly nữa</span>}
@@ -75,6 +81,7 @@ export default function MissingCupSuspicionCard({ candidates = [], cash = null }
                     {cash.diff < 0 && <span className="text-[11px] text-text-dim">Két không dư nên chưa chốt được số ly — soi lại bill</span>}
                 </div>
             )}
+            </>)}
         </div>
     )
 }

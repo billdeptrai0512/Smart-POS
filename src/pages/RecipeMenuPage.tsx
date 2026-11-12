@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, Fragment, lazy, Suspense, type ReactNode } from 'react'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
-import { Plus, BadgePercent, GripVertical, FileSpreadsheet } from 'lucide-react'
+import { Plus, BadgePercent, GripVertical, FileSpreadsheet, Search } from 'lucide-react'
 import {
     type DragEndEvent,
     DndContext, DragOverlay, MouseSensor, TouchSensor,
@@ -396,14 +396,23 @@ export default function RecipeMenuPage() {
                             triggerClassName="h-11 px-3 rounded-[12px] bg-surface border border-border/60 text-text-secondary text-[12px] font-black uppercase tracking-widest hover:bg-surface-light"
                         />
                         <div className="relative flex-1 min-w-0">
+                            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-dim pointer-events-none" />
                             <input
                                 type="text"
                                 value={search}
                                 onChange={e => setSearch(e.target.value)}
-                                placeholder={`Tìm ${KINDS.find(k => k.key === kind)!.label.toLowerCase()}…`}
-                                className={`w-full h-full pl-3 ${canEdit ? 'pr-12' : 'pr-3'} rounded-[12px] bg-surface border border-border/60 text-text text-[14px] placeholder:text-text-dim focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/20`}
+                                aria-label={`Tìm ${KINDS.find(k => k.key === kind)!.label.toLowerCase()}`}
+                                className={`w-full h-full pl-9 ${canEdit ? 'pr-[5.25rem]' : 'pr-3'} rounded-[12px] bg-surface border border-border/60 text-text text-[14px] focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/20`}
                             />
-                            {canEdit && (
+                            {canEdit && (<>
+                                <button
+                                    onClick={() => setShowImportModal(true)}
+                                    aria-label="Nhập hàng loạt từ Excel"
+                                    title="Nhập hàng loạt từ Excel"
+                                    className="absolute right-11 top-1 bottom-1 w-9 rounded-[8px] flex items-center justify-center active:scale-95 transition-all text-text-secondary hover:text-primary"
+                                >
+                                    <FileSpreadsheet size={18} />
+                                </button>
                                 <button
                                     onClick={() => setCreateOpen(true)}
                                     aria-label={`Tạo ${KINDS.find(k => k.key === kind)!.label.toLowerCase()}`}
@@ -411,18 +420,8 @@ export default function RecipeMenuPage() {
                                 >
                                     <Plus size={18} />
                                 </button>
-                            )}
+                            </>)}
                         </div>
-                        {canEdit && (
-                            <button
-                                onClick={() => setShowImportModal(true)}
-                                aria-label="Nhập hàng loạt từ Excel"
-                                title="Nhập hàng loạt từ Excel"
-                                className="shrink-0 w-11 rounded-[12px] bg-surface border border-border/60 text-text-secondary flex items-center justify-center active:scale-95 hover:border-primary/40 hover:text-primary transition-all"
-                            >
-                                <FileSpreadsheet size={18} />
-                            </button>
-                        )}
                     </div>
                 )}
 

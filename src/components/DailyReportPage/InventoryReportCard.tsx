@@ -152,6 +152,7 @@ export default function InventoryReportCard({
     // section đầu tiên còn "Chưa nhập". Tính theo baseline nên gõ số không làm section tự đóng giữa chừng;
     // lưu xong baseline đổi → mở sang section kế. `toggled` là phần người dùng bấm tay, đè mặc định.
     const [toggled, setToggled] = useState<Record<string, boolean>>({})
+    const [lossOpen, setLossOpen] = useState(true) // thu gọn thẻ Tổng hao hụt (chỉ còn dòng tổng)
     const { sections, defaultOpenId } = useMemo(() => {
         const ingredientGroups = dbGroups?.length ? dbGroups : byCategory ? INGREDIENT_CATEGORIES.map(c => ({ id: c.key, name: c.label })) : null
         if (!ingredientGroups) return { sections: null, defaultOpenId: null }
@@ -249,25 +250,30 @@ export default function InventoryReportCard({
     // Footer tổng — tiền hao hụt cộng dồn, chỉ hiện khi đã kiểm ít nhất 1 NVL.
     const totalRow = countedCount > 0 && (
         <div ref={totalRef} className="scroll-mt-4">
-            <div className="flex items-center justify-between">
+            <button type="button" onClick={() => setLossOpen(o => !o)} className="w-full flex items-center justify-between gap-2">
                 <span className="text-[14px] font-black text-text uppercase">Tổng hao hụt</span>
-                <span className={`text-[14px] font-black tabular-nums ${totalLossValue > 0 ? 'text-danger' : 'text-text-secondary'}`}>
-                    {totalLossValue > 0 ? '-' : ''}{formatVND(Math.round(totalLossValue))}
+                <span className="flex items-center gap-2">
+                    <span className={`text-[14px] font-black tabular-nums ${totalLossValue > 0 ? 'text-danger' : 'text-text-secondary'}`}>
+                        {totalLossValue > 0 ? '-' : ''}{formatVND(Math.round(totalLossValue))}
+                    </span>
+                    <ChevronDown size={16} className={`text-text-dim transition-transform ${lossOpen ? 'rotate-180' : ''}`} />
                 </span>
-            </div>
-            {losses.length > 0 ? (
-                <div className="mt-2 pt-2 border-t border-border/40 flex flex-col gap-1">
-                    {losses.map(l => (
-                        <div key={l.key} className="flex items-baseline justify-between gap-2 text-[12px]">
-                            <span className="text-text-secondary truncate">{l.name} <span className="text-text-dim tabular-nums">· hụt {l.qty}</span></span>
-                            <span className="font-bold tabular-nums text-danger shrink-0">{l.value > 0 ? `-${formatVND(Math.round(l.value))}` : '—'}</span>
-                        </div>
-                    ))}
-                </div>
-            ) : <p className="text-[11px] mt-0.5 text-success">Khớp hết</p>}
-            {uncounted.length > 0 && (
-                <p className="text-[11px] mt-2 pt-2 border-t border-border/40 text-warning">Chưa kiểm kê ({uncounted.length}): {uncounted.join(', ')}</p>
-            )}
+            </button>
+            {lossOpen && (<>
+                {losses.length > 0 ? (
+                    <div className="mt-2 pt-2 border-t border-border/40 flex flex-col gap-1">
+                        {losses.map(l => (
+                            <div key={l.key} className="flex items-baseline justify-between gap-2 text-[12px]">
+                                <span className="text-text-secondary truncate">{l.name} <span className="text-text-dim tabular-nums">· hụt {l.qty}</span></span>
+                                <span className="font-bold tabular-nums text-danger shrink-0">{l.value > 0 ? `-${formatVND(Math.round(l.value))}` : '—'}</span>
+                            </div>
+                        ))}
+                    </div>
+                ) : <p className="text-[11px] mt-0.5 text-success">Khớp hết</p>}
+                {uncounted.length > 0 && (
+                    <p className="text-[11px] mt-2 pt-2 border-t border-border/40 text-warning">Chưa kiểm kê ({uncounted.length}): {uncounted.join(', ')}</p>
+                )}
+            </>)}
         </div>
     )
 

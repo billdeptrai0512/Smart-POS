@@ -2,7 +2,7 @@ import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback, typ
 import { withCounterEstimate, recipesBelongTo } from '../services/counterEstimate'
 import { useCounterCalc } from '../hooks/useCounterCalc'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Plus, Settings2, ClipboardList } from 'lucide-react'
+import { Plus, Settings2, ClipboardList, Search } from 'lucide-react'
 import { BottomSheet, SheetHeader, SHEET_PANEL } from '../components/common/ModalShell'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
@@ -438,14 +438,23 @@ export default function IngredientManagementPage() {
                         />
                     )}
                     <div className="relative flex-1 min-w-0">
+                        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-dim pointer-events-none" />
                         <input
                             type="text"
                             value={search}
                             onChange={e => setSearch(e.target.value)}
-                            placeholder="Tìm nguyên liệu…"
-                            className={`w-full h-full pl-3 ${canEdit ? 'pr-12' : 'pr-3'} rounded-[12px] bg-surface border border-border/60 text-text text-[14px] placeholder:text-text-dim focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/20`}
+                            aria-label="Tìm nguyên liệu"
+                            className={`w-full h-full pl-9 ${canEdit ? 'pr-[5.25rem]' : 'pr-3'} rounded-[12px] bg-surface border border-border/60 text-text text-[14px] focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/20`}
                         />
-                        {canEdit && (
+                        {canEdit && (<>
+                            <button
+                                onClick={() => navigate('/inventory/summary')}
+                                aria-label="Tổng hợp nhập kho"
+                                title="Tổng hợp nhập kho"
+                                className="absolute right-11 top-1 bottom-1 w-9 rounded-[8px] flex items-center justify-center active:scale-95 transition-all text-text-secondary hover:text-primary"
+                            >
+                                <ClipboardList size={18} />
+                            </button>
                             <button
                                 onClick={() => setShowCreateModal(true)}
                                 aria-label="Tạo nguyên liệu"
@@ -453,18 +462,8 @@ export default function IngredientManagementPage() {
                             >
                                 <Plus size={18} />
                             </button>
-                        )}
+                        </>)}
                     </div>
-                    {canEdit && (
-                        <button
-                            onClick={() => navigate('/inventory/summary')}
-                            aria-label="Tổng hợp nhập kho"
-                            title="Tổng hợp nhập kho"
-                            className="shrink-0 w-11 rounded-[12px] bg-surface border border-border/60 text-text-secondary flex items-center justify-center active:scale-95 hover:border-primary/40 hover:text-primary transition-all"
-                        >
-                            <ClipboardList size={18} />
-                        </button>
-                    )}
                 </div>
                 {canEdit && keyMismatches.hasIssues && !isDismissed && (
                     <KeyMismatchBanner
