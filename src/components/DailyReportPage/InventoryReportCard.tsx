@@ -499,8 +499,8 @@ const IngredientRow = memo(function IngredientRow({
     const breakdownEntries = showBreakdown ? Object.values(breakdown).filter((e) => (Number(e.totalAmount) || 0) > 0).sort((a, b) => b.totalAmount - a.totalAmount) : []
     // Bảng chi tiết trải hàng 2–4 của lưới 4 hàng BẰNG NHAU: để nó dài tuỳ ý thì cả 4 hàng bị kéo cao theo → các ô nhập giãn thưa. Nên chỉ hiện các món dùng nhiều nhất, phần còn lại ẨN, bấm "Xem đủ N món" mở sheet.
     const entryRow = (entry: (typeof breakdownEntries)[number], i: number) => (
-        <div key={i} className="flex flex-col">
-            <span className="text-[12px] font-medium text-text leading-tight line-clamp-2">{entry.name}</span>
+        <div key={i} className="flex flex-col min-w-0">
+            <span className="text-[12px] font-medium text-text leading-tight truncate">{entry.name}</span>
             <span className="text-[10.5px] text-text-dim tabular-nums">
                 {entry.qty} {entry.unitLabel ?? 'ly'} ×{r1(entry.totalAmount / entry.qty)}{unit.length <= 2 ? '' : ' '}{unit} = <b className="text-[11px] text-text">{entry.totalAmount} {unit}</b>
             </span>
