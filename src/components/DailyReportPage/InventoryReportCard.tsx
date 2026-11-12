@@ -73,8 +73,8 @@ function computeRowStatus(args: Parameters<typeof computeHaoHut>[0]) {
 }
 
 // Per-ingredient layout (counter-side only — Tồn kho tách ra ngoài):
-//   row 1:  Đầu kỳ    |  Nhập thêm
-//   rows 2–4: [chi tiết Sử dụng theo món]  |  Sử dụng / Lý thuyết còn / Cuối kỳ (input, = Thực tế, nổi nhất)
+//   cột trái:  Đầu kỳ / Nhập thêm / Lý thuyết còn / Cuối kỳ (input, = Thực tế, nổi nhất)
+//   cột phải:  Sử dụng, bên dưới là [chi tiết Sử dụng theo món]
 //   (hụt/dư + tiền nằm ở nhãn tiêu đề dòng, không lặp thành ô)
 //
 // Staff inputs: Đầu kỳ, Nhập thêm, Cuối kỳ. Everything else is computed and disabled.
@@ -501,10 +501,9 @@ const IngredientRow = memo(function IngredientRow({
     const entryRow = (entry: (typeof breakdownEntries)[number], i: number) => (
         <div key={i} className="flex flex-col">
             <span className="text-[12px] font-medium text-text leading-tight line-clamp-2">{entry.name}</span>
-            <div className="flex items-baseline justify-between gap-2 tabular-nums">
-                <span className="text-[10.5px] text-text-dim">{entry.qty} {entry.unitLabel ?? 'ly'} ×{r1(entry.totalAmount / entry.qty)}{unit.length <= 2 ? '' : ' '}{unit}</span>
-                <span className="text-[11px] font-bold text-text">{entry.totalAmount} {unit}</span>
-            </div>
+            <span className="text-[10.5px] text-text-dim tabular-nums">
+                {entry.qty} {entry.unitLabel ?? 'ly'} ×{r1(entry.totalAmount / entry.qty)}{unit.length <= 2 ? '' : ' '}{unit} = <b className="text-[11px] text-text">{entry.totalAmount} {unit}</b>
+            </span>
         </div>
     )
     const breakdownCard = showBreakdown && (
@@ -512,7 +511,7 @@ const IngredientRow = memo(function IngredientRow({
             {p && <span className="text-[10px] font-black uppercase text-text-secondary">Hôm nay · {todayUsed}</span>}
             {breakdownEntries.slice(0, MAX_SIDE_BREAKDOWN).map(entryRow)}
             {breakdownEntries.length > MAX_SIDE_BREAKDOWN && (
-                <button type="button" onClick={() => setListOpen(true)} className="text-left text-[10.5px] font-bold text-primary">Xem đủ {breakdownEntries.length} món ›</button>
+                <button type="button" onClick={() => setListOpen(true)} className="text-left text-[10.5px] font-bold text-primary">Xem tất cả ›</button>
             )}
         </div>
     )
@@ -548,14 +547,14 @@ const IngredientRow = memo(function IngredientRow({
 
                 {showBreakdown ? (<>
                     {openingNotePanel}
-                    {/* Có chi tiết món: lưới 2 cột bằng nhau × 4 hàng bằng nhau. Cột phải = 4 ô cách đều; cột trái = Đầu kỳ (hàng 1) + bảng chi tiết trải hàng 2–4 (đỉnh–đáy thẳng với Sử dụng–Cuối kỳ). Hụt/dư + tiền đã nằm ở nhãn tiêu đề dòng. */}
-                    <div className="grid grid-cols-2 grid-rows-4 items-center gap-2">
-                        <div className="col-start-1 row-start-1">{cellDauKy}</div>
-                        <div className="col-start-2 row-start-1">{cellNhap}</div>
-                        <div className="col-start-1 row-start-2 row-span-3 self-stretch min-w-0 flex flex-col">{breakdownCard}</div>
-                        <div className="col-start-2 row-start-2">{cellSuDung}</div>
-                        <div className="col-start-2 row-start-3">{cellLyThuyet}</div>
-                        <div className="col-start-2 row-start-4">{cellCuoiKy}</div>
+                    {/* 2 cột × 4 hàng bằng nhau, xếp theo cột (grid-flow-col); bảng chi tiết trải hàng 2–4 bên phải. */}
+                    <div className="grid grid-flow-col grid-cols-2 grid-rows-4 items-center gap-2">
+                        <div>{cellDauKy}</div>
+                        <div>{cellNhap}</div>
+                        <div>{cellLyThuyet}</div>
+                        <div>{cellCuoiKy}</div>
+                        <div>{cellSuDung}</div>
+                        <div className="row-span-3 self-stretch min-w-0 flex flex-col">{breakdownCard}</div>
                     </div>
                 </>) : (<>
                     {/* Không có chi tiết món: cùng 2 cột — Đầu kỳ | Nhập thêm ; Sử dụng | Lý thuyết còn ; Cuối kỳ trải cả hàng. */}
@@ -568,7 +567,7 @@ const IngredientRow = memo(function IngredientRow({
             </div>)}
             {listOpen && (
                 <NoticeSheet icon={<ClipboardList size={18} className="text-primary shrink-0" />} title={`${ingredientLabel(ing.ingredient)} · Sử dụng`} count={p ? todayUsed : `${usedShown} ${unit}`} onClose={() => setListOpen(false)}>
-                    <div className="flex flex-col gap-3 pb-2">{breakdownEntries.map(entryRow)}</div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 pb-2">{breakdownEntries.map(entryRow)}</div>
                 </NoticeSheet>
             )}
         </div>
