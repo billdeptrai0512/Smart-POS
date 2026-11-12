@@ -347,8 +347,9 @@ export const seedGuestDemoDay = () => {
     const hasCoffee = (pid: string) => recipes.some(r => r.product_id === pid && Number(r.amount) > 0 && ingredientLabel(r.ingredient).toLowerCase() === 'cà phê');
     const cups = 1 + Math.floor(Math.random() * 3);
     const qtyBy: Record<string, number> = {};
+    const products = get(KEYS.PRODUCTS);
     for (let i = 0; i < cups; i++) {
-        const pool = get(KEYS.PRODUCTS).filter(p => sold.has(p.id) && Number(p.price) > 0 && hasCoffee(p.id) && canMake(p.id));
+        const pool = products.filter(p => sold.has(p.id) && Number(p.price) > 0 && hasCoffee(p.id) && canMake(p.id));
         if (!pool.length) break;
         const pick = pool[Math.floor(Math.random() * pool.length)];
         qtyBy[pick.id] = (qtyBy[pick.id] || 0) + 1;
@@ -359,11 +360,9 @@ export const seedGuestDemoDay = () => {
 };
 
 // Các ly pha không bấm bill của ngày demo hôm nay (có thể nhiều món), kèm tổng số ly, tổng giá và lượng NVL đã dùng cho mấy ly đó.
-// (bản cũ lưu 1 object {productId, qty} — vẫn đọc được.)
 export const getGuestUnbilled = () => {
-    const state = readJSON<{ day: string | null; unbilled?: { productId: string; qty: number }[] | { productId: string; qty: number } | null } | null>(KEYS.DEMO_DAY, null);
-    const raw = state?.day === dateStringVN() ? state.unbilled : null;
-    const list = Array.isArray(raw) ? raw : raw ? [raw] : [];
+    const state = readJSON<{ day: string | null; unbilled?: { productId: string; qty: number }[] | null } | null>(KEYS.DEMO_DAY, null);
+    const list = (state?.day === dateStringVN() && state.unbilled) || [];
     const products = get(KEYS.PRODUCTS);
     const recipes = get(KEYS.RECIPES);
     let qty = 0, value = 0;

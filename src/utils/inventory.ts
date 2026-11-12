@@ -25,9 +25,11 @@ export interface MissingCupCandidate {
     cashMatch: boolean // két dư (Thực thu − Doanh thu) ≈ estimatedRevenue
     similar: string[] // món khác khớp gần bằng (±3%) cùng số ly — không phân biệt nổi bằng hao hụt
     matches: { ingredient: string; haoHut: number; amount: number; ratio: number }[]
-    // Phân rã theo ngân sách hao hụt (xem decompose): cups = ly gán được món (mỗi phần tử = 1 ly), rest = hao hụt còn lại chưa gán được.
+    // Phân rã hao hụt hôm nay thành từng ly (chung cho mọi ứng viên, xem `decomposed`): cups = ly gán được món (mỗi phần tử = 1 ly),
+    // rest = hao hụt còn lại chưa gán được, restCups = số ly còn hụt trong rest.
     cups: { name: string; price: number; rows: { ingredient: string; amount: number }[] }[]
     rest: { ingredient: string; amount: number }[]
+    restCups: number
 }
 
 /** Ứng viên kèm thống kê lặp lại do findMissingCupCandidates thêm vào. */
@@ -661,27 +663,35 @@ export function findMissingCupCandidates({ ingredientsList = [], haoHutByIngredi
         const b = baseByProduct[r.product_id] ??= {}
         b[r.ingredient] = (b[r.ingredient] || 0) + r.amount
     }
-    // Mỗi món = công thức gốc + từng biến thể "món + 1 extra" (size Lớn: Ly 350ml −1, Ly 470ml +1…) — ly bán ra có thể là bản
-    // extra, công thức gốc một mình không giải thích được hao hụt của nó. Cộng dồn định lượng, bỏ dòng ≤ 0.
-    type Variant = { productId: string; label: string; extraPrice: number; rows: { ingredient: string; amount: number }[] }
+    // Mỗi món = công thức gốc + các biến thể "món + 1 hoặc 2 extra" (size Lớn: Ly 350ml −1, Ly 470ml +1…) — ly bán ra có thể là bản
+    // extra, công thức gốc một mình không giải thích được hao hụt của nó. Cộng dồn định lượng + giá của mọi extra trong tổ hợp.
+    // Tổ hợp làm 1 nguyên liệu xuống ÂM là món không tồn tại → loại: "Bình lớn" (ly 470 −1, nắp −1) chỉ có nghĩa khi đi cùng "Lớn"
+    // (ly 470 +1); ghép một mình vào món gốc sẽ ra "món gốc không nắp" giá gốc — món ma vừa khít mọi ngày nắp hụt ít.
+    // Tổ hợp ra trùng công thức đã có (NGỌT + KHÔNG đường = gốc) thì bỏ.
+    // ponytail: tối đa 2 extra/ly; lên 3 nếu quán có món cần 3 extra mới ra công thức riêng.
+    type Variant = { productId: string; label: string; extraPrice: number; extras: number; rows: { ingredient: string; amount: number }[] }
+    const sigOf = (rows: Variant['rows']) => rows.map(r => `${r.ingredient}:${r.amount}`).sort().join('|')
     const variants: Variant[] = []
     const maxAmount: UsageMap = {}
     const usedBy: UsageMap = {}
     for (const [productId, base] of Object.entries(baseByProduct)) {
         const seen = new Set<string>()
-        const add = (label: string, extraPrice: number, amounts: Record<string, number>) => {
-            const rows = Object.entries(amounts).filter(([, a]) => a > 0).map(([ingredient, amount]) => ({ ingredient, amount }))
-            variants.push({ productId, label, extraPrice, rows })
+        const sigs = new Set<string>()
+        const exs = (productExtras[productId] || []).flatMap(ex => extraIngredients[ex.id]?.length ? [{ name: ex.name, price: Number(ex.price) || 0, ei: extraIngredients[ex.id] }] : [])
+        const add = (picked: typeof exs) => {
+            const amounts = { ...base }
+            for (const x of picked) for (const e of x.ei) amounts[e.ingredient] = (amounts[e.ingredient] || 0) + e.amount
+            if (Object.values(amounts).some(a => a < -1e-9)) return
+            const rows = Object.entries(amounts).filter(([, a]) => a > 1e-9).map(([ingredient, amount]) => ({ ingredient, amount }))
+            const sig = sigOf(rows)
+            if (sigs.has(sig)) return
+            sigs.add(sig)
+            variants.push({ productId, label: picked.map(x => x.name).join(' + '), extraPrice: picked.reduce((s, x) => s + x.price, 0), extras: picked.length, rows })
             for (const r of rows) { maxAmount[r.ingredient] = Math.max(maxAmount[r.ingredient] || 0, r.amount); seen.add(r.ingredient) }
         }
-        add('', 0, base)
-        for (const ex of productExtras[productId] || []) {
-            const ei = extraIngredients[ex.id]
-            if (!ei?.length) continue
-            const merged = { ...base }
-            for (const e of ei) merged[e.ingredient] = (merged[e.ingredient] || 0) + e.amount
-            add(ex.name, Number(ex.price) || 0, merged)
-        }
+        add([])
+        exs.forEach(a => add([a]))
+        exs.forEach((a, i) => exs.slice(i + 1).forEach(b => add([a, b])))
         for (const ing of seen) usedBy[ing] = (usedBy[ing] || 0) + 1
     }
     // Bao bì không đếm được (bịch T, ống hút) hụt không nói gì về số ly → loại khỏi cả mẫu số lẫn công thức.
@@ -710,41 +720,73 @@ export function findMissingCupCandidates({ ingredientsList = [], haoHutByIngredi
     if (total <= 0) return []
 
     const productById = new Map((products || []).map(p => [p.id, p]))
-    // Phân rã N ly thành từng món thật theo NGÂN SÁCH hao hụt: lấy từng ly một, mỗi ly phải nằm gọn trong phần hao hụt CÒN LẠI
-    // (trừ dần những gì các ly trước đã "dùng" — 36ml sữa đặc hụt chỉ đủ 1 ly cà phê sữa, không phải 3). Mỗi bước chọn món dùng nhiều
-    // nguyên liệu nhất trong ngân sách; dung sai như tolOf (ly/nắp không dung sai). Ly nào không món nào đỡ nổi thì để ở `rest`:
-    // phần hao hụt chưa gán được món (vd 2 ly + 2 nắp + 34g cà phê → có ly cà phê không sữa/không đường mà menu không có món tương ứng).
+    // Phân rã hao hụt thành TỪNG LY món thật — tìm cả nhóm ly cùng lúc (không chốt từng ly tham lam: ly đầu sai là sai cả chuỗi).
+    // Mỗi ly phải nằm gọn trong phần hao hụt CÒN LẠI (36ml sữa đặc hụt chỉ đủ 1 ly cà phê sữa, không phải 3; dung sai như tolOf,
+    // ly không dung sai, nắp mềm). Điểm của 1 nhóm ly (càng thấp càng tốt) = hao hụt còn chưa giải thích + lệch giữa két dư và tổng giá
+    // bán (nửa điểm mỗi "1 ly tiền" lệch — két hiếm khi khớp 100% nên chỉ nặng bằng nửa kho) + chút phạt cho mỗi extra (hoà thì
+    // ưu tiên công thức gốc). Hao hụt còn lại không món nào đỡ nổi → `rest`.
+    // Hai món cùng công thức cùng giá (Americano có đường = Cà phê đen) kho lẫn két đều không phân biệt được → giữ món đầu.
+    const poolSeen = new Set<string>()
     const pool = variants.flatMap(v => {
         const p = productById.get(v.productId)
         if (!p?.is_active || !(Number(p.price) > 0)) return []
-        return [{ ...v, name: v.label ? `${p.name} (${v.label})` : p.name, price: Number(p.price) + v.extraPrice, rows: v.rows.filter(r => !skip(r.ingredient)) }]
+        const rows = v.rows.filter(r => !skip(r.ingredient)), price = Number(p.price) + v.extraPrice
+        const key = `${sigOf(rows)}@${price}`
+        if (poolSeen.has(key)) return []
+        poolSeen.add(key)
+        return [{ extras: v.extras, name: v.label ? `${p.name} (${v.label})` : p.name, price, rows }]
     })
     // Khoá theo nguyên liệu TRONG CÔNG THỨC (lossOf tự dò theo nhãn): khoá ở ingredientsList có thể khác khoá công thức ("cup" vs "Ly").
     const lossVec = [...new Set(pool.flatMap(v => v.rows.map(r => r.ingredient)))].flatMap(ingredient => {
         const loss = lossOf(ingredient)
         if (loss == null) return []
         const scale = maxAmount[ingredient] || 1
-        return [{ ingredient, loss, scale, tol: tolOf(ingredient, scale, lookupByLabel<number | null>(ingredient, noiseByIngredient, null)) }]
+        const noise = lookupByLabel<number | null>(ingredient, noiseByIngredient, null)
+        // Nắp mềm: ly bán ra có thể không đậy nắp / đếm nắp lệch — vượt số nắp hụt không bị
+        // cấm, chỉ bị trừ điểm như mọi hao hụt không khớp (cấm cứng thì 5 ly hụt + 1 nắp hụt sẽ không ghép nổi món nào cho 4 ly kia).
+        const isLid = /^nắp/.test(ingredientLabel(ingredient).toLowerCase())
+        return [{ ingredient, loss, tol: isLid ? Infinity : tolOf(ingredient, scale, noise), norm: isCup(ingredient) ? scale : Math.max(scale, 2 * (noise || 0)) }]
     })
     const amtVec = pool.map(v => lossVec.map(x => v.rows.find(r => r.ingredient === x.ingredient)?.amount ?? 0))
-    const decompose = (n: number) => {
-        const left = lossVec.map(x => x.loss + x.tol)
-        const used = lossVec.map(() => 0)
-        const cups: MissingCupCandidate['cups'] = []
-        for (let c = 0; c < n; c++) {
-            let best = -1, bestScore = 0
-            amtVec.forEach((a, i) => {
-                if (!a.every((x, k) => x <= left[k] + 1e-9)) return
-                const score = a.reduce((s, x, k) => s + x / lossVec[k].scale, 0)
-                if (score > bestScore) { bestScore = score; best = i }
-            })
-            if (best < 0) break
-            amtVec[best].forEach((x, k) => { left[k] -= x; used[k] += x })
-            cups.push({ name: pool[best].name, price: pool[best].price, rows: pool[best].rows })
+    const decomposed = (() => {
+        // Hao hụt CHƯA giải thích (thiếu lẫn thừa), quy về "đơn vị ly": chia định lượng lớn nhất của 1 ly — nguyên liệu nhiễu lịch sử
+        // lớn (cà phê ±147g) thì chia cho 2× độ nhiễu: lệch vẫn bị tính, chỉ nhẹ đi, không được bỏ qua hẳn.
+        const stockCost = (used: number[]) => lossVec.reduce((s, x, k) => s + Math.abs(x.loss - used[k]) / x.norm, 0)
+        const cash = cashDiff != null && cashDiff > 0 ? cashDiff : null
+        const avgPrice = pool.reduce((s, v) => s + v.price, 0) / (pool.length || 1) || 1
+        const costOf = (stock: number, picks: number[]) => stock + (cash ? 0.5 * Math.abs(cash - picks.reduce((s, i) => s + pool[i].price, 0)) / avgPrice : 0)
+            + 0.01 * picks.reduce((s, i) => s + pool[i].extras, 0)
+        const zero = lossVec.map(() => 0)
+        const add = (used: number[], i: number) => used.map((u, k) => u + amtVec[i][k])
+        const fits = (used: number[], i: number) => amtVec[i].every((x, k) => used[k] + x <= lossVec[k].loss + lossVec[k].tol + 1e-9)
+        const root = stockCost(zero)
+        // Thử món giải thích được nhiều nhất trước → nhánh đầu tiên chính là lời giải tham lam, các nhánh sau chỉ cải thiện thêm.
+        const order = pool.map((_, i) => i).filter(i => fits(zero, i)).sort((a, b) => stockCost(add(zero, a)) - stockCost(add(zero, b)))
+        let best = { cost: costOf(root, []), picks: [] as number[] }
+        let nodes = 0
+        const dfs = (start: number, used: number[], picks: number[], stock: number) => {
+            for (let o = start; o < order.length; o++) {
+                // ponytail: chặn 20.000 nút — quá ngưỡng thì dừng với lời giải tốt nhất đang có; đổi sang branch-and-bound nếu menu lớn làm kết quả kém.
+                if (nodes++ > 20000) return
+                const i = order[o]
+                if (!fits(used, i)) continue
+                const used2 = add(used, i), stock2 = stockCost(used2)
+                if (stock - stock2 < 0.5) continue // ly thêm vào phải được KHO chống lưng (≥ nửa ly hao hụt thật), không sinh ly chỉ vì két dư
+                const picks2 = [...picks, i], cost = costOf(stock2, picks2)
+                if (cost < best.cost - 1e-9) best = { cost, picks: picks2 }
+                dfs(o, used2, picks2, stock2)
+            }
         }
-        const rest = lossVec.flatMap((x, k) => x.loss - used[k] >= 0.25 * x.scale ? [{ ingredient: x.ingredient, amount: r1(x.loss - used[k]) }] : [])
-        return { cups, rest }
-    }
+        dfs(0, zero, [], root)
+        const used = best.picks.reduce(add, zero)
+        const left = lossVec.map((x, k) => r1(x.loss - used[k]))
+        return {
+            cups: best.picks.map(i => pool[i]),
+            rest: lossVec.flatMap((x, k) => left[k] >= 0.25 * x.norm ? [{ ingredient: x.ingredient, amount: left[k] }] : []),
+            // Ly (không tính nắp) còn hụt mà không món nào đỡ nổi phần hao hụt còn lại.
+            restCups: lossVec.reduce((s, x, k) => s + (/^ly/.test(ingredientLabel(x.ingredient).toLowerCase()) ? Math.max(0, Math.round(left[k])) : 0), 0),
+        }
+    })()
     const candidates: MissingCupCandidate[] = []
     for (const { productId, label, extraPrice, rows } of variants) {
         const product = productById.get(productId)
@@ -787,7 +829,7 @@ export function findMissingCupCandidates({ ingredientsList = [], haoHutByIngredi
             similar: [],
             ingredientValue: known.reduce((s, r) => s + Math.min(r.loss, bestN * r.amount) * (unitCost[r.ingredient] ?? 0), 0),
             matches,
-            ...decompose(bestN),
+            ...decomposed,
         })
     }
     // Mỗi món chỉ giữ biến thể khớp nhất (attachRepeatHistory tra theo productId).
