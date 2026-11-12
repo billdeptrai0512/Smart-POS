@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Trash2, ChevronRight, ChevronLeft, Check } from 'lucide-react'
+import { Trash2, ChevronRight, ChevronLeft, Check, Search } from 'lucide-react'
 import { BottomSheet, SheetHeader } from '../common/ModalShell'
 import { createIngredientGroup, renameIngredientGroup, deleteIngredientGroup, setIngredientsGroup } from '../../services/orderService'
 import { useConfirm } from '../../contexts/ConfirmContext'
@@ -180,7 +180,10 @@ function GroupPicker({ group, ingredients, groupOf, busy, inputClass, onBack, on
                     <h3 className="flex-1 min-w-0 truncate text-[16px] font-black text-text">{group.name}</h3>
                     <span className="shrink-0 text-[13px] font-bold text-text-dim tabular-nums">{checked.size} món</span>
                 </div>
-                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Tìm nguyên liệu…" className={`${inputClass} flex-none`} />
+                <div className="relative">
+                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-dim pointer-events-none" />
+                    <input value={search} onChange={e => setSearch(e.target.value)} aria-label="Tìm nguyên liệu" className={`${inputClass} flex-none w-full pl-9`} />
+                </div>
             </div>
             <div className="flex flex-col -mx-1 min-h-[50vh] shrink-0">
                 {shown.map(ing => {

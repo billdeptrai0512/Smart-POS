@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { Search } from 'lucide-react'
 import { formatVND } from '../../utils'
 import { ingredientLabel, normalizeSearchText } from '../../utils/ingredients'
 import { SignedBox, SIGNED_INPUT_CLASS } from './SignedMoneyInput'
@@ -107,13 +108,16 @@ export default function FastIngredientFill({
             )}
 
             {canEdit && addOpen && available.length > 8 && (
-                <input
-                    type="search"
-                    value={query}
-                    onChange={e => setQuery(e.target.value)}
-                    placeholder="Tìm nguyên liệu…"
-                    className="w-full h-10 px-3 rounded-[12px] bg-bg border border-border/60 text-text text-[14px] focus:outline-none focus:border-primary/60"
-                />
+                <div className="relative">
+                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-dim pointer-events-none" />
+                    <input
+                        type="search"
+                        value={query}
+                        onChange={e => setQuery(e.target.value)}
+                        aria-label="Tìm nguyên liệu"
+                        className="w-full h-10 pl-9 pr-3 rounded-[12px] bg-bg border border-border/60 text-text text-[14px] focus:outline-none focus:border-primary/60"
+                    />
+                </div>
             )}
 
             {canEdit && addOpen && CATS.map((cat, i) => (

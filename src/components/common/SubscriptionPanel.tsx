@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, type ReactNode } from 'react'
-import { Loader2, CheckCircle2, Check, ChevronDown, ClipboardCheck } from 'lucide-react'
+import { Loader2, CheckCircle2, Check, ChevronDown, ClipboardCheck, Search } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAddress } from '../../contexts/AddressContext'
 import { useAddressStats } from '../../contexts/AddressStatsContext'
@@ -272,13 +272,16 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
                         )}
                     />
                     {manyBranches && (
-                        <input
-                            type="text"
-                            value={branchQuery}
-                            onChange={e => setBranchQuery(e.target.value)}
-                            placeholder="Tìm chi nhánh…"
-                            className="w-full px-3 py-2 rounded-[10px] bg-surface-light border border-border/60 text-text text-[13px] placeholder:text-text-dim focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
-                        />
+                        <div className="relative">
+                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-dim pointer-events-none" />
+                            <input
+                                type="text"
+                                value={branchQuery}
+                                onChange={e => setBranchQuery(e.target.value)}
+                                aria-label="Tìm chi nhánh"
+                                className="w-full pl-9 pr-3 py-2 rounded-[10px] bg-surface-light border border-border/60 text-text text-[13px] focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
+                            />
+                        </div>
                     )}
                     <div className="min-h-0 flex flex-col gap-1.5 overflow-y-auto">
                         {filteredAddresses.map(addr => {
