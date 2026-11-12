@@ -494,3 +494,6 @@ body.pwa-banner-open .address-scroll-list {
     line-height: 1.3;
   }
 }
+/* Dải Bổ sung tồn kho trượt xuống vào chỗ (onboarding, sau khi cuộn xong) */
+@keyframes restock-slide-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+.restock-slide-in { animation: restock-slide-in 0.45s ease-out both; }

@@ -25,6 +25,9 @@ export interface MissingCupCandidate {
     cashMatch: boolean // két dư (Thực thu − Doanh thu) ≈ estimatedRevenue
     similar: string[] // món khác khớp gần bằng (±3%) cùng số ly — không phân biệt nổi bằng hao hụt
     matches: { ingredient: string; haoHut: number; amount: number; ratio: number }[]
+    // Phân rã theo ngân sách hao hụt (xem decompose): cups = ly gán được món (mỗi phần tử = 1 ly), rest = hao hụt còn lại chưa gán được.
+    cups: { name: string; price: number; rows: { ingredient: string; amount: number }[] }[]
+    rest: { ingredient: string; amount: number }[]
 }
 
 /** Ứng viên kèm thống kê lặp lại do findMissingCupCandidates thêm vào. */
@@ -707,6 +710,41 @@ export function findMissingCupCandidates({ ingredientsList = [], haoHutByIngredi
     if (total <= 0) return []
 
     const productById = new Map((products || []).map(p => [p.id, p]))
+    // Phân rã N ly thành từng món thật theo NGÂN SÁCH hao hụt: lấy từng ly một, mỗi ly phải nằm gọn trong phần hao hụt CÒN LẠI
+    // (trừ dần những gì các ly trước đã "dùng" — 36ml sữa đặc hụt chỉ đủ 1 ly cà phê sữa, không phải 3). Mỗi bước chọn món dùng nhiều
+    // nguyên liệu nhất trong ngân sách; dung sai như tolOf (ly/nắp không dung sai). Ly nào không món nào đỡ nổi thì để ở `rest`:
+    // phần hao hụt chưa gán được món (vd 2 ly + 2 nắp + 34g cà phê → có ly cà phê không sữa/không đường mà menu không có món tương ứng).
+    const pool = variants.flatMap(v => {
+        const p = productById.get(v.productId)
+        if (!p?.is_active || !(Number(p.price) > 0)) return []
+        return [{ ...v, name: v.label ? `${p.name} (${v.label})` : p.name, price: Number(p.price) + v.extraPrice, rows: v.rows.filter(r => !skip(r.ingredient)) }]
+    })
+    // Khoá theo nguyên liệu TRONG CÔNG THỨC (lossOf tự dò theo nhãn): khoá ở ingredientsList có thể khác khoá công thức ("cup" vs "Ly").
+    const lossVec = [...new Set(pool.flatMap(v => v.rows.map(r => r.ingredient)))].flatMap(ingredient => {
+        const loss = lossOf(ingredient)
+        if (loss == null) return []
+        const scale = maxAmount[ingredient] || 1
+        return [{ ingredient, loss, scale, tol: tolOf(ingredient, scale, lookupByLabel<number | null>(ingredient, noiseByIngredient, null)) }]
+    })
+    const amtVec = pool.map(v => lossVec.map(x => v.rows.find(r => r.ingredient === x.ingredient)?.amount ?? 0))
+    const decompose = (n: number) => {
+        const left = lossVec.map(x => x.loss + x.tol)
+        const used = lossVec.map(() => 0)
+        const cups: MissingCupCandidate['cups'] = []
+        for (let c = 0; c < n; c++) {
+            let best = -1, bestScore = 0
+            amtVec.forEach((a, i) => {
+                if (!a.every((x, k) => x <= left[k] + 1e-9)) return
+                const score = a.reduce((s, x, k) => s + x / lossVec[k].scale, 0)
+                if (score > bestScore) { bestScore = score; best = i }
+            })
+            if (best < 0) break
+            amtVec[best].forEach((x, k) => { left[k] -= x; used[k] += x })
+            cups.push({ name: pool[best].name, price: pool[best].price, rows: pool[best].rows })
+        }
+        const rest = lossVec.flatMap((x, k) => x.loss - used[k] >= 0.25 * x.scale ? [{ ingredient: x.ingredient, amount: r1(x.loss - used[k]) }] : [])
+        return { cups, rest }
+    }
     const candidates: MissingCupCandidate[] = []
     for (const { productId, label, extraPrice, rows } of variants) {
         const product = productById.get(productId)
@@ -749,6 +787,7 @@ export function findMissingCupCandidates({ ingredientsList = [], haoHutByIngredi
             similar: [],
             ingredientValue: known.reduce((s, r) => s + Math.min(r.loss, bestN * r.amount) * (unitCost[r.ingredient] ?? 0), 0),
             matches,
+            ...decompose(bestN),
         })
     }
     // Mỗi món chỉ giữ biến thể khớp nhất (attachRepeatHistory tra theo productId).

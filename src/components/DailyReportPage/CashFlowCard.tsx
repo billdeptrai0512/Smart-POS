@@ -52,6 +52,7 @@ interface Props {
     onTransferChange?: (value: string) => void
     hintCash?: boolean
     hintTransfer?: boolean
+    onHintFill?: () => void // guide: bấm vào 1 ô đang sáng → cả hai ô hiện số gợi ý rồi tự lưu
     hintNet?: boolean
     onEditExpense?: (expense: Row) => void
     onEditRestockPayment?: (payment: Row) => void
@@ -94,6 +95,7 @@ export default function CashFlowCard({
     // Onboarding bước 3: hintCash/hintTransfer sáng từng ô; còn ô cần sáng thì panel tự cuộn vào màn hình.
     hintCash = false,
     hintTransfer = false,
+    onHintFill,
     hintNet = false,
     // Bấm 1 dòng chi phí → mở modal sửa (DailyReportPage điều hướng sang tab Chi phí).
     onEditExpense,
@@ -384,6 +386,7 @@ export default function CashFlowCard({
                                 onBlur={onInputBlur}
                                 onChange={onCashChange}
                                 hint={hintCash}
+                                onHintFill={onHintFill}
                             />
                             <MoneyInputRow
                                 label="Chuyển khoản"
@@ -391,6 +394,7 @@ export default function CashFlowCard({
                                 onBlur={onInputBlur}
                                 onChange={onTransferChange}
                                 hint={hintTransfer}
+                                onHintFill={onHintFill}
                             />
                         </>
                     ) : (
@@ -681,7 +685,7 @@ function ItemRow({ date, name, amount, count, phase = 'in_shift', method = 'cash
     )
 }
 
-function MoneyInputRow({ label, value, onChange, onBlur, hint }: { label: string; value: string; onChange?: (value: string) => void; onBlur?: () => void; hint?: boolean }) {
+function MoneyInputRow({ label, value, onChange, onBlur, hint, onHintFill }: { label: string; value: string; onChange?: (value: string) => void; onBlur?: () => void; hint?: boolean; onHintFill?: () => void }) {
     // Chưa gõ gì → ô trông y hệt dòng chỉ-đọc bên dưới, chủ quán không biết là
     // bấm được. Viền đứt + icon bút chỉ hiện lúc rỗng, gõ vào là biến mất.
     const empty = !value
@@ -699,8 +703,11 @@ function MoneyInputRow({ label, value, onChange, onBlur, hint }: { label: string
                     value={value}
                     onChange={e => onChange?.(e.target.value)}
                     onBlur={onBlur}
-                    // Guide khách dùng thử: số đã móm sẵn vào ô đang sáng → bấm vào là xác nhận (blur = lưu).
-                    onFocus={hint && value ? e => e.currentTarget.blur() : undefined}
+                    // Guide khách dùng thử: ô đang sáng — trống thì hiện số gợi ý rồi tự rời ô (blur = lưu); đã có số thì bấm vào là xác nhận.
+                    onFocus={hint && (value || onHintFill) ? e => {
+                        const el = e.currentTarget
+                        if (!value) { onHintFill?.(); setTimeout(() => el.blur(), 700) } else el.blur()
+                    } : undefined}
                     // Lưu chỉ chạy ở onBlur — Enter / phím "Đi" của bàn phím điện thoại không làm mất focus,
                     // nên phải tự blur để kích hoạt lưu (và hạ bàn phím).
                     enterKeyHint="done"

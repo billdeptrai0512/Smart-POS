@@ -37,7 +37,6 @@ interface HistoryHeaderProps extends DateRangePickerProps {
     hintForward?: boolean
     activeTab?: string
     onTabSelect?: (key: string) => void
-    hintTab?: string | null
     belowTabs?: ReactNode
 }
 
@@ -46,7 +45,7 @@ interface HistoryHeaderProps extends DateRangePickerProps {
 export default function HistoryHeader({
     title = 'Nhật ký', totalCups, isReadOnly,
     onBack, onForward, hintForward = false,
-    activeTab, onTabSelect, hintTab, belowTabs,
+    activeTab, onTabSelect, belowTabs,
     ...picker
 }: HistoryHeaderProps) {
     return (
@@ -79,7 +78,7 @@ export default function HistoryHeader({
                 </button>
             </div>
 
-            {activeTab && <HistoryTabsBar activeTab={activeTab} onSelect={onTabSelect} hintTab={hintTab} />}
+            {activeTab && <HistoryTabsBar activeTab={activeTab} onSelect={onTabSelect} />}
             {belowTabs}
             </div>
         </header>

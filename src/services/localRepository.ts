@@ -331,10 +331,10 @@ export const seedGuestDemoDay = () => {
         budget: state.budget, addressId: DEMO_ADDRESS_ID, from, to: Math.max(from, now - 60_000), shift: open - from,
     });
     set(KEYS.ORDERS, [...get(KEYS.ORDERS), ...generated]);
-    // Kịch bản "pha bán không bấm bill": 1–3 ly của 1 món có cà phê (khách tự đếm cà phê) đã bán trong ngày. Két dư
-    // đúng tiền mấy ly đó (Kết ca), nguyên liệu hụt đúng định lượng mấy ly đó (Kiểm kê) → thẻ "Nghi vấn bán thiếu
-    // ghi nhận" chỉ đích danh món + số ly. Xem getGuestUnbilled.
-    // Số ly tối đa còn pha được từ phần quầy còn lại, chừa 1 ly cho đơn của chính khách.
+    // Kịch bản "pha bán không bấm bill": 1–3 ly có cà phê (khách tự đếm cà phê) đã bán trong ngày, CÓ THỂ LẪN nhiều món (vd 1 cà phê
+    // sữa + 2 cà phê đen). Két dư đúng tiền mấy ly đó (Kết ca), nguyên liệu hụt đúng tổng định lượng mấy ly đó (Kiểm kê) → thẻ
+    // "Khả năng bấm thiếu" tách được từng ly theo công thức. Xem getGuestUnbilled.
+    // Mỗi ly chọn xong thì trừ vào phần quầy còn lại: chỉ pha thêm món còn đủ nguyên liệu, chừa 1 ly cho đơn của chính khách.
     const recipes = get(KEYS.RECIPES);
     const extraIngs = get(KEYS.EXTRA_INGREDIENTS);
     const left: Budget = { ...state.budget };
@@ -342,25 +342,40 @@ export const seedGuestDemoDay = () => {
         for (const r of recipes) if (r.product_id === it.product_id) left[r.ingredient] = (left[r.ingredient] || 0) - Number(r.amount || 0) * it.quantity;
         for (const e of extraIngs) if (it.extra_ids.includes(e.extra_id)) left[e.ingredient] = (left[e.ingredient] || 0) - Number(e.amount || 0) * it.quantity;
     }
-    const maxQty = (pid: string) => Math.min(3, ...recipes.filter(r => r.product_id === pid && Number(r.amount) > 0)
-        .map(r => Math.floor((left[r.ingredient] || 0) / Number(r.amount)) - 1));
     const sold = new Set(generated.flatMap(o => o.order_items.map((i: Row) => i.product_id)));
-    const pool = get(KEYS.PRODUCTS).filter(p => sold.has(p.id) && Number(p.price) > 0 && maxQty(p.id) >= 1
-        && recipes.some(r => r.product_id === p.id && Number(r.amount) > 0 && ingredientLabel(r.ingredient).toLowerCase() === 'cà phê'));
-    const pick = pool[Math.floor(Math.random() * pool.length)];
-    const unbilled = pick ? { productId: pick.id, qty: 1 + Math.floor(Math.random() * maxQty(pick.id)) } : null;
+    const canMake = (pid: string) => recipes.filter(r => r.product_id === pid && Number(r.amount) > 0).every(r => (left[r.ingredient] || 0) >= 2 * Number(r.amount));
+    const hasCoffee = (pid: string) => recipes.some(r => r.product_id === pid && Number(r.amount) > 0 && ingredientLabel(r.ingredient).toLowerCase() === 'cà phê');
+    const cups = 1 + Math.floor(Math.random() * 3);
+    const qtyBy: Record<string, number> = {};
+    for (let i = 0; i < cups; i++) {
+        const pool = get(KEYS.PRODUCTS).filter(p => sold.has(p.id) && Number(p.price) > 0 && hasCoffee(p.id) && canMake(p.id));
+        if (!pool.length) break;
+        const pick = pool[Math.floor(Math.random() * pool.length)];
+        qtyBy[pick.id] = (qtyBy[pick.id] || 0) + 1;
+        for (const r of recipes) if (r.product_id === pick.id) left[r.ingredient] = (left[r.ingredient] || 0) - Number(r.amount || 0);
+    }
+    const unbilled = Object.entries(qtyBy).map(([productId, qty]) => ({ productId, qty }));
     set(KEYS.DEMO_DAY, { ...state, day: today, unbilled });
 };
 
-// Món + số ly pha không bấm bill của ngày demo hôm nay, kèm giá và lượng NVL đã dùng cho mấy ly đó.
+// Các ly pha không bấm bill của ngày demo hôm nay (có thể nhiều món), kèm tổng số ly, tổng giá và lượng NVL đã dùng cho mấy ly đó.
+// (bản cũ lưu 1 object {productId, qty} — vẫn đọc được.)
 export const getGuestUnbilled = () => {
-    const state = readJSON<{ day: string | null; unbilled?: { productId: string; qty: number } | null } | null>(KEYS.DEMO_DAY, null);
-    const u = state?.day === dateStringVN() ? state.unbilled : null;
-    const product = u && get(KEYS.PRODUCTS).find(p => p.id === u.productId);
-    if (!u || !product) return null;
+    const state = readJSON<{ day: string | null; unbilled?: { productId: string; qty: number }[] | { productId: string; qty: number } | null } | null>(KEYS.DEMO_DAY, null);
+    const raw = state?.day === dateStringVN() ? state.unbilled : null;
+    const list = Array.isArray(raw) ? raw : raw ? [raw] : [];
+    const products = get(KEYS.PRODUCTS);
+    const recipes = get(KEYS.RECIPES);
+    let qty = 0, value = 0;
     const usage: Record<string, number> = {};
-    for (const r of get(KEYS.RECIPES)) if (r.product_id === u.productId && Number(r.amount) > 0) usage[r.ingredient] = (usage[r.ingredient] || 0) + Number(r.amount) * u.qty;
-    return { qty: u.qty, value: u.qty * Number(product.price), usage };
+    for (const u of list) {
+        const product = products.find(p => p.id === u.productId);
+        if (!product) continue;
+        qty += u.qty;
+        value += u.qty * Number(product.price);
+        for (const r of recipes) if (r.product_id === u.productId && Number(r.amount) > 0) usage[r.ingredient] = (usage[r.ingredient] || 0) + Number(r.amount) * u.qty;
+    }
+    return qty ? { qty, value, usage } : null;
 };
 
 export const submitLocalOrder = (order: Row) => {

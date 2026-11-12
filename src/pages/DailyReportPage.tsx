@@ -237,13 +237,13 @@ export default function DailyReportPage() {
     // thẻ Thực thu vào màn hình. Xong thì sáng mũi tên "tiến" sang Tồn kho (bước 5 Kiểm kê).
     const showOnboardingHints = isGuest && !!addressId && journalProgress.viewedReport
     const hintCash = showOnboardingHints && !cashFlowProgress.cash
-    const hintTransfer = showOnboardingHints && cashFlowProgress.cash && !cashFlowProgress.transfer
-    // Móm sẵn số cho khách dùng thử (expectCash/expectTransfer, effect bên dưới) vào ô đang sáng — từng ô một, để lần
-    // lưu của ô này không tick luôn ô kia (progress tick theo ô có số lúc lưu). Bấm vào ô là lưu (MoneyInputRow).
-    useEffect(() => {
+    const hintTransfer = showOnboardingHints && !cashFlowProgress.transfer
+    // Số gợi ý (expectCash/expectTransfer) KHÔNG điền sẵn — khách chưa hiểu số từ đâu ra. Bấm vào 1 ô đang sáng thì cả hai
+    // ô cùng hiện số (CashFlowCard → MoneyInputRow), ~0,7s sau ô tự rời = lưu cả hai (progress tick theo ô có số lúc lưu).
+    const fillHint = () => {
         if (hintCash && !cashInput && cashFlowProgress.expectCash) setCashInput(formatVNDInput(String(cashFlowProgress.expectCash)))
-        else if (hintTransfer && !transferInput && cashFlowProgress.expectTransfer) setTransferInput(formatVNDInput(String(cashFlowProgress.expectTransfer)))
-    }, [hintCash, hintTransfer, cashInput, transferInput, cashFlowProgress.expectCash, cashFlowProgress.expectTransfer])
+        if (hintTransfer && !transferInput && cashFlowProgress.expectTransfer) setTransferInput(formatVNDInput(String(cashFlowProgress.expectTransfer)))
+    }
     const hintGoToInventory = showOnboardingHints && isCashFlowProgressDone(cashFlowProgress) && !isInventoryProgressDone(inventoryProgress)
     // Bước cuối: nhập kho xong quay về đây → cuộn tới Thực chi (khoản nhập kho vừa chi); ~2,5s
     // sau tick xong → dải "Hoàn thành" hiện.
@@ -754,6 +754,7 @@ export default function DailyReportPage() {
                                 onInputBlur={handleSaveCashflow}
                                 hintCash={hintCash}
                                 hintTransfer={hintTransfer}
+                                onHintFill={fillHint}
                                 hintNet={hintNet}
                                 onEditExpense={setEditingExpense}
                                 onEditRestockPayment={handleEditRestockPayment}

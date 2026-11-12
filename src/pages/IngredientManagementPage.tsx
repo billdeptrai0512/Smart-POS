@@ -256,7 +256,22 @@ export default function IngredientManagementPage() {
     const [inventoryProgress, setInventoryProgress] = useState(storedInventoryProgress)
     useOnboardingProgressPersist('inventoryProgress', inventoryProgress, { isGuest, addressId })
     const restockProgress = useOnboardingProgress('restockProgress', { isGuest, addressId })
-    const hintRestock = isGuest && isInventoryProgressDone(inventoryProgress) && !restockProgress.bought
+    const invDone = isInventoryProgressDone(inventoryProgress)
+    // Nối tiếp từng nhịp (không dồn 1 lúc): lưu Cuối kỳ → dòng thu lại (+0,7s) → cuộn xuống Tổng hao hụt (~0,5s) → để khách ĐỌC kết luận (~1,7s)
+    // → dải Bổ sung tồn kho trượt vào (slid) → ngừng 1 nhịp → mới sáng viền gợi ý (glow). Vào trang khi đã xong thì hiện luôn.
+    const [slid, setSlid] = useState(!isGuest || invDone)
+    const [glow, setGlow] = useState(slid)
+    useEffect(() => {
+        if (!isGuest || !invDone || slid) return
+        const t = setTimeout(() => setSlid(true), 3000)
+        return () => clearTimeout(t)
+    }, [isGuest, invDone, slid])
+    useEffect(() => {
+        if (!slid || glow) return
+        const t = setTimeout(() => setGlow(true), 650)
+        return () => clearTimeout(t)
+    }, [slid, glow])
+    const hintRestock = isGuest && invDone && !restockProgress.bought && glow
 
     // PERF: index configs by ingredient ONCE.
     // Was: ingredientConfigs.find() called THREE times per ingredient (packSize, packUnit, minStock).
@@ -351,7 +366,11 @@ export default function IngredientManagementPage() {
             {/* "Bổ sung tồn kho" hiện ở cả 2 tab (kiểm kê xong là thấy ngay cần mua gì, khỏi sang Lưu trữ); "Soạn cho ngày mai"
                 (chỉ nhóm kho chung) giữ ở tab Kiểm kê. */}
             {/* Khách dùng thử: ẩn tới khi xong Kiểm kê — hiện sớm thì dễ bấm nhầm bước 6 khi đang đếm. */}
-            {!(isGuest && !isInventoryProgressDone(inventoryProgress)) && <WarehousePrepNotice onRestocked={loadStocks} onOpenIngredient={openIngredient} hint={hintRestock} />}
+            {slid && (
+                <div className={glow ? undefined : 'restock-slide-in'}>
+                    <WarehousePrepNotice onRestocked={loadStocks} onOpenIngredient={openIngredient} hint={hintRestock} />
+                </div>
+            )}
             {activeView !== 'stocking' && <TomorrowPrepNotice />}
 
             <MenuPageHeader

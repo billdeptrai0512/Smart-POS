@@ -103,7 +103,7 @@ function Notice({ addressId, onRestocked, onOpenIngredient, hint }: Props & { ad
             {show && (
                 <NoticeBar
                     icon={<Package size={15} className="text-primary shrink-0" />}
-                    label="Bổ sung tồn kho"
+                    label="Tồn kho cần bổ sung"
                     count={progress}
                     onClick={openSheet} // chưa xong / lỗi: HubBuyBody tự hiện khung chờ / nút Thử lại
                     hint={hint && !hinted && !open}
@@ -113,9 +113,9 @@ function Notice({ addressId, onRestocked, onOpenIngredient, hint }: Props & { ad
 
             {open && !payInvoice && (
                 <NoticeSheet
-                    icon={<Package size={18} className="text-primary shrink-0" />}
-                    title="Bổ sung tồn kho"
-                    count={progress}
+                    icon={<span className="shrink-0 text-[16px] font-black text-primary tabular-nums">{progress}</span>}
+                    title="Tồn kho cần bổ sung"
+                    count=""
                     onClose={() => setOpen(false)}
                     hintClose={restockProgress.bought && !restockProgress.viewedNet} // guide: nhập kho xong → sáng nút Đóng
                 >

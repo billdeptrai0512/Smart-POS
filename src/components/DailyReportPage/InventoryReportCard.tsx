@@ -52,6 +52,8 @@ interface Props {
     hintIngredient?: string | null
     // Onboarding bước Tồn kho: sáng ô Cuối kỳ của dòng được gợi ý (xem onboarding/steps.ts).
     hintStep?: HintStep | null
+    // Số gợi ý hiện vào ô Cuối kỳ của dòng được gợi ý NGAY LÚC khách bấm vào (không điền sẵn — khách chưa hiểu số từ đâu ra).
+    hintFill?: number
     // Chen ngay trên "Tổng hao hụt" (vd dòng Xác nhận kiểm kê của tab).
     beforeTotal?: ReactNode
     // Dưới Tổng hao hụt, cùng cột (laptop: cột phải dính).
@@ -104,7 +106,7 @@ export default function InventoryReportCard({
     // Nguyên liệu đang được onboarding phase 4 gợi ý bấm vào — xem DailyReportPage.tsx
     // (hintCoffeeIngredient) + onboarding/steps.ts.
     hintIngredient = null,
-    hintStep = null, beforeTotal, afterTotal,
+    hintStep = null, hintFill, beforeTotal, afterTotal,
 }: Props) {
     // Sort by status priority so staff sees "Chưa nhập" first, then anomalies,
     // then matched rows at the bottom. Tie-break by display name for stability.
@@ -233,6 +235,7 @@ export default function InventoryReportCard({
             onFieldBlur={onFieldBlur}
             hint={ing.ingredient === hintIngredient}
             hintStep={ing.ingredient === hintIngredient ? hintStep : null}
+            hintFill={ing.ingredient === hintIngredient ? hintFill : undefined}
         />
     )
 
@@ -341,6 +344,7 @@ interface RowProps {
     onFieldBlur?: () => void
     hint: boolean
     hintStep: HintStep | null
+    hintFill?: number
 }
 
 const IngredientRow = memo(function IngredientRow({
@@ -348,7 +352,7 @@ const IngredientRow = memo(function IngredientRow({
     warehouseAvailable, used, made, periodMade, breakdown, period, openingNote,
     isSubmitting, lockWarehouseInputs, readOnly,
     onOpeningChange, onRestockChange, onInventoryChange, onFieldBlur,
-    hint, hintStep,
+    hint, hintStep, hintFill,
 }: RowProps) {
     // Whole-row collapse: default closed so staff can scroll the list of NVL fast and
     // open just the ones they're counting. Status badge in the header tells them
@@ -462,6 +466,7 @@ const IngredientRow = memo(function IngredientRow({
             onChange={(v) => onInventoryChange(ing.ingredient, v)}
             onBlur={onFieldBlur}
             hint={hintCount}
+            onHintFill={hintCount && hintFill ? () => onInventoryChange(ing.ingredient, String(hintFill)) : undefined}
             emphasis
         />
     )
@@ -572,10 +577,11 @@ interface ColumnInputProps {
     tone?: string
     onBoxClick?: () => void
     hint?: boolean | 'soft'
-    emphasis?: boolean // ô chính của thao tác (Cuối kỳ): viền + nền cam nhạt, số to hơn
+    onHintFill?: () => void // guide: ô đang sáng còn trống → bấm vào mới hiện số gợi ý, ~0,7s sau tự rời ô (= lưu)
+    emphasis?: boolean // ô chính của thao tác (Cuối kỳ): viền + nền cam nhạt, số đậm hơn
 }
 
-function ColumnInput({ label, value, unit, disabled, locked, onChange, onBlur, overflow, tone = 'neutral', onBoxClick, hint = false, emphasis = false }: ColumnInputProps) {
+function ColumnInput({ label, value, unit, disabled, locked, onChange, onBlur, overflow, tone = 'neutral', onBoxClick, hint = false, onHintFill, emphasis = false }: ColumnInputProps) {
     // tone overrides the default disabled coloring for read-only diff cells.
     const t: Partial<ToneCls> = TONE[tone] || {}
 
@@ -611,12 +617,15 @@ function ColumnInput({ label, value, unit, disabled, locked, onChange, onBlur, o
                     value={value}
                     onChange={e => onChange?.(e.target.value)}
                     onBlur={onBlur}
-                    // Guide khách dùng thử: số đã móm sẵn vào ô đang sáng → bấm vào là xác nhận (blur = lưu).
-                    onFocus={hint === true && value !== '' && onBlur ? e => e.currentTarget.blur() : undefined}
+                    // Guide khách dùng thử: ô đang sáng — trống thì hiện số gợi ý rồi tự rời ô (blur = lưu); đã có số thì bấm vào là xác nhận.
+                    onFocus={hint === true && onBlur && (value !== '' || onHintFill) ? e => {
+                        const el = e.currentTarget
+                        if (value === '') { onHintFill?.(); setTimeout(() => el.blur(), 700) } else el.blur()
+                    } : undefined}
                     onKeyDown={onBlur ? e => { if (e.key === 'Enter') e.currentTarget.blur() } : undefined} // Enter/"Đi" không mất focus → tự blur để kích hoạt lưu
                     disabled={disabled}
                     style={{ width: `${Math.max(String(value ?? '').length, 1)}ch` }}
-                    className={`min-w-0 bg-transparent ${emphasis ? 'text-[15px] font-black' : 'text-[13px] font-bold'} text-center placeholder:text-text-secondary/40 focus:outline-none no-spin ${tone === 'neutral' ? 'disabled:opacity-50' : ''} ${inputCls}`}
+                    className={`min-w-0 bg-transparent text-[13px] ${emphasis ? 'font-black' : 'font-bold'} text-center placeholder:text-text-secondary/40 focus:outline-none no-spin ${tone === 'neutral' ? 'disabled:opacity-50' : ''} ${inputCls}`}
                 />
                 <span className={`text-[10px] font-medium shrink-0 ${unitCls}`}>{unit}</span>
                 {onBoxClick && <Info size={10} className={`absolute right-1.5 text-text-dim pointer-events-none ${onboardingHintClass(hint === 'soft', 'soft')}`} />}

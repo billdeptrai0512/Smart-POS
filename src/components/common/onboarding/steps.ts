@@ -28,16 +28,13 @@ export const STEPS: Step[] = [
     {
         title: 'Nhật ký',
         items: ({ journalProgress: j }) => [
-            { label: 'Xem bán hàng cả ngày', done: j.viewedIncome },
-            { label: 'Xem chi phí', done: j.viewedExpense, hideBar: true },
             { label: 'Sang báo cáo kết ca', done: j.viewedReport, hideBar: true },
         ],
     },
     {
         title: 'Kết ca',
         items: ({ cashFlowProgress: c }) => [
-            { label: 'Bấm ô Tiền mặt', done: c.cash, hideBar: true },
-            { label: 'Bấm ô Chuyển khoản', done: c.transfer, hideBar: true },
+            { label: 'Bấm ô Tiền mặt hoặc Chuyển khoản', done: c.cash && c.transfer, hideBar: true },
         ],
     },
     {

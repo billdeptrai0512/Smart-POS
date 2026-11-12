@@ -13,7 +13,7 @@ export const DEFAULT_ONBOARDING_STATE = {
     // viewedHistory: đã vào Nhật ký sau khi bán (HistoryPage.tsx).
     orderProgress: { sent: 0, ready: false, viewedHistory: false },
     // Bước 3 "Nhật ký" — HistoryPage.tsx: viewedReport = bấm mũi tên "tiến" sang Báo cáo.
-    journalProgress: { viewedIncome: false, viewedExpense: false, viewedReport: false },
+    journalProgress: { viewedReport: false },
     // Bước 4 "Kết ca" — DailyReportPage.tsx. expectCash/expectTransfer = số guide đọc ra để két lệch 20k so với doanh thu.
     cashFlowProgress: { cash: false, transfer: false, expectCash: 0, expectTransfer: 0 },
     // Bước 5 "Kiểm kê" — tab Kiểm kê của /inventory. coffee: đã lưu Cuối kỳ cà phê; suggest: số cà phê móm sẵn vào ô Cuối kỳ (Lý thuyết − phần ly pha không bill).

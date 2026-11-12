@@ -17,8 +17,7 @@ import { useStats } from '../contexts/StatsContext'
 import { useHistory } from '../contexts/HistoryContext'
 import { useConfirm } from '../contexts/ConfirmContext'
 import { useAuth } from '../contexts/AuthContext'
-import { readOnboardingState, writeOnboardingState, DEFAULT_ONBOARDING_STATE } from '../utils/onboardingStorage'
-import { useOnboardingProgressPersist } from '../hooks/useOnboardingProgressPersist'
+import { readOnboardingState, writeOnboardingState } from '../utils/onboardingStorage'
 import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
 import OrdersList from '../components/HistoryPage/OrdersList'
@@ -72,27 +71,13 @@ export default function HistoryPage() {
     const [activeTab, setActiveTab] = useTabRoute('/history')
     const [showAddModal, setShowAddModal] = useState(false)
 
-    // Onboarding phase 2 "Nhật ký" — tick theo tab /history user tự bấm qua (Thu nhập/Chi
-    // phí/Báo cáo, xem HistoryTabsBar.tsx + onboarding/steps.ts). "Xem thu nhập" chỉ cần tick 1
-    // lần lúc khởi tạo state (là tab mặc định, không đổi lại sau đó); "Xem chi phí" theo dõi
-    // lại mỗi render vì user có thể bấm qua tab đó bất cứ lúc nào (render-time-adjust, cùng
-    // pattern với useOrderOnboardingProgress.ts). Persist dùng chung
-    // useOnboardingProgressPersist với orderProgress.
-    // Cả 3 cờ chỉ tick khi bước "Bán hàng" đã xong: guide đi tuần tự, ghé /history sớm (khi còn đang
-    // tạo đơn) mà tick luôn thì tới lượt bước Nhật ký guide nhảy cóc qua việc user chưa từng làm.
+    // Onboarding phase 2 "Nhật ký": một việc duy nhất — sang Báo cáo (viewedReport, ghi ở nút "tiến" bên dưới). Chỉ tính khi bước "Bán hàng" đã xong.
     const orderStored = useOnboardingProgress('orderProgress', { isGuest, addressId })
     const finalStep = useOnboardingProgress('restockProgress', { isGuest, addressId }).bought // bước cuối → sáng đường về Báo cáo
     const orderDone = orderStored.sent >= 1
-    const [journalProgress, setJournalProgress] = useState(() => {
-        const stored = isGuest && addressId ? readOnboardingState(addressId).journalProgress : DEFAULT_ONBOARDING_STATE.journalProgress
-        return orderDone && activeTab === 'sales' && !stored.viewedIncome ? { ...stored, viewedIncome: true } : stored
-    })
-    if (isGuest && orderDone && activeTab === 'expense' && !journalProgress.viewedExpense) {
-        setJournalProgress(prev => ({ ...prev, viewedExpense: true }))
-    }
-    useOnboardingProgressPersist('journalProgress', journalProgress, { isGuest, addressId })
-    // Hint tuần tự: tab Chi phí trước, rồi mũi tên "tiến" sang trang Báo cáo (Báo cáo là trang riêng).
-    const journalHint = !(isGuest && orderDone) ? null : !journalProgress.viewedExpense ? 'expense' : !journalProgress.viewedReport ? 'report' : null
+    const journalProgress = useOnboardingProgress('journalProgress', { isGuest, addressId })
+    // Hint: mũi tên "tiến" sang trang Báo cáo (Báo cáo là trang riêng).
+    const journalHint = !(isGuest && orderDone) ? null : !journalProgress.viewedReport ? 'report' : null
 
     // Date selection (scope/offset/customRange + handlers) lives in the shared
     // hook so /history and /report stay in lock-step. Seeded from nav state
@@ -390,7 +375,6 @@ export default function HistoryPage() {
                 onForward={handleForward}
                 hintForward={journalHint === 'report' || (isGuest && finalStep)}
                 activeTab={activeTab}
-                hintTab={journalHint === 'expense' ? 'expense' : null}
                 onTabSelect={setActiveTab}
                 onOffsetPrev={goOffsetPrev}
                 onOffsetNext={goOffsetNext}

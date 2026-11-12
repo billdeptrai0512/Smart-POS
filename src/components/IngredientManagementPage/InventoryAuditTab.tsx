@@ -220,15 +220,6 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
         setTimeout(() => blurSaveRef.current(), 0) // lưu luôn như rời ô — khỏi dải "chưa lưu" khi khách chưa kịp nhập cà phê
     }, [hintInventory, isTodayScope, inventory, ordersToday.length, usedMap, coffee, setInventoryProgress])
 
-    // Tới ô Cuối kỳ cà phê: móm sẵn số gợi ý (suggest) — khách bấm vào ô là lưu (ColumnInput), như ô Tiền mặt ở Kết ca.
-    // Trễ 400ms: lượt điền sẵn các NVL khác ở trên tự lưu ngay (setTimeout 0) — nếu số cà phê vào cùng lúc thì bị lưu luôn
-    // và guide tự tick xong bước dù khách chưa bấm gì.
-    useEffect(() => {
-        if (!(hintInventory && hintStep === 'count' && coffee && inventoryProgress.suggest && !coffeeTyped)) return
-        const t = setTimeout(() => inventory.onInventoryChange(coffee, String(inventoryProgress.suggest)), 400)
-        return () => clearTimeout(t)
-    }, [hintInventory, hintStep, coffee, coffeeTyped, inventoryProgress.suggest, inventory])
-
     // Cà phê đã có số và đã lưu → tick bước sau ~1,2s (toast "Đã lưu" + số vừa lưu còn trên dòng) → dòng thu lại, cuộn
     // xuống Tổng hao hụt. Effect (không setTimeout trong handleSave): rời trang giữa chừng thì lần sau vào vẫn tick được.
     useEffect(() => {
@@ -373,6 +364,7 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
                         open={openAudit}
                         onToggleOpen={() => setOpenAudit(o => !o)}
                         hintIngredient={hintInventoryIngredient}
+                        hintFill={inventoryProgress.suggest}
                         // Cà phê đã lưu → tắt nhấp nháy ngay (dòng vẫn mở ~1,2s chờ tick, xem effect tick coffee) — khỏi tưởng chưa xong.
                         hintStep={coffeeTyped && !inventory.isDirty ? null : hintStep}
                         beforeTotal={!isGuest && (
