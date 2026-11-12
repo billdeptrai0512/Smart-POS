@@ -1,3 +1,4 @@
+import { Fragment } from 'react'
 import { ingredientLabel, getIngredientUnit } from '../../utils/ingredients'
 import { useProducts } from '../../contexts/ProductContext'
 import { formatVND } from '../../utils'
@@ -39,11 +40,14 @@ export default function MissingCupSuspicionCard({ candidates = [], cash = null }
     // Một ly = 2 dòng: tên món (nổi) rồi công thức "17g cà phê + 36ml sữa đặc + ly + nắp" (nền nhạt) — không bao giờ rớt chữ lẻ.
     const equation = (key: string | number, rows: { ingredient: string; amount: number }[], result: string, price: number) => (
         <div key={key} className="leading-snug">
-            <div className="flex items-baseline justify-between gap-2 text-[12px] font-bold tabular-nums">
-                <span className="text-warning">{result}</span>
-                <span className="text-text">{formatVND(price)}</span>
+            <div className="flex items-baseline justify-between gap-2 text-[12px] font-semibold tabular-nums">
+                <span className="text-text">{result}</span>
+                <span className="text-text-secondary">{formatVND(price)}</span>
             </div>
-            <div className="text-[12px] text-text-secondary">{[...rows].sort((a, b) => rank(a.ingredient) - rank(b.ingredient)).map(term).join(' + ')}</div>
+            {/* Mỗi nguyên liệu là 1 khối không bẻ giữa chừng, "+" dính vào đầu khối sau → chỉ xuống dòng GIỮA các nguyên liệu, và cân đều 2 dòng. */}
+            <div className="text-[12px] text-text-dim max-w-[85%] text-balance">
+                {[...rows].sort((a, b) => rank(a.ingredient) - rank(b.ingredient)).map((r, j) => <Fragment key={j}><span className="whitespace-nowrap">{j > 0 && '+ '}{term(r)}</span> </Fragment>)}
+            </div>
         </div>
     )
 
@@ -62,12 +66,13 @@ export default function MissingCupSuspicionCard({ candidates = [], cash = null }
                 <div className="mt-2 pt-2 border-t border-border/40 flex flex-col gap-1 text-[12px] tabular-nums">
                     <div className="flex items-baseline justify-between gap-2">
                         <span className="text-text-secondary">Giá bán {n} ly</span>
-                        <span className="font-bold text-text">{formatVND(total)}</span>
+                        <span className="font-semibold text-text">{formatVND(total)}</span>
                     </div>
                     <div className="flex items-baseline justify-between gap-2">
-                        <span className="text-text-secondary">Thực thu lệch</span>
-                        <span className={`font-bold ${cashOk ? 'text-warning' : 'text-text-dim'}`}>{cashOk ? '≈ ' : ''}{formatVND(Math.abs(cash.diff))}</span>
+                        <span className="text-text-secondary">{cash.diff < 0 ? 'Thực thu thiếu' : 'Thực thu lệch'}</span>
+                        <span className={`font-bold ${cash.diff < 0 ? 'text-danger' : cashOk ? 'text-warning' : 'text-text-dim'}`}>{cash.diff < 0 ? '−' : cashOk ? '≈ ' : ''}{formatVND(Math.abs(cash.diff))}</span>
                     </div>
+                    {cash.diff < 0 && <span className="text-[11px] text-text-dim">Két không dư nên chưa chốt được số ly — soi lại bill</span>}
                 </div>
             )}
         </div>
