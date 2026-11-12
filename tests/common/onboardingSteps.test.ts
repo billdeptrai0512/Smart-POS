@@ -18,25 +18,31 @@ describe('guide "một ngày của quán"', () => {
         expect(prep({ opened: true, taken: 9, total: 9, done: true }).every(i => i.done)).toBe(true)
     })
 
-    it('Bán hàng: có món trong giỏ → nhắc bấm Tạo đơn; gửi 1 đơn là xong', () => {
+    it('Bán hàng: 1 dòng chào, gửi 1 đơn là xong', () => {
         const order = (p: Partial<typeof ctx.orderProgress>) => step('Bán hàng').items({ ...ctx, orderProgress: { ...ctx.orderProgress, ...p } })
-        expect(firstUndone(order({}))).toMatch(/Bán thử 1 đơn/)
-        expect(firstUndone(order({ ready: true }))).toMatch(/Tạo đơn/)
+        expect(firstUndone(order({}))).toMatch(/KOPHiN xin chào/)
         expect(order({ sent: 1 }).every(i => i.done)).toBe(true)
     })
 
-    it('Kết ca: không hiện dải guide (số đã móm sẵn vào ô, ô tự sáng)', () => {
-        expect(step('Kết ca').items(ctx).every(i => i.hideBar)).toBe(true)
+    it('Nhật ký: chỉ còn bước sang báo cáo kết ca, không dải guide', () => {
+        const journal = (viewedReport: boolean) => step('Nhật ký').items({ ...ctx, journalProgress: { viewedReport } })
+        expect(firstUndone(journal(false))).toMatch(/báo cáo kết ca/)
+        expect(journal(true).every(i => i.done)).toBe(true)
+        expect(journal(false).every(i => i.hideBar)).toBe(true)
     })
 
-    it('Kiểm kê: Sử dụng → Lý thuyết → nhập, không dải guide', () => {
+    it('Kết ca: bấm ô Tiền mặt hoặc Chuyển khoản (số hiện khi bấm, không điền sẵn), không dải guide', () => {
+        const cash = (p: Partial<typeof ctx.cashFlowProgress>) => step('Kết ca').items({ ...ctx, cashFlowProgress: { ...ctx.cashFlowProgress, ...p } })
+        expect(firstUndone(cash({}))).toMatch(/Tiền mặt hoặc Chuyển khoản/)
+        expect(cash({ cash: true, transfer: true }).every(i => i.done)).toBe(true)
+        expect(cash({}).every(i => i.hideBar)).toBe(true)
+    })
+
+    it('Kiểm kê: chỉ còn nhập Cuối kỳ cà phê (Sử dụng/Lý thuyết đã hiện sẵn), không dải guide', () => {
         const inv = step('Kiểm kê')
         const inventory = (patch: Partial<typeof ctx.inventoryProgress>) => inv.items({ ...ctx, inventoryProgress: { ...ctx.inventoryProgress, ...patch } })
-        expect(firstUndone(inventory({}))).toMatch(/đã dùng/)
-        expect(firstUndone(inventory({ usedOpened: true }))).toMatch(/Lý thuyết/)
-        expect(firstUndone(inventory({ usedOpened: true, theoryOpened: true }))).toMatch(/Cuối kỳ/)
+        expect(firstUndone(inventory({}))).toMatch(/Cuối kỳ cà phê/)
         expect(inventory({}).every(i => i.hideBar)).toBe(true)
-        // nhập luôn mà bỏ qua 2 ô đầu thì không kẹt
         expect(inventory({ coffee: true }).every(i => i.done)).toBe(true)
     })
 })

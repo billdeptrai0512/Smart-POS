@@ -12,6 +12,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useAddress } from '../../contexts/AddressContext'
 import type { OpeningPeriods, OpeningNotes } from '../../services/counterEstimate'
 import CollapsibleCard from './CollapsibleCard'
+import NoticeSheet from '../common/NoticeSheet'
 
 // Status priority for sorting collapsed list. Lower = render earlier.
 // Chưa nhập first (needs action), then anomalies (Hụt/Dư), then Khớp (done).
@@ -360,6 +361,7 @@ const IngredientRow = memo(function IngredientRow({
     const [open, setOpen] = useState(hint)
     // Onboarding: dòng đang được gợi ý tự mở sẵn — khỏi 1 lần bấm đi tìm ô Cuối kỳ.
     const [seenHint, setSeenHint] = useState(hint)
+    const [listOpen, setListOpen] = useState(false) // sheet "Xem đủ N món" của bảng chi tiết Sử dụng
     // Hết gợi ý (đã lưu Cuối kỳ) → tự thu lại, nhường chỗ cho Tổng hao hụt bên dưới.
     if (hint !== seenHint) { setSeenHint(hint); setOpen(hint) }
     // Inline help bubble for the Lý thuyết formula — tap the (i) to toggle.
@@ -484,21 +486,23 @@ const IngredientRow = memo(function IngredientRow({
             ))}
         </div>
     )
+    const breakdownEntries = showBreakdown ? Object.values(breakdown).filter((e) => (Number(e.totalAmount) || 0) > 0).sort((a, b) => b.totalAmount - a.totalAmount) : []
+    // Bảng chi tiết trải hàng 2–4 của lưới 4 hàng BẰNG NHAU: để nó dài tuỳ ý thì cả 4 hàng bị kéo cao theo → các ô nhập giãn thưa. Nên chỉ hiện các món dùng nhiều nhất, phần còn lại ẨN, bấm "Xem đủ N món" mở sheet.
+    const entryRow = (entry: (typeof breakdownEntries)[number], i: number) => (
+        <div key={i} className="flex flex-col">
+            <span className="text-[12px] font-medium text-text leading-tight line-clamp-2">{entry.name}</span>
+            <div className="flex items-baseline justify-between gap-2 tabular-nums">
+                <span className="text-[10.5px] text-text-dim">{entry.qty} ly × {r1(entry.totalAmount / entry.qty)}{unit.length <= 2 ? '' : ' '}{unit}</span>
+                <span className="text-[11px] font-bold text-text">{entry.totalAmount} {unit}</span>
+            </div>
+        </div>
+    )
     const breakdownCard = showBreakdown && (
         <div className="min-w-0 flex-1 px-2 py-2 bg-surface-light rounded-[10px] border border-border/40 flex flex-col justify-between gap-1.5">
-            {Object.values(breakdown)
-                .filter((e) => (Number(e.totalAmount) || 0) > 0)
-                .sort((a, b) => b.totalAmount - a.totalAmount)
-                .map((entry, i) => (
-                    <div key={i} className="flex flex-col">
-                        <span className="text-[12px] font-medium text-text leading-tight line-clamp-2">{entry.name}</span>
-                        <div className="flex items-baseline justify-between gap-2 tabular-nums">
-                            <span className="text-[10.5px] text-text-dim">{entry.qty} ly × {r1(entry.totalAmount / entry.qty)}</span>
-                            <span className="text-[11px] font-bold text-text">{entry.totalAmount} {unit}</span>
-                        </div>
-                    </div>
-                ))
-            }
+            {breakdownEntries.slice(0, MAX_SIDE_BREAKDOWN).map(entryRow)}
+            {breakdownEntries.length > MAX_SIDE_BREAKDOWN && (
+                <button type="button" onClick={() => setListOpen(true)} className="text-left text-[10.5px] font-bold text-primary">Xem đủ {breakdownEntries.length} món ›</button>
+            )}
         </div>
     )
 
@@ -551,6 +555,11 @@ const IngredientRow = memo(function IngredientRow({
                     </div>
                 </>)}
             </div>)}
+            {listOpen && (
+                <NoticeSheet icon={<ClipboardList size={18} className="text-primary shrink-0" />} title={`${ingredientLabel(ing.ingredient)} · Sử dụng`} count={`${r1(usedNum)} ${unit}`} onClose={() => setListOpen(false)}>
+                    <div className="flex flex-col gap-3 pb-2">{breakdownEntries.map(entryRow)}</div>
+                </NoticeSheet>
+            )}
         </div>
     )
 })
@@ -558,6 +567,7 @@ const IngredientRow = memo(function IngredientRow({
 // tone → wrapper classes (no border-width, callers add `border`) + text color classes.
 // ColumnInput's neutral tone is intentionally empty so locked/overflow styling shows through;
 // TextCell falls back to a grey box instead.
+const MAX_SIDE_BREAKDOWN = 3 // bảng chi tiết món chỉ hiện tối đa bấy nhiêu món (nhiều nhất trước), còn lại ẩn
 type ToneCls = { wrap: string; text: string; unit: string }
 const TONE: Record<string, ToneCls> = {
     good: { wrap: 'bg-success/8 border-success/30', text: 'text-success', unit: 'text-success/70' },
