@@ -2,11 +2,12 @@ import { useState, type ReactNode } from 'react'
 import {
     Pencil, Trash2, ClipboardCopy, MoreVertical, X,
     Coffee, FileText, Package, ChevronRight, Eraser,
-    Receipt, TrendingUp, Warehouse, Printer, LayoutGrid,
+    Receipt, TrendingUp, Warehouse, Printer, LayoutGrid, Plus, Search,
 } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
 import Skeleton from '../common/Skeleton'
 import { formatVND } from '../../utils'
+import { normalizeSearchText } from '../../utils/ingredients'
 import { wipeAddressSalesData } from '../../services/adminService'
 import SubscriptionBadge from './SubscriptionBadge'
 import BackupModal from './BackupModal'
@@ -57,6 +58,7 @@ interface Props {
     onRemove: (addressId: UUID) => Promise<unknown>
     onDefaultTemplate?: () => void
     onSupportClick?: () => void
+    onCreate?: () => void
     onSetPrinters: (addressId: UUID, printers: { counterPrinterIp: string; kitchenPrinterIp: string }) => Promise<unknown>
     warehouseGroups?: WarehouseGroup[]
     onCreateWarehouseGroup: (addressId: UUID, name: string) => Promise<UUID>
@@ -70,7 +72,7 @@ export default function BranchGrid({
     addresses, fetchError, cupsMap, revenueMap, prevCupsMap = {}, prevRevenueMap = {}, actualTotals = { today: {}, prev: {} }, sessionsMap, subscriptionRowsMap = {}, subscriptionStatusMap = {}, subscriptionLoading, statsLoading,
     isStaff, isAdmin, error, setError,
     onSelect, onNavigate,
-    onRename, onRemove, onDefaultTemplate, onSupportClick, onSetPrinters,
+    onRename, onRemove, onDefaultTemplate, onSupportClick, onCreate, onSetPrinters,
     warehouseGroups = [], onCreateWarehouseGroup, onRenameWarehouseGroup, onRemoveWarehouseGroup, onSetAddressGroup, onSetGroupHub,
 }: Props) {
     // Which per-card sub-modal (rename/delete/backup/wipe/group/printers) is open, and for which
@@ -78,6 +80,9 @@ export default function BranchGrid({
     // "Hủy" inside a sub-modal clears just this, returning to the sheet; X/backdrop clears
     // both). Mỗi modal tự quản lý form state riêng; BranchGrid chỉ giữ subModal và error dùng
     // chung cho ErrorBanner cuối trang.
+    const [search, setSearch] = useState('')
+    const q = normalizeSearchText(search.trim())
+    const shown = q ? addresses.filter(a => normalizeSearchText(a.name).includes(q)) : addresses
     const [subModal, setSubModal] = useState<SubModal | null>(null)
     const closeSubModal = () => setSubModal(null)
     const [expandedActionsId, setExpandedActionsId] = useState<UUID | null>(null) // which card has the 3-action menu open
@@ -97,6 +102,26 @@ export default function BranchGrid({
     return (
         <>
             <div className="grid grid-cols-1 gap-3 mb-4">
+                <div className="relative">
+                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-dim pointer-events-none" />
+                    <input
+                        type="search"
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        aria-label="Tìm địa chỉ"
+                        className={`w-full h-11 pl-9 rounded-[12px] bg-surface border border-border/60 text-text text-[14px] focus:outline-none focus:border-primary/60 ${onCreate ? 'pr-12' : 'pr-3'}`}
+                    />
+                    {onCreate && (
+                        <button
+                            type="button"
+                            onClick={onCreate}
+                            aria-label="Tạo địa chỉ"
+                            className="absolute right-1 top-1 bottom-1 w-9 flex items-center justify-center rounded-[8px] bg-primary text-bg active:scale-95 transition-all"
+                        >
+                            <Plus size={18} />
+                        </button>
+                    )}
+                </div>
                 {addresses.length === 0 && (
                     fetchError ? (
                         <div className="bg-surface border border-danger/40 rounded-[20px] p-6 text-center">
@@ -111,7 +136,8 @@ export default function BranchGrid({
                     )
                 )}
 
-                {addresses.map(addr => {
+                {q && shown.length === 0 && <p className="text-text-dim text-[13px] text-center py-4">Không tìm thấy địa chỉ nào.</p>}
+                {shown.map(addr => {
                     const cups = cupsMap[addr.id] || 0
                     const revenue = revenueMap[addr.id] || 0
                     const sessionUsers = sessionsMap[addr.id] || []

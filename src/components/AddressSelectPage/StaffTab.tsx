@@ -1,10 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Users, Loader, MoreVertical, ArrowUp, ArrowDown, Trash2, Check, KeyRound, Store, LayoutDashboard, ChevronRight } from 'lucide-react'
+import { Users, Loader, MoreVertical, ArrowUp, ArrowDown, Trash2, Check, KeyRound, Store, Plus } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
 import Skeleton from '../common/Skeleton'
 import { BottomSheet, SheetHeader } from '../common/ModalShell'
-import { useAuth } from '../../contexts/AuthContext'
 import { capitalizeWords } from '../../utils'
 import { dateFullVN } from '../../utils/dateVN'
 import type { StaffMember } from '../../contexts/AddressStatsContext'
@@ -325,11 +323,10 @@ interface StaffTabProps {
     staffLoading?: boolean
     addresses?: Pick<Address, 'id' | 'name'>[]
     onChanged: () => Promise<unknown> | unknown
+    onInvite: () => void
 }
 
-export default function StaffTab({ staffList, staffLoading, addresses = [], onChanged }: StaffTabProps) {
-    const navigate = useNavigate()
-    const { isAdmin } = useAuth()
+export default function StaffTab({ staffList, staffLoading, addresses = [], onChanged, onInvite }: StaffTabProps) {
     const [actionMember, setActionMember] = useState<StaffMember | null>(null)
 
     // Prefetch chi nhánh bị chặn + lần đăng nhập gần nhất của cả team một lần để mở panel là có ngay.
@@ -361,23 +358,14 @@ export default function StaffTab({ staffList, staffLoading, addresses = [], onCh
 
     return (
         <div className="space-y-3">
-            {/* Admin-only: tổng quan billing + customer health toàn hệ thống (công tắc thu
-                phí + đối soát thanh toán đều nằm trong đó). */}
-            {isAdmin && (
-                <button
-                    onClick={() => navigate('/admin/dashboard')}
-                    className="w-full bg-surface border border-border/60 rounded-[20px] p-3 flex items-center gap-3 hover:bg-border/10 active:scale-[0.99] transition-all"
-                >
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 bg-primary/10">
-                        <LayoutDashboard size={16} className="text-primary" />
-                    </div>
-                    <span className="flex-1 min-w-0 text-left text-text text-sm font-black">Admin Dashboard</span>
-                    <ChevronRight size={16} className="text-text-secondary shrink-0" />
-                </button>
-            )}
-
             {/* Đội ngũ — danh sách gộp */}
             <div className="bg-surface border border-border/60 rounded-[20px] overflow-hidden">
+                <button
+                    onClick={onInvite}
+                    className="w-full flex items-center justify-center gap-2 py-3 border-b border-border/40 text-primary text-[13px] font-black uppercase hover:bg-primary/5 active:bg-primary/10 transition-colors"
+                >
+                    <Plus size={16} /> Thêm nhân sự
+                </button>
                 {staffLoading ? (
                     <div className="p-3 flex flex-col gap-2">
                         <Skeleton className="h-12 rounded-[12px]" />
@@ -387,7 +375,7 @@ export default function StaffTab({ staffList, staffLoading, addresses = [], onCh
                     <div className="px-4 py-8 text-center">
                         <Users size={20} className="text-text-secondary/60 mx-auto mb-2" />
                         <p className="text-text-secondary text-sm font-medium">Chưa có thành viên nào</p>
-                        <p className="text-text-secondary/70 text-xs mt-0.5">Thêm người mới bằng nút bên dưới</p>
+                        <p className="text-text-secondary/70 text-xs mt-0.5">Thêm người mới bằng nút phía trên</p>
                     </div>
                 ) : (
                     <div className="p-3 flex flex-col gap-2">

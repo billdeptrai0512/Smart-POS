@@ -225,7 +225,6 @@ export default function AddressSelectPage() {
     }
 
     const showCreate = !isStaff && activeTab === 'branches'
-    const showInvite = activeTab === 'staff' && !isStaff && !isGuest
 
     return (
         <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
@@ -273,6 +272,7 @@ export default function AddressSelectPage() {
                         onSetAddressGroup={setAddressGroup}
                         onSetGroupHub={setGroupHub}
                         onSupportClick={() => setShowSupportModal(true)}
+                        onCreate={showCreate ? () => setShowCreateModal(true) : undefined}
                         onDefaultTemplate={async () => {
                             // Load persisted ingredient sort so /inventory respects admin's saved order.
                             const ingredient_sort_order = await fetchDefaultIngredientSort()
@@ -289,12 +289,15 @@ export default function AddressSelectPage() {
                         staffLoading={staffLoading}
                         addresses={teamAddresses}
                         onChanged={refreshStaff}
+                        onInvite={() => {
+                            setError('')
+                            setShowCreateStaffModal(true)
+                        }}
                     />
                 )}
             </div>
 
-            {/* Bottom action bar */}
-            {activeTab === 'branches' && (
+            {(activeTab === 'staff' || isStaff || isGuest) && (
                 <div className="shrink-0 flex items-stretch gap-3 px-4 py-2.5 pb-[max(env(safe-area-inset-bottom),10px)] bg-surface border-t border-border/60">
                     <button
                         onClick={handleSignOut}
@@ -302,27 +305,14 @@ export default function AddressSelectPage() {
                     >
                         <span className="truncate">Đăng xuất</span>
                     </button>
-                    {showCreate && (
+                    {isAdmin && (
                         <button
-                            onClick={() => setShowCreateModal(true)}
+                            onClick={() => navigate('/admin/dashboard')}
                             className="flex-1 min-w-0 flex items-center justify-center rounded-[12px] bg-primary px-4 py-3 text-[13px] font-black uppercase text-bg hover:bg-primary/90 active:scale-95 transition-all"
                         >
-                            <span className="truncate">Tạo địa chỉ</span>
+                            <span className="truncate">Admin Dashboard</span>
                         </button>
                     )}
-                </div>
-            )}
-            {showInvite && (
-                <div className="shrink-0 flex items-stretch px-4 py-2.5 pb-[max(env(safe-area-inset-bottom),10px)] bg-surface border-t border-border/60">
-                    <button
-                        onClick={() => {
-                            setError('')
-                            setShowCreateStaffModal(true)
-                        }}
-                        className="flex-1 min-w-0 flex items-center justify-center rounded-[12px] bg-primary px-4 py-3 text-[13px] font-black uppercase text-bg hover:bg-primary/90 active:scale-95 transition-all"
-                    >
-                        <span className="truncate">Thêm nhân sự</span>
-                    </button>
                 </div>
             )}
 
