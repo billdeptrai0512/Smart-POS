@@ -36,6 +36,8 @@ interface Props {
     ingredientUnits?: Record<string, string>
     usedMap?: UsageMap
     periodMadeMap?: UsageMap   // như madeMap nhưng cho các ngày trong kỳ kiểm kê nhiều ngày (sau ngày đếm → hết hôm qua)
+    usedAfterMap?: UsageMap  // ròng SAU giờ xác nhận kiểm kê (ngoài usedMap): chỉ cộng vào ô Sử dụng / trừ Lý thuyết còn, không vào hao hụt
+    madeAfterMap?: UsageMap  // thành phẩm làm ra sau giờ xác nhận (ngoài madeMap)
     madeMap?: UsageMap       // ingredient → lượng thành phẩm làm ra hôm nay (mẻ sản xuất); đã nằm trong usedMap dưới dạng âm
     consumptionBreakdown?: ConsumptionBreakdown
     ingredientToProduct?: IngredientToProduct
@@ -88,6 +90,8 @@ export default function InventoryReportCard({
     ingredientUnits = {},
     usedMap = {},            // ingredient → todayEstimatedConsumption qty
     madeMap = {},
+    usedAfterMap = {},
+    madeAfterMap = {},
     periodMadeMap = {},
     consumptionBreakdown = {}, // ingredient → { [variantKey]: { name, qty, totalAmount } } for expand-on-tap
     isSubmitting,
@@ -223,6 +227,8 @@ export default function InventoryReportCard({
             warehouseAvailable={warehouseStocks[ing.ingredient]}
             used={lookupByLabel(ing.ingredient, usedMap)}
             made={lookupByLabel(ing.ingredient, madeMap)}
+            usedAfter={lookupByLabel(ing.ingredient, usedAfterMap)}
+            madeAfter={lookupByLabel(ing.ingredient, madeAfterMap)}
             periodMade={lookupByLabel(ing.ingredient, periodMadeMap)}
             breakdown={lookupByLabel(ing.ingredient, consumptionBreakdown) || null}
             period={openingPeriods[ing.ingredient]}
@@ -332,6 +338,8 @@ interface RowProps {
     warehouseAvailable?: number
     used: number
     made: number
+    usedAfter: number
+    madeAfter: number
     periodMade: number
     breakdown: ConsumptionBreakdown[string] | null
     period?: OpeningPeriods[string]
@@ -350,7 +358,7 @@ interface RowProps {
 
 const IngredientRow = memo(function IngredientRow({
     ing, ingredientUnits, openingValue, openingFallback, isLocked, restockValue, inventoryValue,
-    warehouseAvailable, used, made, periodMade, breakdown, period, openingNote,
+    warehouseAvailable, used, made, usedAfter, madeAfter, periodMade, breakdown, period, openingNote,
     isSubmitting, lockWarehouseInputs, readOnly,
     onOpeningChange, onRestockChange, onInventoryChange, onFieldBlur,
     hint, hintStep, hintFill,
@@ -388,16 +396,17 @@ const IngredientRow = memo(function IngredientRow({
     // Sử dụng = dùng cả kỳ + hôm nay, nhập thêm = đã nhập trong kỳ + nhập hôm nay. Chỉ là cách hiện; số lưu vẫn theo ngày.
     const p = isLocked ? undefined : period
     const showBreakdown = hasBreakdown
-    const todayUsed = `${r1(used + r1(made))} ${unit}` // used là ròng của mẻ; cộng lại phần làm ra = phần bán, khớp bảng. bảng chi tiết chỉ có hôm nay; kỳ nhiều ngày thì khác ô Sử dụng (cộng dồn)
+    const todayUsed = `${r1(used + usedAfter + made + madeAfter)} ${unit}` // used là ròng của mẻ; cộng lại phần làm ra = phần bán, khớp bảng. bảng chi tiết chỉ có hôm nay; kỳ nhiều ngày thì khác ô Sử dụng (cộng dồn)
     const hintCount = hint && open && hintStep === 'count'
     const restockTotal = p ? restockNum + p.restock : restockNum
     const { openingNum, usedNum, lyThuyet, haoHut } = p
         ? computeBalance({ inventoryValue, restockValue: restockTotal, openingValue: p.counted, used: r1(used) + p.used })
         : computeBalance({ inventoryValue, restockValue, openingValue, openingFallback, used })
     // Thành phẩm / topping: mẻ làm ra chính là "Nhập thêm" của nó (không qua kho tổng), Sử dụng chỉ còn phần bán — Lý thuyết không đổi (usedNum là ròng). Chỉ là cách hiện, không ghi vào ô Nhập thêm đã lưu.
-    const madeNum = r1(made)
+    const madeNum = r1(made + madeAfter)   // gồm cả mẻ sau giờ xác nhận (chỉ để hiện)
     const madeAll = p ? r1(madeNum + periodMade) : madeNum   // kỳ nhiều ngày: cộng dồn cả các mẻ của kỳ
-    const usedShown = r1(usedNum + madeAll)
+    // Sau giờ xác nhận: Sử dụng / Lý thuyết còn chạy tiếp theo đơn mới (= Tồn quầy đang có); haoHut vẫn chốt ở giờ xác nhận.
+    const usedShown = r1(usedNum + madeAll + usedAfter)
     // Lý thuyết âm mà đếm ra dương = "dư" ảo (dùng nhiều hơn đầu kỳ + nhập → nhập hàng chưa ghi): không quy ra tiền / ly.
     const phantomDu = haoHut != null && haoHut > 0 && lyThuyet < 0
 
@@ -458,7 +467,7 @@ const IngredientRow = memo(function IngredientRow({
         />
     )
     const cellSuDung = <TextCell label="Sử dụng" text={`${usedShown} ${unit}`} />
-    const cellLyThuyet = <ColumnInput label="Lý thuyết còn" value={lyThuyet} unit={unit} disabled />
+    const cellLyThuyet = <ColumnInput label="Lý thuyết còn" value={r1(lyThuyet - usedAfter)} unit={unit} disabled />
     const cellCuoiKy = (
         <ColumnInput
             label="Cuối kỳ"
@@ -558,7 +567,7 @@ const IngredientRow = memo(function IngredientRow({
                 </>)}
             </div>)}
             {listOpen && (
-                <NoticeSheet icon={<ClipboardList size={18} className="text-primary shrink-0" />} title={`${ingredientLabel(ing.ingredient)} · Sử dụng`} count={p ? todayUsed : `${r1(usedNum)} ${unit}`} onClose={() => setListOpen(false)}>
+                <NoticeSheet icon={<ClipboardList size={18} className="text-primary shrink-0" />} title={`${ingredientLabel(ing.ingredient)} · Sử dụng`} count={p ? todayUsed : `${usedShown} ${unit}`} onClose={() => setListOpen(false)}>
                     <div className="flex flex-col gap-3 pb-2">{breakdownEntries.map(entryRow)}</div>
                 </NoticeSheet>
             )}

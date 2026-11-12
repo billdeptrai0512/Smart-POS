@@ -127,15 +127,15 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
     // NVL đã xác nhận chỉ tính đơn trước giờ xác nhận CỦA NÓ; NVL đếm lại sau đó (mất confirmed_at) tính đủ đơn tới giờ.
     // Mẻ sản xuất cắt theo giờ xác nhận RIÊNG của NVL y như đơn: mẻ SAU giờ đó không nằm trong số đã đếm
     // (tồn quầy đã trừ/cộng nó qua productionAfterCount) — không cắt thì thành phẩm làm ra sau xác nhận hiện hụt đúng bằng mẻ.
+    const prodFull = useMemo(() => (isTodayScope ? productionOnDay(productionRows, todayISO) : {}), [isTodayScope, productionRows, todayISO])
     const productionMap = useMemo(() => {
-        if (!isTodayScope) return {}
-        const prod = productionOnDay(productionRows, todayISO)
+        const prod = { ...prodFull }
         for (const at of new Set(confirmedByIng.values())) {
             const before = productionOnDay(productionRows.filter(p => new Date(p.created_at).getTime() < at), todayISO)
             for (const [ing, t] of confirmedByIng) if (t === at) prod[ing] = usedOf(before, ing)
         }
         return prod
-    }, [isTodayScope, productionRows, todayISO, confirmedByIng])
+    }, [prodFull, productionRows, todayISO, confirmedByIng])
     const usedMap = useMemo(() => {
         const used = { ...calculateEstimatedConsumption(ordersToday.flatMap(o => o.items), recipes, extraIngredients) }
         for (const at of new Set(confirmedByIng.values())) {
@@ -146,27 +146,31 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
     }, [ordersToday, confirmedByIng, recipes, extraIngredients, isTodayScope, productionMap])
     // Phần thành phẩm làm ra hôm nay (dương) — cộng vào "Nhập thêm" khi hiển thị để Sử dụng chỉ còn phần bán.
     const madeMap = useMemo(() => madeOf(productionMap), [productionMap])
-    const periodMadeMap = useMemo(() => madeInPeriods(productionRows, inventory.openingPeriods, todayISO), [productionRows, inventory.openingPeriods, todayISO])
-    // Cắt đơn theo giờ xác nhận RIÊNG của từng NVL — cùng mốc với usedMap, để "Đã sử dụng" và danh sách mũi tên không lệch nhau.
-    const consumptionBreakdown = useMemo(() => {
-        const calc = (items: typeof todayOrderItems) => calculateConsumptionBreakdown(items, recipes, extraIngredients, products, productExtras)
-        // Mẻ sản xuất (topping / bán thành phẩm) cũng tiêu hao nguyên liệu gốc → thêm dòng "Sản xuất X" (cùng nguồn với productionMap).
-        const withProduction = (b: ReturnType<typeof calc>, before = Infinity) => {
-            const batches = isTodayScope ? productionRows.filter(p => !p.cancelled_at && dateStringVN(new Date(p.created_at)) === todayISO && new Date(p.created_at).getTime() < before) : []
-            for (const p of batches) for (const [ing, qty] of Object.entries(p.inputs || {})) {
-                if (!(Number(qty) > 0)) continue
-                const e = ((b[ing] ??= {})[`prod|${p.output_ingredient}`] ??= { name: `Sản xuất ${ingredientLabel(p.output_ingredient)}`, qty: 0, totalAmount: 0, unitLabel: 'mẻ' })
-                e.qty += 1; e.totalAmount = r1(e.totalAmount + Number(qty))
-            }
-            return b
+    // Sau giờ xác nhận: đơn/mẻ mới KHÔNG vào hao hụt của kỳ vừa đếm (usedMap đã cắt), nhưng ô Sử dụng / Lý thuyết còn vẫn phải
+    // chạy tiếp cho khớp Tồn quầy đang có → phần chênh (đủ ngày − đã cắt) đưa riêng xuống thẻ, chỉ để hiện.
+    const afterConfirm = useMemo(() => {
+        const used: Record<string, number> = {}, made: Record<string, number> = {}
+        const full = mergeUsage(calculateEstimatedConsumption(ordersToday.flatMap(o => o.items), recipes, extraIngredients), prodFull)
+        const madeFull = madeOf(prodFull)
+        for (const ing of confirmedByIng.keys()) {
+            used[ing] = r1(usedOf(full, ing) - usedOf(usedMap, ing))
+            made[ing] = r1(usedOf(madeFull, ing) - usedOf(madeMap, ing))
         }
-        const breakdown = withProduction(calc(ordersToday.flatMap(o => o.items)))
-        for (const at of new Set(confirmedByIng.values())) {
-            const before = withProduction(calc(ordersToday.filter(o => o.at < at).flatMap(o => o.items)), at)
-            for (const [ing, t] of confirmedByIng) if (t === at) { if (before[ing]) breakdown[ing] = before[ing]; else delete breakdown[ing] }
+        return { used, made }
+    }, [confirmedByIng, prodFull, ordersToday, recipes, extraIngredients, usedMap, madeMap])
+    const periodMadeMap = useMemo(() => madeInPeriods(productionRows, inventory.openingPeriods, todayISO), [productionRows, inventory.openingPeriods, todayISO])
+    // Đủ cả ngày (không cắt theo giờ xác nhận) — khớp ô Sử dụng, vốn cũng chạy tiếp sau xác nhận (afterConfirm).
+    const consumptionBreakdown = useMemo(() => {
+        // Mẻ sản xuất (topping / bán thành phẩm) cũng tiêu hao nguyên liệu gốc → thêm dòng "Sản xuất X" (cùng nguồn với productionMap).
+        const breakdown = calculateConsumptionBreakdown(ordersToday.flatMap(o => o.items), recipes, extraIngredients, products, productExtras)
+        const batches = isTodayScope ? productionRows.filter(p => !p.cancelled_at && dateStringVN(new Date(p.created_at)) === todayISO) : []
+        for (const p of batches) for (const [ing, qty] of Object.entries(p.inputs || {})) {
+            if (!(Number(qty) > 0)) continue
+            const e = ((breakdown[ing] ??= {})[`prod|${p.output_ingredient}`] ??= { name: `Sản xuất ${ingredientLabel(p.output_ingredient)}`, qty: 0, totalAmount: 0, unitLabel: 'mẻ' })
+            e.qty += 1; e.totalAmount = r1(e.totalAmount + Number(qty))
         }
         return breakdown
-    }, [ordersToday, confirmedByIng, recipes, extraIngredients, products, productExtras, isTodayScope, productionRows, todayISO])
+    }, [ordersToday, recipes, extraIngredients, products, productExtras, isTodayScope, productionRows, todayISO])
     const ingredientToProduct = useMemo(
         () => buildIngredientToProduct({ orderItems: todayOrderItems, recipes, products }),
         [recipes, products, todayOrderItems],
@@ -361,6 +365,8 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
                         ingredientUnits={inventoryRowUnits}
                         usedMap={usedMap}
                         madeMap={madeMap}
+                        usedAfterMap={afterConfirm.used}
+                        madeAfterMap={afterConfirm.made}
                         periodMadeMap={periodMadeMap}
                         consumptionBreakdown={consumptionBreakdown}
                         ingredientToProduct={ingredientToProduct}
