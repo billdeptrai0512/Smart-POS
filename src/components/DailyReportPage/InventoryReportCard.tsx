@@ -387,7 +387,8 @@ const IngredientRow = memo(function IngredientRow({
     // Kỳ kiểm kê (lần đếm trước cách từ 2 ngày, đầu kỳ chưa bị sửa tay): hiển thị CỘNG DỒN từ lần đếm — Đầu kỳ = số đã đếm,
     // Sử dụng = dùng cả kỳ + hôm nay, nhập thêm = đã nhập trong kỳ + nhập hôm nay. Chỉ là cách hiện; số lưu vẫn theo ngày.
     const p = isLocked ? undefined : period
-    const showBreakdown = hasBreakdown && !p
+    const showBreakdown = hasBreakdown
+    const todayUsed = `${r1(used + r1(made))} ${unit}` // used là ròng của mẻ; cộng lại phần làm ra = phần bán, khớp bảng. bảng chi tiết chỉ có hôm nay; kỳ nhiều ngày thì khác ô Sử dụng (cộng dồn)
     const hintCount = hint && open && hintStep === 'count'
     const restockTotal = p ? restockNum + p.restock : restockNum
     const { openingNum, usedNum, lyThuyet, haoHut } = p
@@ -492,13 +493,14 @@ const IngredientRow = memo(function IngredientRow({
         <div key={i} className="flex flex-col">
             <span className="text-[12px] font-medium text-text leading-tight line-clamp-2">{entry.name}</span>
             <div className="flex items-baseline justify-between gap-2 tabular-nums">
-                <span className="text-[10.5px] text-text-dim">{entry.qty} ly × {r1(entry.totalAmount / entry.qty)}{unit.length <= 2 ? '' : ' '}{unit}</span>
+                <span className="text-[10.5px] text-text-dim">{entry.qty} {entry.unitLabel ?? 'ly'} ×{r1(entry.totalAmount / entry.qty)}{unit.length <= 2 ? '' : ' '}{unit}</span>
                 <span className="text-[11px] font-bold text-text">{entry.totalAmount} {unit}</span>
             </div>
         </div>
     )
     const breakdownCard = showBreakdown && (
         <div className="min-w-0 flex-1 px-2 py-2 bg-surface-light rounded-[10px] border border-border/40 flex flex-col justify-between gap-1.5">
+            {p && <span className="text-[10px] font-black uppercase text-text-secondary">Hôm nay · {todayUsed}</span>}
             {breakdownEntries.slice(0, MAX_SIDE_BREAKDOWN).map(entryRow)}
             {breakdownEntries.length > MAX_SIDE_BREAKDOWN && (
                 <button type="button" onClick={() => setListOpen(true)} className="text-left text-[10.5px] font-bold text-primary">Xem đủ {breakdownEntries.length} món ›</button>
@@ -556,7 +558,7 @@ const IngredientRow = memo(function IngredientRow({
                 </>)}
             </div>)}
             {listOpen && (
-                <NoticeSheet icon={<ClipboardList size={18} className="text-primary shrink-0" />} title={`${ingredientLabel(ing.ingredient)} · Sử dụng`} count={`${r1(usedNum)} ${unit}`} onClose={() => setListOpen(false)}>
+                <NoticeSheet icon={<ClipboardList size={18} className="text-primary shrink-0" />} title={`${ingredientLabel(ing.ingredient)} · Sử dụng`} count={p ? todayUsed : `${r1(usedNum)} ${unit}`} onClose={() => setListOpen(false)}>
                     <div className="flex flex-col gap-3 pb-2">{breakdownEntries.map(entryRow)}</div>
                 </NoticeSheet>
             )}

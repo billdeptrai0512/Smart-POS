@@ -194,7 +194,7 @@ export function forecastFromWeeks(weeks: Row[][], recipes: RecipeRow[], extraIng
  * @returns {Object} breakdown[ingredient][variantKey] = { name, qty, totalAmount }
  */
 export function calculateConsumptionBreakdown(orderItems: OrderItem[], recipes: RecipeRow[], extraIngredients: ExtraIngredients, products: Row[] = [], productExtras: Record<string, Row[]> = {}) {
-    const breakdown: Record<string, Record<string, { name: string; qty: number; totalAmount: number }>> = {};
+    const breakdown: Record<string, Record<string, { name: string; qty: number; totalAmount: number; unitLabel?: string }>> = {};
     const recipesByProduct = groupRecipesByProduct(recipes);
     const productNames = new Map((products || []).map(p => [p.id, p.name]));
 

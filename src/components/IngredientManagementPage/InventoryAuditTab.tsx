@@ -16,7 +16,7 @@ import type { OnboardingState } from '../../utils/onboardingStorage'
 import type { Row } from '../../types/domain'
 import { useOnboardingProgress } from '../../hooks/useOnboardingProgress'
 import { getPendingOrders } from '../../hooks/useOfflineSync'
-import { calculateEstimatedConsumption, calculateConsumptionBreakdown, buildIngredientToProduct, orderItemsOf, isLiveOrder, sumLiveRevenue, usedOf, computeBalance } from '../../utils/inventory'
+import { calculateEstimatedConsumption, calculateConsumptionBreakdown, buildIngredientToProduct, orderItemsOf, isLiveOrder, sumLiveRevenue, usedOf, computeBalance, r1 } from '../../utils/inventory'
 import { ingredientLabel } from '../../utils/ingredients'
 import { findIngredientByLabel } from '../../utils/onboardingHint'
 import { inShiftCashTotal } from '../../utils/reportStats'
@@ -150,13 +150,23 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
     // Cắt đơn theo giờ xác nhận RIÊNG của từng NVL — cùng mốc với usedMap, để "Đã sử dụng" và danh sách mũi tên không lệch nhau.
     const consumptionBreakdown = useMemo(() => {
         const calc = (items: typeof todayOrderItems) => calculateConsumptionBreakdown(items, recipes, extraIngredients, products, productExtras)
-        const breakdown = calc(ordersToday.flatMap(o => o.items))
+        // Mẻ sản xuất (topping / bán thành phẩm) cũng tiêu hao nguyên liệu gốc → thêm dòng "Sản xuất X" (cùng nguồn với productionMap).
+        const withProduction = (b: ReturnType<typeof calc>, before = Infinity) => {
+            const batches = isTodayScope ? productionRows.filter(p => !p.cancelled_at && dateStringVN(new Date(p.created_at)) === todayISO && new Date(p.created_at).getTime() < before) : []
+            for (const p of batches) for (const [ing, qty] of Object.entries(p.inputs || {})) {
+                if (!(Number(qty) > 0)) continue
+                const e = ((b[ing] ??= {})[`prod|${p.output_ingredient}`] ??= { name: `Sản xuất ${ingredientLabel(p.output_ingredient)}`, qty: 0, totalAmount: 0, unitLabel: 'mẻ' })
+                e.qty += 1; e.totalAmount = r1(e.totalAmount + Number(qty))
+            }
+            return b
+        }
+        const breakdown = withProduction(calc(ordersToday.flatMap(o => o.items)))
         for (const at of new Set(confirmedByIng.values())) {
-            const before = calc(ordersToday.filter(o => o.at < at).flatMap(o => o.items))
+            const before = withProduction(calc(ordersToday.filter(o => o.at < at).flatMap(o => o.items)), at)
             for (const [ing, t] of confirmedByIng) if (t === at) { if (before[ing]) breakdown[ing] = before[ing]; else delete breakdown[ing] }
         }
         return breakdown
-    }, [ordersToday, confirmedByIng, recipes, extraIngredients, products, productExtras])
+    }, [ordersToday, confirmedByIng, recipes, extraIngredients, products, productExtras, isTodayScope, productionRows, todayISO])
     const ingredientToProduct = useMemo(
         () => buildIngredientToProduct({ orderItems: todayOrderItems, recipes, products }),
         [recipes, products, todayOrderItems],
