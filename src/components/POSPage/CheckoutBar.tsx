@@ -28,7 +28,7 @@ export default function CheckoutBar({
     const [showCart, setShowCart] = useState(false)
 
     return (
-        <footer className="shrink-0 bg-surface border-t border-border/80 px-6 dine-split:px-4 pt-3 pb-[max(env(safe-area-inset-bottom),28px)] shadow-[0_-4px_24px_rgba(0,0,0,0.02)]">
+        <footer className="shrink-0 bg-surface border-t border-border/80 px-6 dine-split:px-4 pt-3 pb-[max(env(safe-area-inset-bottom),12px)] [@media(display-mode:standalone)]:pb-[max(env(safe-area-inset-bottom),28px)] shadow-[0_-4px_24px_rgba(0,0,0,0.02)]">
             <div className="flex items-center gap-4">
                 <button
                     type="button"
