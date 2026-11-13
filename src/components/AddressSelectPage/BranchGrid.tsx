@@ -151,14 +151,14 @@ export default function BranchGrid({
                     return (
                         <div
                             key={addr.id}
-                            className="bg-surface border border-border/60 rounded-[20px] overflow-hidden shadow-sm group hover:border-border/80 hover:shadow-[0_4px_20px_rgba(0,0,0,0.15)] transition-all flex flex-col"
+                            className="bg-surface border border-border/60 rounded-[20px] overflow-hidden shadow-sm group group/card hover:border-border/80 hover:shadow-[0_4px_20px_rgba(0,0,0,0.15)] transition-all flex flex-col"
                         >
                             {/* Main click area — bọc trong div.relative vì nút ⋮ góc phải KHÔNG được lồng
                                 trong button này (HTML không cho button-trong-button). */}
                             <div className="relative flex-1 min-w-0">
                                 <button
                                     onClick={() => onSelect(addr)}
-                                    className="group w-full p-3 pr-11 text-left hover:bg-surface-light active:bg-border/30 transition-colors"
+                                    className="group w-full p-3 pr-11 text-left group-hover/card:bg-surface-light group-active/card:bg-border/30 transition-colors"
                                 >
                                     <div className="mb-1.5">
                                         <span className="text-text font-black text-sm transition-colors line-clamp-2 leading-tight">{addr.name}</span>
@@ -225,7 +225,7 @@ export default function BranchGrid({
 
                             {/* Footer: trạng thái gói (mọi role). px-3 khớp p-3 của header → thẳng hàng với tên quán.
                                 Bấm = bấm card: cổng gói ở onSelect tự mở paywall khi cần (≤7 ngày / ân hạn). */}
-                            <div onClick={() => onSelect(addr)} className="border-t border-border/40 px-3 py-2 cursor-pointer hover:bg-surface-light active:bg-border/30 transition-colors">
+                            <div onClick={() => onSelect(addr)} className="border-t border-border/40 px-3 py-2 cursor-pointer group-hover/card:bg-surface-light group-active/card:bg-border/30 transition-colors">
                                 {/* Tự ẩn khi monetization OFF (badge return null) */}
                                 <SubscriptionBadge
                                     addressId={addr.id}
