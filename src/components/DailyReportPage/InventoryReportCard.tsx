@@ -623,6 +623,7 @@ function ColumnInput({ label, value, unit, disabled, locked, onChange, onBlur, o
     const inputCls = overflow ? 'text-danger' : t.text || (locked ? 'text-primary cursor-not-allowed' : 'text-text')
     const unitCls = overflow ? 'text-danger/70' : t.unit || (locked ? 'text-primary/70' : 'text-text-dim')
     const Box = onBoxClick ? 'div' : 'label'
+    const guided = hint === true && !!onBlur && (value !== '' || !!onHintFill)
 
     return (
         <div className="flex flex-col">
@@ -644,7 +645,9 @@ function ColumnInput({ label, value, unit, disabled, locked, onChange, onBlur, o
                     onChange={e => onChange?.(e.target.value)}
                     onBlur={onBlur}
                     // Guide khách dùng thử: ô đang sáng — trống thì hiện số gợi ý rồi tự rời ô (blur = lưu); đã có số thì bấm vào là xác nhận.
-                    onFocus={hint === true && onBlur && (value !== '' || onHintFill) ? e => {
+                    // readOnly: vẫn nhận tap/focus nhưng không bật bàn phím.
+                    readOnly={guided}
+                    onFocus={guided ? e => {
                         const el = e.currentTarget
                         if (value === '') { onHintFill?.(); setTimeout(() => el.blur(), 700) } else el.blur()
                     } : undefined}

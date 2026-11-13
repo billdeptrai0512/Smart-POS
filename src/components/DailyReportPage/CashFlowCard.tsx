@@ -689,6 +689,7 @@ function MoneyInputRow({ label, value, onChange, onBlur, hint, onHintFill }: { l
     // Chưa gõ gì → ô trông y hệt dòng chỉ-đọc bên dưới, chủ quán không biết là
     // bấm được. Viền đứt + icon bút chỉ hiện lúc rỗng, gõ vào là biến mất.
     const empty = !value
+    const guided = !!hint && !!(value || onHintFill)
     return (
         <div className="flex items-center justify-between gap-3 rounded-lg">
             <span className="text-[12px] font-bold text-text-secondary shrink-0">{label}</span>
@@ -704,7 +705,9 @@ function MoneyInputRow({ label, value, onChange, onBlur, hint, onHintFill }: { l
                     onChange={e => onChange?.(e.target.value)}
                     onBlur={onBlur}
                     // Guide khách dùng thử: ô đang sáng — trống thì hiện số gợi ý rồi tự rời ô (blur = lưu); đã có số thì bấm vào là xác nhận.
-                    onFocus={hint && (value || onHintFill) ? e => {
+                    // readOnly: vẫn nhận tap/focus nhưng không bật bàn phím.
+                    readOnly={guided}
+                    onFocus={guided ? e => {
                         const el = e.currentTarget
                         if (!value) { onHintFill?.(); setTimeout(() => el.blur(), 700) } else el.blur()
                     } : undefined}
