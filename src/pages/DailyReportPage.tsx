@@ -761,6 +761,7 @@ export default function DailyReportPage() {
                                 hintTransfer={hintTransfer}
                                 onHintFill={fillHint}
                                 hintNet={hintNet}
+                                hintDiff={hintGoToInventory}
                                 onEditExpense={setEditingExpense}
                                 onEditRestockPayment={handleEditRestockPayment}
                                 printInfo={{ addressName: selectedAddress?.name, dateLabel: rangeLabel, revenue: totalRevenue, cups: totalCups, printerIp: selectedAddress?.counter_printer_ip }}

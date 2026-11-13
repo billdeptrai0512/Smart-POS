@@ -54,12 +54,32 @@ interface Props {
     hintTransfer?: boolean
     onHintFill?: () => void // guide: bấm vào 1 ô đang sáng → cả hai ô hiện số gợi ý rồi tự lưu
     hintNet?: boolean
+    hintDiff?: boolean // guide: đã nhập đủ thực thu → cuộn tới thẻ Đối chiếu
     onEditExpense?: (expense: Row) => void
     onEditRestockPayment?: (payment: Row) => void
     printInfo?: { addressName?: string | null; dateLabel?: string; revenue?: number; cups?: number; printerIp?: string | null }
     printPreview?: boolean
     onPreviewClose?: () => void
     onPrintError?: (err: unknown) => void
+}
+
+// Cuộn chậm (~0,9s, easeInOut) đưa `el` vào giữa/đầu khung cuộn gần nhất — scrollIntoView({behavior:'smooth'}) của
+// trình duyệt chỉ ~0,25s, khách thấy như giật 1 cái. Bật giảm chuyển động của hệ điều hành → nhảy thẳng.
+function slowScrollTo(el: HTMLElement, block: 'center' | 'start', ms = 900) {
+    let sc: HTMLElement | null = el.parentElement
+    while (sc && sc.scrollHeight <= sc.clientHeight) sc = sc.parentElement
+    if (!sc) return
+    const s = sc.getBoundingClientRect(), r = el.getBoundingClientRect()
+    const from = sc.scrollTop
+    const delta = block === 'center' ? r.top + r.height / 2 - (s.top + s.height / 2) : r.top - s.top
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { sc.scrollTop = from + delta; return }
+    const t0 = performance.now()
+    const step = (now: number) => {
+        const p = Math.min((now - t0) / ms, 1)
+        sc.scrollTop = from + delta * (p < 0.5 ? 2 * p * p : 1 - (-2 * p + 2) ** 2 / 2)
+        if (p < 1) requestAnimationFrame(step)
+    }
+    requestAnimationFrame(step)
 }
 
 // Phase 1 payment: cờ trên payment ưu tiên cờ hoá đơn gốc; chỉ 'in_shift' rõ ràng
@@ -97,6 +117,7 @@ export default function CashFlowCard({
     hintTransfer = false,
     onHintFill,
     hintNet = false,
+    hintDiff = false,
     // Bấm 1 dòng chi phí → mở modal sửa (DailyReportPage điều hướng sang tab Chi phí).
     onEditExpense,
     // Bấm 1 dòng "Mua nguyên liệu/bao bì" → mở RestockModal sửa phiếu nhập (chỉ khi
@@ -114,10 +135,14 @@ export default function CashFlowCard({
     // Chỉ chạy khi đích đổi (tiền mặt → chuyển khoản vẫn là 'cash' nên không cuộn lại); trễ chút cho trang dựng xong.
     const panelRef = useRef<HTMLDivElement>(null)
     const netRef = useRef<HTMLDivElement>(null)
-    const scrollTo = hintNet ? 'net' : hintCash || hintTransfer ? 'cash' : null
+    const diffRef = useRef<HTMLDivElement>(null)
+    const scrollTo = hintNet ? 'net' : hintDiff ? 'diff' : hintCash || hintTransfer ? 'cash' : null
     useEffect(() => {
         if (!scrollTo) return
-        const t = setTimeout(() => (scrollTo === 'net' ? netRef : panelRef).current?.scrollIntoView({ block: scrollTo === 'net' ? 'start' : 'center', behavior: 'smooth' }), 400)
+        const t = setTimeout(() => {
+            const el = { net: netRef, diff: diffRef, cash: panelRef }[scrollTo].current
+            if (el) slowScrollTo(el, scrollTo === 'net' ? 'start' : 'center')
+        }, 400)
         return () => clearTimeout(t)
     }, [scrollTo])
     // Nhóm nguyên liệu — để chia các dòng trong mục Tồn kho bên dưới. Mặc định collapse từng nhóm.
@@ -420,7 +445,8 @@ export default function CashFlowCard({
                 const tone = cashNotEntered || diff === 0 ? 'text-text-dim' : diff > 0 ? 'text-success' : 'text-danger'
                 return (
                     <ReportPanel
-                        title="So sánh"
+                        panelRef={diffRef}
+                        title="Đối chiếu"
                         total={{ label: 'Chênh lệch', value: cashNotEntered ? '—' : `${diff > 0 ? '+' : ''}${formatVND(diff)}`, className: tone }}
                     >
                         <div className="flex flex-col gap-2.5 pl-2">

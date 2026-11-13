@@ -50,8 +50,10 @@ export default function OnboardingGuide({ onPos = false }: { onPos?: boolean }) 
     // idx -1 = xong hết: không dải — CTA đăng ký nằm cuối Báo cáo (DailyReportPage), các trang khác sáng đường về đó.
     // Trên POS dải còn hiện ở bước Nhật ký (idx 2): thẻ Nhật ký đang sáng, dải nói rõ phải bấm vào đó.
     const journalOnPos = onPos && idx === 2
-    // Bước Nhật ký, tab Bán hàng: dải giải thích số liệu bên dưới (nút "tiến" tự sáng lo phần bấm).
-    const journalOnHistory = onHistory && idx === 2 && !pathname.endsWith('/expense')
+    // Dải theo trang (căn giữa, không icon/số bước/thanh tiến độ): Nhật ký giải thích số liệu; Kết ca nói đây là lúc đối chiếu tiền — nút cần bấm tự sáng.
+    const pageGuide = onHistory && idx === 2 && !pathname.endsWith('/expense') ? 'Bên dưới là thống kê bán hàng'
+        : pathname.startsWith('/report') && !pathname.endsWith('/revenue') ? (idx === 3 ? 'Cuối ca, đếm tiền mặt và chuyển khoản' : idx === 4 ? 'Đối chiếu chênh lệch với doanh thu' : null)
+        : pathname.startsWith('/inventory') && !pathname.startsWith('/inventory/stocking') && idx === 4 ? 'Sau đó, nhập tồn cà phê cuối kỳ' : null
     if ((onPos && idx !== 1 && !journalOnPos) || (onHistory && idx === 1) || !isGuest || !addressId || idx === -1) return null
 
     // Nền cam nhạt + icon để tách hẳn khỏi header (bg-surface) ngay bên dưới — cùng
@@ -65,27 +67,27 @@ export default function OnboardingGuide({ onPos = false }: { onPos?: boolean }) 
     const offerFrom = flat.findIndex(i => i.offerSignup)
     const showSignup = offerFrom >= 0 && flat.findIndex(i => !i.done) >= offerFrom
     const current = items.find(i => !i.done)
-    if (current?.hideBar && !journalOnPos && !journalOnHistory) return null
-    const label = journalOnPos ? 'Tiếp theo, bấm xem nhật ký' : journalOnHistory ? 'Bên dưới là thống kê bán hàng hôm nay' : current?.label ?? ''
+    if (current?.hideBar && !journalOnPos && !pageGuide) return null
+    const label = journalOnPos ? 'Tiếp theo, bấm xem nhật ký' : pageGuide ?? current?.label ?? ''
     return (
         <div className={`${bar} relative bg-primary/15 text-text`}>
-            {!onPos && !journalOnHistory && <>
+            {!onPos && !pageGuide && <>
                 <span className="shrink-0 grid place-items-center size-6 rounded-full bg-primary/20 text-primary"><Lightbulb size={14} /></span>
                 <span className="shrink-0 text-[11px] font-black tabular-nums text-primary">{idx + 1}/{STEPS.length}</span>
             </>}
             {/* Chữ gõ dần (Typewriter); bản ẩn cùng nội dung giữ chỗ để dải không đổi chiều cao lúc đang gõ. */}
-            <span className={`flex-1 relative uppercase ${onPos || journalOnHistory ? 'text-center' : ''} tracking-wider text-[12px] font-black`}>
+            <span className={`flex-1 relative uppercase ${onPos || pageGuide ? 'text-center' : ''} tracking-wider text-[12px] font-black`}>
                 <span className="invisible line-clamp-2">{label}</span>
                 <span className="absolute inset-0 line-clamp-2"><Typewriter text={label} /></span>
             </span>
             {/* Tới việc có cờ offerSignup (steps.ts) thì cho đăng ký sớm — guide vẫn chạy tiếp. */}
-            {showSignup && (
+            {showSignup && !pageGuide && (
                 <Link to="/signup" className="shrink-0 text-[12px] font-black uppercase tracking-wider text-primary border border-primary/60 rounded-full px-3 py-0.5 active:bg-primary/15 transition-colors">
                     Đăng ký
                 </Link>
             )}
             {/* Thanh tiến độ mảnh dưới đáy dải: khách thấy còn bao xa. */}
-            {!onPos && !journalOnHistory && <span className="absolute bottom-0 left-0 h-0.5 bg-primary transition-all duration-500" style={{ width: `${(idx / STEPS.length) * 100}%` }} />}
+            {!onPos && !pageGuide && <span className="absolute bottom-0 left-0 h-0.5 bg-primary transition-all duration-500" style={{ width: `${(idx / STEPS.length) * 100}%` }} />}
         </div>
     )
 }
