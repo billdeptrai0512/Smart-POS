@@ -113,6 +113,10 @@ body {
   body {
     /* ponytail: Android edge-to-edge có thể báo inset = 0 → sàn 24px để header không bị status bar che */
     padding-top: max(env(safe-area-inset-top), 32px);
+    /* iOS standalone: height:100% của html ngắn hơn màn hình thật → dải đen dưới footer.
+       fixed inset-0 ép body phủ full màn hình (viewport-fit=cover), các footer tự đệm safe-area đáy. */
+    position: fixed;
+    inset: 0;
   }
 }
 
