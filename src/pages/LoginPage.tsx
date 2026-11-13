@@ -115,7 +115,7 @@ export default function LoginPage() {
                             disabled={guestLoading}
                             className="w-full py-3.5 rounded-[14px] bg-primary/5 uppercase border border-primary/40 text-primary font-black text-sm hover:bg-primary/10 hover:border-primary/60 focus-visible:outline-2 focus-visible:outline-primary/50 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            {guestLoading ? 'Đang tải...' : 'Lần đầu sử dụng'}
+                            {guestLoading ? 'Đang tải...' : 'Sử dụng thử'}
                         </button>
                     </div>
                 </div>
