@@ -59,7 +59,7 @@ export default function NoticeSheet({ icon, title, count, onClose, children, hin
                     <X size={16} />
                 </button>
             </div>
-            <div className="min-h-0 overflow-y-auto px-5 pt-1 pb-8">{children}</div>
+            <div className="min-h-0 overflow-y-auto px-5 pt-1 pb-8 [@media(display-mode:standalone)]:pb-[max(env(safe-area-inset-bottom),40px)]">{children}</div>
         </BottomSheet>,
         document.body,
     )

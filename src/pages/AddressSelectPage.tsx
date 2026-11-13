@@ -298,7 +298,7 @@ export default function AddressSelectPage() {
             </div>
 
             {(activeTab === 'staff' || isStaff || isGuest) && (
-                <div className="shrink-0 flex items-stretch gap-3 px-4 py-2.5 pb-[max(env(safe-area-inset-bottom),10px)] bg-surface border-t border-border/60">
+                <div className="shrink-0 flex items-stretch gap-3 px-4 py-2.5 pb-[max(env(safe-area-inset-bottom),10px)] [@media(display-mode:standalone)]:pb-[max(env(safe-area-inset-bottom),28px)] bg-surface border-t border-border/60">
                     <button
                         onClick={handleSignOut}
                         className="flex-1 min-w-0 flex items-center justify-center rounded-[12px] border border-border/60 bg-bg px-4 py-3 text-[13px] font-bold uppercase tracking-wider text-text-secondary hover:bg-surface-light hover:text-danger active:scale-95 transition-all"

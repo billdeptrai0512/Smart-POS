@@ -433,7 +433,7 @@ export default function HistoryPage() {
                 FAB position (the date-picker footer is gone, so it sits flush to the bottom). */}
             {activeTab === 'expense' && !isReadOnly && (
                 <div className="fixed bottom-0 left-0 right-0 max-w-lg lg:max-w-[1280px] mx-auto pointer-events-none z-50">
-                    <div className="flex justify-end px-4 lg:px-8 pb-[max(env(safe-area-inset-bottom),16px)] pointer-events-auto">
+                    <div className="flex justify-end px-4 lg:px-8 pb-[max(env(safe-area-inset-bottom),16px)] [@media(display-mode:standalone)]:pb-[max(env(safe-area-inset-bottom),28px)] pointer-events-auto">
                         <button
                             onClick={() => { if (scope === 'day') setExpenseDate(dayInputValue); setShowAddModal(true) }}
                             aria-label="Thêm chi phí"

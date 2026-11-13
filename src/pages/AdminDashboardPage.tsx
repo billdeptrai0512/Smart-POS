@@ -104,7 +104,7 @@ export default function AdminDashboardPage() {
     if (!isAdmin) return <Navigate to="/addresses" />
 
     return (
-        <div className="flex flex-col h-[100dvh] bg-bg">
+        <div className="flex flex-col h-full bg-bg">
             <AdminPageHeader
                 title="Admin Dashboard"
                 subtitle={data ? `Cập nhật ${timeStringVN(new Date(data.generated_at))}` : undefined}

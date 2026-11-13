@@ -22,7 +22,7 @@ export default function SubscriptionScreen({ backTo = '/addresses', preselectAdd
     const navigate = useNavigate()
 
     return (
-        <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg">
+        <div className="flex flex-col h-full max-w-lg mx-auto bg-bg">
             {/* Header: [back] [chip tiêu đề] [Bỏ qua] */}
             <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex items-center px-4 gap-3">
                 <button

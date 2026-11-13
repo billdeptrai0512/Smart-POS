@@ -403,7 +403,7 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
 
             {/* ── Footer dính đáy: nút Reset (Admin). User thường xác nhận qua webhook. ── */}
             {isAdmin && (
-                <div className="sticky bottom-0 -mx-4 px-4 pt-2 bg-bg/85 backdrop-blur-md border-t border-border/50 pb-[max(env(safe-area-inset-bottom),8px)] flex flex-col gap-2">
+                <div className="sticky bottom-0 -mx-4 px-4 pt-2 bg-bg/85 backdrop-blur-md border-t border-border/50 pb-[max(env(safe-area-inset-bottom),8px)] [@media(display-mode:standalone)]:pb-[max(env(safe-area-inset-bottom),28px)] flex flex-col gap-2">
                     <button
                         onClick={() => setAdminOpen(o => !o)}
                         className="self-center flex items-center gap-1 text-[11px] font-bold text-text-dim active:scale-95 transition"

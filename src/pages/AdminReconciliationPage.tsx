@@ -160,7 +160,7 @@ export default function AdminReconciliationPage() {
     }
 
     return (
-        <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg">
+        <div className="flex flex-col h-full max-w-lg mx-auto bg-bg">
             <AdminPageHeader title="Cần chú ý" subtitle={countHint} onBack={() => navigate('/admin/dashboard')} onRefresh={reload} />
 
             <div className="flex-1 overflow-y-auto px-4 pt-4 pb-8 flex flex-col gap-5">
