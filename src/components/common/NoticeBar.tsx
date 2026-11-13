@@ -1,13 +1,15 @@
 import type { ReactNode } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { onboardingHintClass } from '../../utils/onboardingHint'
+import Typewriter from './Typewriter'
 
 // Dải notice 1 dòng ở đỉnh trang (cùng chỗ OnboardingGuide): icon + nhãn + số đếm + mũi tên. Rộng
 // bằng cột nội dung (max-w-lg) để khớp header trang bên dưới; tablet chia đôi thì giãn như header.
 // hint: spotlight của guide khách dùng thử (onboarding/steps.ts).
-interface Props { icon?: ReactNode; label: string; count?: number | string; onClick?: () => void; chevron?: boolean; hint?: boolean }
+interface Props { icon?: ReactNode; label: string; count?: number | string; onClick?: () => void; chevron?: boolean; hint?: boolean; typed?: boolean }
 
-export default function NoticeBar({ icon, label, count, onClick, chevron = true, hint = false }: Props) {
+// typed: chữ gõ dần (mặc định theo hint — chỉ dải guide). Truyền riêng khi hint bật trễ hơn lúc dải hiện, để chữ không gõ lại giữa chừng.
+export default function NoticeBar({ icon, label, count, onClick, chevron = true, hint = false, typed = hint }: Props) {
     return (
         <button
             type="button"
@@ -16,7 +18,7 @@ export default function NoticeBar({ icon, label, count, onClick, chevron = true,
             className={`shrink-0 w-full max-w-lg mx-auto dine-split:max-w-none flex items-center gap-2.5 h-10 px-4 text-[14px] font-bold bg-primary/15 text-text text-left ${onboardingHintClass(hint)}`}
         >
             {icon}
-            <span className="flex-1 truncate uppercase tracking-wider text-[12px] font-black">{label}</span>
+            <span className="flex-1 truncate uppercase tracking-wider text-[12px] font-black">{typed ? <Typewriter text={label} /> : label}</span>
             {count ? <span className="text-[12px] font-bold text-text-secondary tabular-nums">{count}</span> : null}
             {chevron && <ChevronRight size={16} className="text-text-dim shrink-0" />}
         </button>

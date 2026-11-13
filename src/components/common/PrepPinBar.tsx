@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { Hand } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAddress } from '../../contexts/AddressContext'
 import { useStats } from '../../contexts/StatsContext'
@@ -36,10 +37,12 @@ function PinBar({ addressId }: { addressId: string }) {
     const prep = useOnboardingProgress('prepProgress', { isGuest, addressId })
     const lastRef = useRef(prep)
     const allTaken = total > 0 && pendingCount === 0
+    const intro = isGuest && !prep.done // lời chào đầu guide: icon vẫy tay + "Đầu tiên, …"
     useEffect(() => {
         const last = lastRef.current
         if (!isGuest || !ready || last.done || !(open || last.opened)) return
-        const next = { opened: true, taken: doneCount, total, done: allTaken }
+        // done chỉ chốt khi đóng sheet → dải bước 2 ("Chạm vào món…") mới bắt đầu gõ sau khi khách bấm ✓ đóng.
+        const next = { opened: true, taken: doneCount, total, done: allTaken && !open }
         lastRef.current = next
         writeOnboardingState(addressId, { prepProgress: next })
     }, [isGuest, ready, open, doneCount, total, allTaken, addressId])
@@ -47,7 +50,8 @@ function PinBar({ addressId }: { addressId: string }) {
     return (
         <>
             {pendingCount > 0 && <NoticeBar // không icon: pill đã nổi nhờ nền/viền
-                label="Bạn cần chuẩn bị"
+                icon={intro ? <Hand size={18} className="shrink-0 text-primary wave-hand" /> : undefined}
+                label={intro ? 'Đầu tiên, bạn cần chuẩn bị' : 'Bạn cần chuẩn bị'}
                 count={pendingCount} // số việc đang chờ lấy ra quầy
                 chevron={false}
                 onClick={ready ? () => setOpen(true) : undefined} // số từ ảnh chụp: chờ tính xong mới cho thao tác

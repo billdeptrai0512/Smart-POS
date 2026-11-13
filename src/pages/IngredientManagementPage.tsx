@@ -367,9 +367,7 @@ export default function IngredientManagementPage() {
                 (chỉ nhóm kho chung) giữ ở tab Kiểm kê. */}
             {/* Khách dùng thử: ẩn tới khi xong Kiểm kê — hiện sớm thì dễ bấm nhầm bước 6 khi đang đếm. */}
             {slid && (
-                <div className={glow ? undefined : 'restock-slide-in'}>
-                    <WarehousePrepNotice onRestocked={loadStocks} onOpenIngredient={openIngredient} hint={hintRestock} />
-                </div>
+                <WarehousePrepNotice onRestocked={loadStocks} onOpenIngredient={openIngredient} hint={hintRestock} />
             )}
             {activeView !== 'stocking' && <TomorrowPrepNotice />}
 

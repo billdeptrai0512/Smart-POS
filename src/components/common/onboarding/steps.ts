@@ -22,7 +22,7 @@ export const STEPS: Step[] = [
     {
         title: 'Bán hàng',
         items: ({ orderProgress: { sent } }) => [
-            { label: 'KOPHiN xin chào ạ!', done: sent >= 1 },
+            { label: 'Chạm vào món rồi bấm tạo đơn', done: sent >= 1 },
         ],
     },
     {

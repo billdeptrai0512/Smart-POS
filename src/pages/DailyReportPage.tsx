@@ -20,6 +20,7 @@ import { readOnboardingState, writeOnboardingState, DEFAULT_ONBOARDING_STATE, is
 import { useOnboardingProgressPersist } from '../hooks/useOnboardingProgressPersist'
 import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
 import { onboardingHintClass } from '../utils/onboardingHint'
+import Typewriter from '../components/common/Typewriter'
 import { dateStringVN, isSameDayVN } from '../utils/dateVN'
 import { overlayProduction } from '../utils/production'
 import { useDateScope } from '../hooks/useDateScope'
@@ -663,8 +664,12 @@ export default function DailyReportPage() {
     // Guide: CTA cuối của demo nằm cuối trang — khách cuộn qua Thực chi/Thực nhận là gặp (dải trên đỉnh ẩn ở
     // trang này, OnboardingGuide). Hiện ngay khi nhập kho xong, không chờ tick viewedNet; thế chỗ 2 nút cuối trang.
     const footer = isGuest && restockProgress.bought ? (
-        <Link ref={ctaRef} to="/signup" className={`m-3 py-3.5 rounded-[14px] bg-primary text-white text-center text-[14px] font-black uppercase tracking-wide active:scale-[0.98] transition ${onboardingHintClass(true, 'solid')}`}>
-            Hoàn thành! Đăng ký tài khoản
+        <Link ref={ctaRef} to="/signup" className={`m-3 h-10 px-4 flex items-center rounded-[14px] bg-primary/15 text-text text-[12px] font-black uppercase tracking-wider active:scale-[0.98] transition ${onboardingHintClass(true, 'solid')}`}>
+            {/* Cùng kiểu dải guide: chữ gõ dần, canh giữa; bản ẩn giữ chỗ để chữ không trôi khi đang gõ. */}
+            <span className="flex-1 relative text-center">
+                <span className="invisible">Đăng ký tài khoản</span>
+                <span className="absolute inset-0"><Typewriter text="Đăng ký tài khoản" /></span>
+            </span>
         </Link>
     ) : (
         <div className="flex items-center justify-center gap-2 p-3">

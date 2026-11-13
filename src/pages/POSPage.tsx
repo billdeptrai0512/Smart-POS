@@ -95,7 +95,7 @@ export default function POSPage() {
                             <button
                                 type="button"
                                 onClick={() => setShowTables(true)}
-                                className="dine-split:hidden [&:not(:first-child)]:max-w-[50%] h-10 px-3 flex items-center justify-center gap-1.5 border border-border/60 bg-surface-light text-[12px] font-black uppercase tracking-wider text-text"
+                                className={`${isGuest ? 'hidden' : 'flex dine-split:hidden'} [&:not(:first-child)]:max-w-[50%] h-10 px-3 items-center justify-center gap-1.5 border border-border/60 bg-surface-light text-[12px] font-black uppercase tracking-wider text-text`}
                             >
                                 <span className="truncate">{tableName || 'Mang đi'}</span>
                                 <ChevronDown size={14} strokeWidth={3} className="shrink-0 text-text-secondary" />

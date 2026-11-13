@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Hand, Lightbulb } from 'lucide-react'
+import { Lightbulb } from 'lucide-react'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useAddress } from '../../../contexts/AddressContext'
 import { trackGuestOnboardingStage } from '../../../services/onboardingFunnelService'
@@ -47,7 +47,9 @@ export default function OnboardingGuide({ onPos = false }: { onPos?: boolean }) 
     }, [stageReached, isGuest, addressId])
 
     // idx -1 = xong hết: không dải — CTA đăng ký nằm cuối Báo cáo (DailyReportPage), các trang khác sáng đường về đó.
-    if ((onPos && idx !== 1) || (onHistory && idx === 1) || !isGuest || !addressId || idx === -1) return null
+    // Trên POS dải còn hiện ở bước Nhật ký (idx 2): thẻ Nhật ký đang sáng, dải nói rõ phải bấm vào đó.
+    const journalOnPos = onPos && idx === 2
+    if ((onPos && idx !== 1 && !journalOnPos) || (onHistory && idx === 1) || !isGuest || !addressId || idx === -1) return null
 
     // Nền cam nhạt + icon để tách hẳn khỏi header (bg-surface) ngay bên dưới — cùng
     // màu nền với header thì dải bị đọc như 1 phần header và dễ bị lướt qua.
@@ -60,16 +62,16 @@ export default function OnboardingGuide({ onPos = false }: { onPos?: boolean }) 
     const offerFrom = flat.findIndex(i => i.offerSignup)
     const showSignup = offerFrom >= 0 && flat.findIndex(i => !i.done) >= offerFrom
     const current = items.find(i => !i.done)
-    if (current?.hideBar) return null
-    const label = current?.label ?? ''
+    if (current?.hideBar && !journalOnPos) return null
+    const label = journalOnPos ? 'Tiếp theo, bấm xem nhật ký' : current?.label ?? ''
     return (
         <div className={`${bar} relative bg-primary/15 text-text`}>
-            {onPos
-                ? <Hand size={18} className="shrink-0 text-primary wave-hand" />
-                : <span className="shrink-0 grid place-items-center size-6 rounded-full bg-primary/20 text-primary"><Lightbulb size={14} /></span>}
-            {!onPos && <span className="shrink-0 text-[11px] font-black tabular-nums text-primary">{idx + 1}/{STEPS.length}</span>}
+            {!onPos && <>
+                <span className="shrink-0 grid place-items-center size-6 rounded-full bg-primary/20 text-primary"><Lightbulb size={14} /></span>
+                <span className="shrink-0 text-[11px] font-black tabular-nums text-primary">{idx + 1}/{STEPS.length}</span>
+            </>}
             {/* Chữ gõ dần (Typewriter); bản ẩn cùng nội dung giữ chỗ để dải không đổi chiều cao lúc đang gõ. */}
-            <span className="flex-1 relative uppercase tracking-wider text-[12px] font-black">
+            <span className={`flex-1 relative uppercase ${onPos ? 'text-center' : ''} tracking-wider text-[12px] font-black`}>
                 <span className="invisible line-clamp-2">{label}</span>
                 <span className="absolute inset-0 line-clamp-2"><Typewriter text={label} /></span>
             </span>

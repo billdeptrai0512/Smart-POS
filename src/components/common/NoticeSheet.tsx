@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { X } from 'lucide-react'
+import { Check } from 'lucide-react'
 import { onboardingHintClass } from '../../utils/onboardingHint'
 import { BottomSheet } from './ModalShell'
 
@@ -53,10 +53,10 @@ export default function NoticeSheet({ icon, title, count, onClose, children, hin
                 {count !== '' && <span className="shrink-0 text-[13px] font-bold text-text-secondary tabular-nums">{count}</span>}
                 <button
                     onClick={onClose}
-                    aria-label="Đóng"
+                    aria-label="Xác nhận"
                     className={`w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/60 text-text-secondary hover:text-text transition-all shrink-0 ${onboardingHintClass(hintClose, 'solid')}`}
                 >
-                    <X size={16} />
+                    <Check size={18} strokeWidth={3} />
                 </button>
             </div>
             <div className="min-h-0 overflow-y-auto px-5 pt-1 pb-8 [@media(display-mode:standalone)]:pb-[max(env(safe-area-inset-bottom),40px)]">{children}</div>

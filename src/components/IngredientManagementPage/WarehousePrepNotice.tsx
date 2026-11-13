@@ -100,14 +100,20 @@ function Notice({ addressId, onRestocked, onOpenIngredient, hint }: Props & { ad
 
     return (
         <>
+            {/* Dải hiện sau khi tải xong số liệu: mở dần chiều cao (0fr→1fr) thay vì bật ra đẩy cả trang xuống giật một nhịp. */}
             {show && (
-                <NoticeBar
-                    icon={<Package size={15} className="text-primary shrink-0" />}
-                    label="Tồn kho cần bổ sung"
-                    count={progress}
-                    onClick={openSheet} // chưa xong / lỗi: HubBuyBody tự hiện khung chờ / nút Thử lại
-                    hint={hint && !hinted && !open}
-                />
+                <div className="restock-slide-in grid">
+                    <div className="min-h-0 overflow-hidden">
+                        <NoticeBar
+                            icon={<Package size={15} className="text-primary shrink-0" />}
+                            label="Tồn kho cần bổ sung"
+                            count={progress}
+                            onClick={openSheet} // chưa xong / lỗi: HubBuyBody tự hiện khung chờ / nút Thử lại
+                            hint={hint && !hinted && !open}
+                            typed={isGuest}
+                        />
+                    </div>
+                </div>
             )}
             <Toast toast={payToast} />
 
