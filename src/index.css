@@ -111,7 +111,8 @@ body {
 /* iOS PWA standalone mode: respect notch / Dynamic Island */
 @media (display-mode: standalone) {
   body {
-    padding-top: env(safe-area-inset-top);
+    /* ponytail: Android edge-to-edge có thể báo inset = 0 → sàn 24px để header không bị status bar che */
+    padding-top: max(env(safe-area-inset-top), 24px);
   }
 }
 
