@@ -112,7 +112,7 @@ body {
 @media (display-mode: standalone) {
   body {
     /* ponytail: Android edge-to-edge có thể báo inset = 0 → sàn 24px để header không bị status bar che */
-    padding-top: max(env(safe-area-inset-top), 24px);
+    padding-top: max(env(safe-area-inset-top), 32px);
   }
 }
 
