@@ -21,6 +21,7 @@ import { readOnboardingState, writeOnboardingState } from '../utils/onboardingSt
 import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
 import OrdersList from '../components/HistoryPage/OrdersList'
+import { onboardingHintClass } from '../utils/onboardingHint'
 import SalesCard from '../components/DailyReportPage/SalesCard'
 import ExpensePanel from '../components/HistoryPage/ExpensePanel'
 import AddExpenseModal from '../components/HistoryPage/AddExpenseModal'
@@ -77,6 +78,13 @@ export default function HistoryPage() {
     const journalProgress = useOnboardingProgress('journalProgress', { isGuest, addressId })
     // Hint: mũi tên "tiến" sang trang Báo cáo (Báo cáo là trang riêng).
     const journalHint = !(isGuest && orderDone) ? null : !journalProgress.viewedReport ? 'report' : null
+    // Nhịp guide: dải chữ gõ xong (~0,8s) → thẻ thống kê sáng kiểu "nhìn vào đây" 2s → mũi tên "tiến" mới sáng.
+    const [forwardReady, setForwardReady] = useState(false)
+    useEffect(() => {
+        if (journalHint !== 'report') return
+        const t = setTimeout(() => setForwardReady(true), 2800)
+        return () => clearTimeout(t)
+    }, [journalHint])
 
     // Date selection (scope/offset/customRange + handlers) lives in the shared
     // hook so /history and /report stay in lock-step. Seeded from nav state
@@ -372,7 +380,7 @@ export default function HistoryPage() {
                 canGoForward={canGoForwardPeriod}
                 onBack={() => goToMenuStep(activeTab, -1, { navigate, backTo, wizard: location.state?.wizard })}
                 onForward={handleForward}
-                hintForward={journalHint === 'report'}
+                hintForward={journalHint === 'report' && forwardReady}
                 activeTab={activeTab}
                 onTabSelect={setActiveTab}
                 onOffsetPrev={goOffsetPrev}
@@ -402,6 +410,7 @@ export default function HistoryPage() {
                             totalRevenue={totalRevenue}
                             productStats={productStats}
                             lineChartData={isRangeScope ? weekdayChartData : lineChartData}
+                            className={`${onboardingHintClass(journalHint === 'report', 'look')} [--look-delay:0.8s]`}
                         />
                     }
                     isLoading={isTodayScope ? isLoadingHistory : isLoadingRangeOrders}

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useLayoutEffect, type ReactNode } from 'react'
 import { Routes, Route, Navigate, Outlet, useSearchParams, useLocation, useParams } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { AddressProvider, useAddress } from './contexts/AddressContext'
@@ -103,6 +103,15 @@ function RequireAddress() {
 }
 
 export default function App() {
+  // Chuyển trang / chuyển tab (tab cũng là route) → cả app hiện dần 180ms thay vì cắt cảnh. Chỉ opacity: transform sẽ làm
+  // lệch các nút position:fixed (FAB, footer) trong lúc chạy. Modal portal ra ngoài #root nên không bị mờ theo.
+  // ponytail: fade-in một chiều, không crossfade — BrowserRouter không dùng được View Transitions của react-router;
+  // muốn trang cũ mờ dần ra thì phải chuyển sang createBrowserRouter + navigate(..., { viewTransition: true }).
+  const { pathname } = useLocation()
+  useLayoutEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    document.getElementById('root')?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180, easing: 'ease-out' })
+  }, [pathname])
   return (
     <ErrorBoundary>
       <AuthProvider>

@@ -8,9 +8,10 @@ import { ingredientLabel } from './ingredients'
 // variant 'solid' (.onboarding-hint-solid, also in index.css) is a detached ring + glow, for targets
 // that are themselves primary-colored (Tạo đơn). variant 'soft' (.onboarding-hint-soft) is a pulsing icon (colour + scale) for
 // secondary suggestions that sit next to the main hint — put it on the icon, not the whole box.
+// variant 'look' (.onboarding-look) = "nhìn vào đây", không phải "bấm": sáng đứng yên 1 lần ~2s rồi tắt, không nhấp nháy.
 export function onboardingHintClass(active: unknown, variant = 'default') {
     if (!active) return ''
-    return variant === 'solid' ? 'onboarding-hint-solid' : variant === 'soft' ? 'onboarding-hint-soft' : 'onboarding-hint'
+    return variant === 'solid' ? 'onboarding-hint-solid' : variant === 'soft' ? 'onboarding-hint-soft' : variant === 'look' ? 'onboarding-look' : 'onboarding-hint'
 }
 
 // trim + lowercase cho so khớp theo tên.

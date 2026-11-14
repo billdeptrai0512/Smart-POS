@@ -54,7 +54,7 @@ interface Props {
     hintTransfer?: boolean
     onHintFill?: () => void // guide: bấm vào 1 ô đang sáng → cả hai ô hiện số gợi ý rồi tự lưu
     hintNet?: boolean
-    hintDiff?: boolean // guide: đã nhập đủ thực thu → cuộn tới thẻ Đối chiếu
+    hintDiff?: boolean // guide: đã nhập đủ thực thu → cuộn tới thẻ Đối chiếu + sáng viền thẻ
     onEditExpense?: (expense: Row) => void
     onEditRestockPayment?: (payment: Row) => void
     printInfo?: { addressName?: string | null; dateLabel?: string; revenue?: number; cups?: number; printerIp?: string | null }
@@ -452,6 +452,7 @@ export default function CashFlowCard({
                 return (
                     <ReportPanel
                         panelRef={diffRef}
+                        className={`${onboardingHintClass(hintDiff, 'look')} [--look-delay:1.3s]`} // sáng sau khi cuộn tới xong (0,4s trễ + 0,9s cuộn)
                         title="Đối chiếu"
                         total={{ label: 'Chênh lệch', value: cashNotEntered ? '—' : `${diff > 0 ? '+' : ''}${formatVND(diff)}`, className: tone }}
                     >

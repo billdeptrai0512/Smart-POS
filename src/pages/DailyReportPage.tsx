@@ -246,11 +246,11 @@ export default function DailyReportPage() {
         if (hintTransfer && !transferInput && cashFlowProgress.expectTransfer) setTransferInput(formatVNDInput(String(cashFlowProgress.expectTransfer)))
     }
     const hintGoToInventory = showOnboardingHints && isCashFlowProgressDone(cashFlowProgress) && !isInventoryProgressDone(inventoryProgress)
-    // Mũi tên "tiến" sáng sau khi thẻ Đối chiếu cuộn xong (CashFlowCard: trễ 0,4s + cuộn 0,9s) rồi ngừng thêm 1s — để khách kịp nhìn thẻ trước.
+    // Thẻ Đối chiếu cuộn tới (CashFlowCard: trễ 0,4s + cuộn 0,9s) và sáng viền ~2s cho khách nhìn (tự tắt); hết thì mũi tên "tiến" mới sáng.
     const [forwardReady, setForwardReady] = useState(false)
     useEffect(() => {
         if (!hintGoToInventory) return
-        const t = setTimeout(() => setForwardReady(true), 2300)
+        const t = setTimeout(() => setForwardReady(true), 3300)
         return () => clearTimeout(t)
     }, [hintGoToInventory])
     // Bước cuối: nhập kho xong quay về đây → cuộn tới Thực chi, mở nhóm Tồn kho (CashFlowCard, ~1,4s); +1,5s
