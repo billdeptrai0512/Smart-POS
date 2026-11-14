@@ -109,8 +109,8 @@ function Notice({ addressId, onRestocked, onOpenIngredient, hint }: Props & { ad
                 <div className="restock-slide-in grid">
                     <div className="min-h-0 overflow-hidden">
                         <NoticeBar
-                            icon={<Package size={15} className="text-primary shrink-0" />}
-                            label="Bổ sung tồn kho"
+                            icon={isGuest ? undefined : <Package size={15} className="text-primary shrink-0" />} // khách demo: dải đọc như lời dẫn của guide
+                            label={isGuest ? 'Cuối cùng, bổ sung tồn kho mới' : 'Bổ sung tồn kho'}
                             count={progress}
                             chevron={false}
                             onClick={openSheet} // chưa xong / lỗi: HubBuyBody tự hiện khung chờ / nút Thử lại
