@@ -253,8 +253,8 @@ export default function DailyReportPage() {
         const t = setTimeout(() => setForwardReady(true), 3300)
         return () => clearTimeout(t)
     }, [hintGoToInventory])
-    // Bước cuối: nhập kho xong quay về đây → cuộn tới Thực chi, mở nhóm Tồn kho (CashFlowCard, ~1,4s); +1,5s
-    // sau tick xong → dải "Hoàn thành" hiện.
+    // Bước cuối: nhập kho xong quay về đây → cuộn tới Thực chi, mở nhóm Tồn kho (CashFlowCard, ~1,4s); 2,4s sau đó
+    // đánh dấu viewedNet → cuộn chậm xuống nút Đăng ký.
     const restockProgress = useOnboardingProgress('restockProgress', { isGuest, addressId })
     const hintNet = isGuest && !!addressId && restockProgress.bought && !restockProgress.viewedNet
     useEffect(() => {
@@ -674,8 +674,8 @@ export default function DailyReportPage() {
         <Link ref={ctaRef} to="/signup" className={`m-3 h-10 px-4 flex items-center rounded-[14px] bg-primary/15 text-text text-[12px] font-black uppercase tracking-wider active:scale-[0.98] transition ${onboardingHintClass(true, 'solid')}`}>
             {/* Cùng kiểu dải guide: chữ gõ dần, canh giữa; bản ẩn giữ chỗ để chữ không trôi khi đang gõ. */}
             <span className="flex-1 relative text-center">
-                <span className="invisible">Đăng ký tài khoản</span>
-                <span className="absolute inset-0"><Typewriter text="Đăng ký tài khoản" /></span>
+                <span className="invisible">Hoàn thành! Tạo quán của bạn</span>
+                <span className="absolute inset-0"><Typewriter text="Hoàn thành! Tạo quán của bạn" /></span>
             </span>
         </Link>
     ) : (
