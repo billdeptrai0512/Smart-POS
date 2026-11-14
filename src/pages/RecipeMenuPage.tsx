@@ -14,7 +14,6 @@ import { normalizeSearchText, normalizeIngredientKey, sortIngredients, getIngred
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
-import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
 import { upsertProductPrice, insertProduct, updateProductSortOrder, updateProductName, removeProductFromAddress, upsertIngredientCost, setIngredientsGroup } from '../services/orderService'
 import { parseVNDInput } from '../utils'
 import { useToast } from '../hooks/useToast'
@@ -93,7 +92,6 @@ export default function RecipeMenuPage() {
     const { products, batchProducts, toppings, recipes, ingredientCosts, ingredientUnits, ingredientGroups, discountPrograms, refreshProducts } = useProducts()
     const { addressId, selectedAddress } = useAddress()
     const { isManager, isAdmin, isGuest } = useAuth()
-    const finalStep = useOnboardingProgress('restockProgress', { isGuest, addressId }).bought // guide bước cuối → sáng ‹ về Tồn kho → Báo cáo
     const canEdit = isManager || isAdmin
 
     // Chỉ Admin được sắp xếp menu mặc định (chưa chọn địa chỉ) — giống rule cũ của saveSortOrder.
@@ -373,7 +371,6 @@ export default function RecipeMenuPage() {
                         triggerClassName="mt-1 gap-1 pl-5 text-[11px] leading-4 text-text/80 uppercase tabular-nums"
                     />
                 ) : undefined}
-                hintBack={isGuest && finalStep}
                 onBack={() => goToMenuStep('recipes', -1, { navigate, backTo, wizard: location.state?.wizard })}
                 onForward={() => goToMenuStep('recipes', +1, { navigate, backTo, wizard: location.state?.wizard })}
                 tabs={RECIPE_TABS}

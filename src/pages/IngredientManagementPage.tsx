@@ -396,7 +396,6 @@ export default function IngredientManagementPage() {
                         onPresetSelect={(p) => guardLeave(() => dateScope.applyPreset(p))}
                     />
                 ) : undefined}
-                hintBack={isGuest && restockProgress.bought} // bước cuối: luôn sáng đường về Báo cáo (CTA đăng ký ở cuối trang đó)
                 onBack={() => guardLeave(() => goToMenuStep('main', -1, { navigate, backTo: location.state?.from || '/history/sales', wizard: location.state?.wizard }))}
                 onForward={() => guardLeave(() => goToMenuStep('main', +1, { navigate, backTo: location.state?.from || '/history/sales', wizard: location.state?.wizard }))}
                 tabs={INGREDIENT_TABS}

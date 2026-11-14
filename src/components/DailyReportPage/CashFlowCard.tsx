@@ -65,13 +65,13 @@ interface Props {
 
 // Cuộn chậm (~0,9s, easeInOut) đưa `el` vào giữa/đầu khung cuộn gần nhất — scrollIntoView({behavior:'smooth'}) của
 // trình duyệt chỉ ~0,25s, khách thấy như giật 1 cái. Bật giảm chuyển động của hệ điều hành → nhảy thẳng.
-function slowScrollTo(el: HTMLElement, block: 'center' | 'start', ms = 900) {
+export function slowScrollTo(el: HTMLElement, block: 'center' | 'start' | 'end', ms = 900) {
     let sc: HTMLElement | null = el.parentElement
     while (sc && sc.scrollHeight <= sc.clientHeight) sc = sc.parentElement
     if (!sc) return
     const s = sc.getBoundingClientRect(), r = el.getBoundingClientRect()
     const from = sc.scrollTop
-    const delta = block === 'center' ? r.top + r.height / 2 - (s.top + s.height / 2) : r.top - s.top
+    const delta = block === 'center' ? r.top + r.height / 2 - (s.top + s.height / 2) : block === 'end' ? sc.scrollHeight - sc.clientHeight - from : r.top - s.top
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { sc.scrollTop = from + delta; return }
     const t0 = performance.now()
     const step = (now: number) => {
@@ -305,6 +305,12 @@ export default function CashFlowCard({
             operating, overhead, nonOp, inventoryBlocks, inventoryTotal,
         }
     }, [payments, expenses, expenseCategories, ingredientConfigs, ingredientGroups, dailyExpense, refillFreeForm])
+    // Guide bước cuối: sau khi cuộn tới Thực chi (400ms trễ + ~0,9s cuộn) → mở các nhóm Tồn kho cho khách thấy từng khoản vừa nhập.
+    useEffect(() => {
+        if (!hintNet) return
+        const t = setTimeout(() => setExpandedCats(prev => ({ ...prev, ...Object.fromEntries(inventoryBlocks.map(b => [`Tồn kho:${b.label}`, true])) })), 1400)
+        return () => clearTimeout(t)
+    }, [hintNet]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // 1. Thực thu / Thực nhận — phân loại tiền mặt theo cờ `cash_phase` lưu trên từng
     //    phiếu NVL (đặt lúc nhập kho): in_shift → cộng Thực thu (dựng lại doanh thu tiền

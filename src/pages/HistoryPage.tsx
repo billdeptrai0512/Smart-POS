@@ -73,7 +73,6 @@ export default function HistoryPage() {
 
     // Onboarding phase 2 "Nhật ký": một việc duy nhất — sang Báo cáo (viewedReport, ghi ở nút "tiến" bên dưới). Chỉ tính khi bước "Bán hàng" đã xong.
     const orderStored = useOnboardingProgress('orderProgress', { isGuest, addressId })
-    const finalStep = useOnboardingProgress('restockProgress', { isGuest, addressId }).bought // bước cuối → sáng đường về Báo cáo
     const orderDone = orderStored.sent >= 1
     const journalProgress = useOnboardingProgress('journalProgress', { isGuest, addressId })
     // Hint: mũi tên "tiến" sang trang Báo cáo (Báo cáo là trang riêng).
@@ -373,7 +372,7 @@ export default function HistoryPage() {
                 canGoForward={canGoForwardPeriod}
                 onBack={() => goToMenuStep(activeTab, -1, { navigate, backTo, wizard: location.state?.wizard })}
                 onForward={handleForward}
-                hintForward={journalHint === 'report' || (isGuest && finalStep)}
+                hintForward={journalHint === 'report'}
                 activeTab={activeTab}
                 onTabSelect={setActiveTab}
                 onOffsetPrev={goOffsetPrev}
