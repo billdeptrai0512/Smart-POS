@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import { Analytics } from '@vercel/analytics/react'
 import { Capacitor } from '@capacitor/core'
 import App from './App'
@@ -54,15 +54,38 @@ if (import.meta.env.PROD) {
   })
 }
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <BrowserRouter>
+// Router dữ liệu chỉ để có View Transitions (crossfade trang cũ → mới, CSS ở index.css).
+// Một route splat render nguyên <App /> nên <Routes> trong App.tsx giữ nguyên.
+const router = createBrowserRouter([{
+  path: '*',
+  element: (
+    <>
       <App />
       {/* Trong Router vì banner chỉ được phép hiện ở /login (xem PWAInstallPrompt) —
           nhưng vẫn mount toàn cục để không bỏ lỡ event beforeinstallprompt, thứ chỉ
           bắn 1 lần ngay sau khi tải trang. */}
       {!isNative && <PWAInstallPrompt />}
-    </BrowserRouter>
+    </>
+  ),
+}])
+
+// ponytail: bật viewTransition tại MỘT điểm thay vì sửa ~50 lời gọi navigate(). Phải vá ở đây vì
+// trong <Routes> lồng, useNavigate/<Link> đi qua navigator.push — thứ làm rơi option viewTransition.
+// Nút lùi/tiến của trình duyệt tự crossfade theo (router nhớ cặp trang đã chuyển cảnh).
+// Chỉ khi đổi pathname (đổi query như ?date= thì không), và không khi đang có chuyển cảnh —
+// tức là lần chuyển hướng của TabGuard/<Navigate> ngay sau đó, tránh chuyển cảnh kép.
+const baseNavigate = router.navigate
+router.navigate = ((to: Parameters<typeof baseNavigate>[0], opts?: object) => {
+  const path = typeof to === 'string' ? to.split(/[?#]/)[0] : to && typeof to === 'object' ? to.pathname : undefined
+  let busy = false
+  try { busy = document.documentElement.matches(':active-view-transition') } catch { /* trình duyệt cũ không có selector này */ }
+  const viewTransition = !!path && path !== router.state.location.pathname && !busy
+  return baseNavigate(to as string, { viewTransition, ...opts })
+}) as typeof baseNavigate
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <RouterProvider router={router} />
     {/* Not rendered at all (not just hidden) khi native — useRegisterSW bên trong
         PWAUpdatePrompt tự đăng ký service worker ngay lúc component được gọi, nên
         early-return bên trong nó vẫn không tránh được side effect này. */}

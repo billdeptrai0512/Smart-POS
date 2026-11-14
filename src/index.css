@@ -502,3 +502,11 @@ body.pwa-banner-open .address-scroll-list {
 /* Dải Bổ sung tồn kho trượt xuống vào chỗ (onboarding, sau khi cuộn xong) */
 @keyframes restock-slide-in { from { opacity: 0; grid-template-rows: 0fr; } to { opacity: 1; grid-template-rows: 1fr; } }
 .restock-slide-in { animation: restock-slide-in 0.45s ease-out both; }
+
+/* Chuyển trang/chuyển tab: crossfade trang cũ → mới (View Transitions, bật ở main.tsx).
+   Phần giống hệt nhau giữa hai trang (header, thanh tab, dải guide) không chớp vì ảnh cũ + mới
+   cộng sáng (plus-lighter mặc định) ra đúng pixel gốc. Trình duyệt không hỗ trợ → cắt cảnh tức thì. */
+::view-transition-group(root) { animation-duration: 180ms; }
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+}
