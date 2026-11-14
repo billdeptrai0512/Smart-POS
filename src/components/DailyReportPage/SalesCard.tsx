@@ -20,6 +20,7 @@ interface Props {
     productStats?: Record<string, ProductStat>
     lineChartData: HourBucket[]
     showChart?: boolean
+    className?: string
 }
 
 // memo: parent (DailyReportPage) re-renders on every cash/inventory keystroke;
@@ -33,6 +34,7 @@ function SalesCard({
     productStats,
     lineChartData,
     showChart = true,
+    className = '',
 }: Props) {
     const [open, setOpen] = useState(() => localStorage.getItem(STORAGE_KEYS.SALES_CARD_COLLAPSED) !== '1')
     const toggleOpen = () => {
@@ -59,7 +61,7 @@ function SalesCard({
         .map(([id, stats]) => ({ id, name: products.find(p => p.id === id)?.name || '', ...stats }))
 
     return (
-        <div className="bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col gap-4">
+        <div className={`bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col gap-4 ${className}`}>
             <button
                 type="button"
                 onClick={toggleOpen}

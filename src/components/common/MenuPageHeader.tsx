@@ -1,12 +1,11 @@
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import type { ReactNode } from 'react'
 import MenuTabsBar, { type MenuTab } from './MenuTabsBar'
-import { onboardingHintClass } from '../../utils/onboardingHint'
 import { ICON_BTN } from './ModalShell'
 
 // Header dùng chung cho /inventory (Tồn kho) và /category (Công thức) — chỉ khác tiêu đề,
-// đơn vị đếm ("loại" vs "món") và bộ tab. subtitle (tuỳ chọn) thay dòng đếm — vd. chọn ngày của Kiểm kê. hintTab/hintBack: onboarding
-// gợi ý bấm tab / mũi tên lùi — xem onboarding/steps.ts.
+// đơn vị đếm ("loại" vs "món") và bộ tab. subtitle (tuỳ chọn) thay dòng đếm — vd. chọn ngày của Kiểm kê. hintTab: onboarding
+// gợi ý bấm tab — xem onboarding/steps.ts.
 interface Props {
     title: string
     count?: number
@@ -18,17 +17,16 @@ interface Props {
     activeTab: string | undefined
     onTabSelect?: (key: string) => void
     hintTab?: string | null
-    hintBack?: boolean
 }
 
-export default function MenuPageHeader({ title, count, unitLabel, subtitle, onBack, onForward, tabs, activeTab, onTabSelect, hintTab, hintBack }: Props) {
+export default function MenuPageHeader({ title, count, unitLabel, subtitle, onBack, onForward, tabs, activeTab, onTabSelect, hintTab }: Props) {
     return (
         <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 px-4 lg:px-8">
             <div className="flex flex-col gap-3 lg:max-w-[1280px] lg:mx-auto">
             <div className="flex items-center gap-3">
                 <button
                     onClick={onBack}
-                    className={`${ICON_BTN} ${onboardingHintClass(hintBack)}`}
+                    className={ICON_BTN}
                     title="Trở về"
                 >
                     <ArrowLeft size={20} strokeWidth={2.5} />

@@ -27,7 +27,7 @@ import { useDateScope } from '../hooks/useDateScope'
 import { goToMenuStep } from '../utils/menuSequence'
 import { useTabRoute } from '../hooks/useTabRoute'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
-import CashFlowCard from '../components/DailyReportPage/CashFlowCard'
+import CashFlowCard, { slowScrollTo } from '../components/DailyReportPage/CashFlowCard'
 import ExpenseEditorModal from '../components/DailyReportPage/ExpenseEditorModal'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
 import { fetchExpenseCategories } from '../services/expenseService'
@@ -246,13 +246,20 @@ export default function DailyReportPage() {
         if (hintTransfer && !transferInput && cashFlowProgress.expectTransfer) setTransferInput(formatVNDInput(String(cashFlowProgress.expectTransfer)))
     }
     const hintGoToInventory = showOnboardingHints && isCashFlowProgressDone(cashFlowProgress) && !isInventoryProgressDone(inventoryProgress)
-    // Bước cuối: nhập kho xong quay về đây → cuộn tới Thực chi (khoản nhập kho vừa chi); ~2,5s
-    // sau tick xong → dải "Hoàn thành" hiện.
+    // Thẻ Đối chiếu cuộn tới (CashFlowCard: trễ 0,4s + cuộn 0,9s) và sáng viền ~2s cho khách nhìn (tự tắt); hết thì mũi tên "tiến" mới sáng.
+    const [forwardReady, setForwardReady] = useState(false)
+    useEffect(() => {
+        if (!hintGoToInventory) return
+        const t = setTimeout(() => setForwardReady(true), 3300)
+        return () => clearTimeout(t)
+    }, [hintGoToInventory])
+    // Bước cuối: nhập kho xong quay về đây → cuộn tới Thực chi, mở nhóm Tồn kho (CashFlowCard, ~1,4s); 2,4s sau đó
+    // đánh dấu viewedNet → cuộn chậm xuống nút Đăng ký.
     const restockProgress = useOnboardingProgress('restockProgress', { isGuest, addressId })
     const hintNet = isGuest && !!addressId && restockProgress.bought && !restockProgress.viewedNet
     useEffect(() => {
         if (!hintNet || !addressId) return
-        const t = setTimeout(() => writeOnboardingState(addressId, { restockProgress: { bought: true, viewedNet: true } }), 2500)
+        const t = setTimeout(() => writeOnboardingState(addressId, { restockProgress: { bought: true, viewedNet: true } }), 2400)
         return () => clearTimeout(t)
     }, [hintNet, addressId])
     // Đã xem Thực chi (lần này sau ~2,5s, hoặc quay lại từ trang khác) → cuộn xuống CTA đăng ký ở cuối trang.
@@ -260,7 +267,7 @@ export default function DailyReportPage() {
     const scrollToCta = isGuest && restockProgress.bought && restockProgress.viewedNet
     useEffect(() => {
         if (!scrollToCta) return
-        const t = setTimeout(() => ctaRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' }), 500)
+        const t = setTimeout(() => ctaRef.current && slowScrollTo(ctaRef.current, 'end', 1200), 500)
         return () => clearTimeout(t)
     }, [scrollToCta])
 
@@ -667,8 +674,8 @@ export default function DailyReportPage() {
         <Link ref={ctaRef} to="/signup" className={`m-3 h-10 px-4 flex items-center rounded-[14px] bg-primary/15 text-text text-[12px] font-black uppercase tracking-wider active:scale-[0.98] transition ${onboardingHintClass(true, 'solid')}`}>
             {/* Cùng kiểu dải guide: chữ gõ dần, canh giữa; bản ẩn giữ chỗ để chữ không trôi khi đang gõ. */}
             <span className="flex-1 relative text-center">
-                <span className="invisible">Đăng ký tài khoản</span>
-                <span className="absolute inset-0"><Typewriter text="Đăng ký tài khoản" /></span>
+                <span className="invisible">Hoàn thành! Tạo quán của bạn</span>
+                <span className="absolute inset-0"><Typewriter text="Hoàn thành! Tạo quán của bạn" /></span>
             </span>
         </Link>
     ) : (
@@ -687,7 +694,7 @@ export default function DailyReportPage() {
                 scope={scope}
                 onBack={() => guardLeave(() => goToMenuStep('report', -1, { navigate, backTo, scopeState: dateNavState, wizard: location.state?.wizard }))}
                 onForward={() => goToMenuStep('report', +1, { navigate, backTo, scopeState: dateNavState, wizard: location.state?.wizard })}
-                hintForward={hintGoToInventory}
+                hintForward={hintGoToInventory && forwardReady}
                 canGoForward={canGoForwardPeriod}
                 onOffsetPrev={() => guardLeave(goOffsetPrev)}
                 onOffsetNext={() => guardLeave(goOffsetNext)}

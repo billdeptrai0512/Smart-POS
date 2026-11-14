@@ -201,6 +201,16 @@ body {
   outline-offset: -3px;
   animation: onboarding-hint 0.9s ease-in-out infinite;
 }
+/* .onboarding-look: "nhìn vào đây" (không phải "bấm") — viền hiện dần, đứng yên, tắt dần; chạy đúng 1 lần, không nhấp nháy. */
+@keyframes onboarding-look {
+  0%, 100% { outline-color: transparent; box-shadow: inset 0 0 0 0 transparent; }
+  15%, 85% { outline-color: var(--color-primary); box-shadow: inset 0 0 28px 2px var(--color-primary-glow); }
+}
+.onboarding-look {
+  outline: 3px solid transparent;
+  outline-offset: -3px;
+  animation: onboarding-look 2s ease-in-out var(--look-delay, 0s) 1 both; /* --look-delay: chờ cuộn tới xong rồi mới sáng */
+}
 @keyframes onboarding-hint-soft {
   0%, 100% { color: var(--color-text-dim); transform: scale(1); }
   50% { color: var(--color-primary); transform: scale(1.7); }

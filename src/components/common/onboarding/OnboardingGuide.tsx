@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import { Lightbulb } from 'lucide-react'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useAddress } from '../../../contexts/AddressContext'
@@ -63,9 +63,6 @@ export default function OnboardingGuide({ onPos = false }: { onPos?: boolean }) 
     const bar = `shrink-0 flex items-center gap-2.5 min-h-10 py-1.5 px-4 text-[14px] w-full max-w-lg mx-auto ${onPos ? `flex-1 min-w-0 !w-auto h-10 !min-h-0 !py-0 rounded-[14px]` : ''}`
 
     const items = STEPS[idx].items(local)
-    const flat = STEPS.flatMap(s => s.items(local))
-    const offerFrom = flat.findIndex(i => i.offerSignup)
-    const showSignup = offerFrom >= 0 && flat.findIndex(i => !i.done) >= offerFrom
     const current = items.find(i => !i.done)
     if (current?.hideBar && !journalOnPos && !pageGuide) return null
     const label = journalOnPos ? 'Tiếp theo, bấm xem nhật ký' : pageGuide ?? current?.label ?? ''
@@ -80,12 +77,6 @@ export default function OnboardingGuide({ onPos = false }: { onPos?: boolean }) 
                 <span className="invisible line-clamp-2">{label}</span>
                 <span className="absolute inset-0 line-clamp-2"><Typewriter text={label} /></span>
             </span>
-            {/* Tới việc có cờ offerSignup (steps.ts) thì cho đăng ký sớm — guide vẫn chạy tiếp. */}
-            {showSignup && !pageGuide && (
-                <Link to="/signup" className="shrink-0 text-[12px] font-black uppercase tracking-wider text-primary border border-primary/60 rounded-full px-3 py-0.5 active:bg-primary/15 transition-colors">
-                    Đăng ký
-                </Link>
-            )}
             {/* Thanh tiến độ mảnh dưới đáy dải: khách thấy còn bao xa. */}
             {!onPos && !pageGuide && <span className="absolute bottom-0 left-0 h-0.5 bg-primary transition-all duration-500" style={{ width: `${(idx / STEPS.length) * 100}%` }} />}
         </div>

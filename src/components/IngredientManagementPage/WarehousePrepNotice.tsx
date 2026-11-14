@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Package, ChevronRight } from 'lucide-react'
 import { useAddress } from '../../contexts/AddressContext'
 import { useAuth } from '../../contexts/AuthContext'
@@ -80,6 +81,9 @@ function Notice({ addressId, onRestocked, onOpenIngredient, hint }: Props & { ad
     const [hinted, setHinted] = useState(false)
     const restockProgress = useOnboardingProgress('restockProgress', { isGuest, addressId })
     const openSheet = () => { setOpen(true); setHinted(true) }
+    const navigate = useNavigate()
+    // Guide bước cuối: nhập kho xong, bấm Đóng → đi thẳng tới Báo cáo xem Thực chi (không bắt khách lần theo ‹ từng trang).
+    const closeSheet = () => { setOpen(false); if (restockProgress.bought && !restockProgress.viewedNet) navigate('/report/cashflow', { state: { wizard: true } }) }
     useEffect(() => { reopenSheet = false }, [])
     const loadDebts = useCallback(
         () => fetchIngredientDebts(addressId).then(d => { debtSnapshots.set(addressId, d); setDebts(d) }).catch(err => console.error('fetchIngredientDebts', err)),
@@ -105,8 +109,8 @@ function Notice({ addressId, onRestocked, onOpenIngredient, hint }: Props & { ad
                 <div className="restock-slide-in grid">
                     <div className="min-h-0 overflow-hidden">
                         <NoticeBar
-                            icon={<Package size={15} className="text-primary shrink-0" />}
-                            label="Bổ sung tồn kho"
+                            icon={isGuest ? undefined : <Package size={15} className="text-primary shrink-0" />} // khách demo: dải đọc như lời dẫn của guide
+                            label={isGuest ? 'Cuối cùng, bổ sung tồn kho mới' : 'Bổ sung tồn kho'}
                             count={progress}
                             chevron={false}
                             onClick={openSheet} // chưa xong / lỗi: HubBuyBody tự hiện khung chờ / nút Thử lại
@@ -123,7 +127,7 @@ function Notice({ addressId, onRestocked, onOpenIngredient, hint }: Props & { ad
                     icon={<span className="shrink-0 text-[16px] font-black text-primary tabular-nums">{progress}</span>}
                     title="Tồn kho cần bổ sung"
                     count=""
-                    onClose={() => setOpen(false)}
+                    onClose={closeSheet}
                     hintClose={restockProgress.bought && !restockProgress.viewedNet} // guide: nhập kho xong → sáng nút Đóng
                 >
                     {debts.length > 0 && (
