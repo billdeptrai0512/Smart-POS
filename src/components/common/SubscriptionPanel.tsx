@@ -326,9 +326,14 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
                         // vàng đứng yên + chữ = lần poll gần nhất lỗi, chưa cập nhật được (chỉ ngoại lệ mới có chữ).
                         connected
                             ? (
-                                <span role="status" aria-label="Đang chờ chuyển khoản" title="Đang chờ chuyển khoản" className="relative flex w-2.5 h-2.5 mr-1.5">
-                                    <span className="absolute inset-0 rounded-full bg-success opacity-75 animate-ping" />
-                                    <span className="relative w-2.5 h-2.5 rounded-full bg-success ring-4 ring-success/20" />
+                                // Có chữ như nhánh "Mất kết nối": khách hiểu trang đang nghe, chuyển xong không phải bấm/gửi gì thêm.
+                                <span role="status" className="flex items-center gap-2 mr-1.5 text-[10px] font-bold text-text-secondary">
+                                    {/* ponytail: màn < 340px không đủ chỗ cạnh tiêu đề → ẩn chữ, còn chấm xanh như trước. */}
+                                    <span className="max-[339px]:hidden">Đang chờ chuyển khoản</span>
+                                    <span className="relative flex w-2.5 h-2.5">
+                                        <span className="absolute inset-0 rounded-full bg-success opacity-75 animate-ping" />
+                                        <span className="relative w-2.5 h-2.5 rounded-full bg-success ring-4 ring-success/20" />
+                                    </span>
                                 </span>
                             )
                             : (
@@ -375,8 +380,8 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
                             <span className="text-[11px] text-text-dim">
                                 ≈ {formatVND(Math.round(total / 30))} / ngày
                             </span>
-                            {/* Cam kết hoàn tiền — đường yêu cầu là mục "Liên hệ hỗ trợ" ngay bên dưới, xử lý tay. */}
-                            {firstPurchase && <span className="mt-1.5 text-[11px] font-bold text-success">Hoàn tiền trong 7 ngày nếu không phù hợp</span>}
+                            {/* Cam kết hoàn tiền — pill trắng mờ, cùng dáng pill trạng thái trong sheet chọn địa chỉ (không xanh: trùng chấm trạng thái; không cam: màu của nút bấm). Đường yêu cầu là mục "Liên hệ hỗ trợ", xử lý tay. */}
+                            {firstPurchase && <span className="mt-2 px-2.5 py-1 rounded-full bg-text/10 text-[10px] font-bold uppercase tracking-wide text-text">Hoàn tiền trong 7 ngày đầu</span>}
                         </div>
                     )}
 
