@@ -6,7 +6,8 @@ import ErrorBanner from '../components/common/ErrorBanner'
 import FloatingLabelInput from '../components/common/FloatingLabelInput'
 import PasswordInput from '../components/common/PasswordInput'
 import PasswordChecklist from '../components/common/PasswordChecklist'
-import { capitalizeWords } from '../utils'
+import { capitalizeWords, formatVND } from '../utils'
+import { PLAN } from '../constants/monetization'
 import { errorMessage } from '../utils/errorMessage'
 import { isStrongPassword } from '../utils/password'
 import { trackSignupPageVisit } from '../services/onboardingFunnelService'
@@ -75,6 +76,9 @@ export default function SignUpPage() {
             <div className="w-full max-w-sm">
                 <div className="text-center mb-4">
                     <h1 className="text-2xl font-black text-text mt-3">Đăng ký</h1>
+                    {/* Báo giá TRƯỚC khi điền form — khỏi bất ngờ ở trang gói ngay sau đăng ký.
+                        ponytail: hiện cứng, không theo cờ thu phí (trang này đọc cờ bằng anon → luôn "tắt", xem handleSubmit). Tắt thu phí lâu dài thì gỡ dòng này. */}
+                    <p className="mt-1 text-[12px] text-text-secondary"><span className="font-bold text-text">{formatVND(PLAN.price)}</span> / tháng / chi nhánh</p>
 
                 </div>
 

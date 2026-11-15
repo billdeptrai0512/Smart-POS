@@ -276,7 +276,7 @@ export async function fetchSubscriptionStatuses(addressIds: UUID[]): Promise<{ s
     if (isGuest() || !addressIds.length) return { statusMap: {}, rowsMap: {} }
     const { data, error } = await supabase
         .from('address_subscriptions')
-        .select('address_id, valid_from, valid_to, note')
+        .select('address_id, valid_from, valid_to, note, amount_paid')
         .in('address_id', addressIds)
     if (error) {
         console.error('fetchSubscriptionStatuses error:', error)

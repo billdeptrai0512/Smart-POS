@@ -65,25 +65,33 @@ export default function OnboardingGuide({ onPos = false }: { onPos?: boolean }) 
     const pageGuide = onJournal ? (bridge || idx === 3 ? 'Sau khi bán xong, bấm sang báo cáo' : 'Bên dưới là thống kê bán hàng')
         : onReport ? (idx === 3 ? 'Nhập tiền mặt và chuyển khoản' : idx === 4 ? (bridge ? 'Sau đó, kiểm kê tồn nguyên vật liệu' : 'Đối chiếu chênh lệch với doanh thu') : null)
         : pathname.startsWith('/inventory') && !pathname.startsWith('/inventory/stocking') && idx === 4 ? 'Nhập tồn cà phê cuối kỳ' : null // không "Sau đó": câu cầu nối ở /report vừa mở đầu bằng nó
-    if ((onPos && idx !== 1 && !journalOnPos) || (onHistory && idx === 1) || !isGuest || !addressId || idx === -1) return null
+    const gone = (onPos && idx !== 1 && !journalOnPos) || (onHistory && idx === 1) || !isGuest || !addressId || idx === -1
+    const current = gone ? undefined : STEPS[idx].items(local).find(i => !i.done)
+    const hidden = gone || (current?.hideBar && !journalOnPos && !pageGuide)
+    const label = journalOnPos ? 'Tiếp theo, bấm xem nhật ký' : pageGuide ?? current?.label ?? ''
+    // Nhớ câu cuối đã hiện: dải ẩn đi thì thu chiều cao dần (bên dưới) thay vì mất hẳn — khỏi giật trang 40px (vd. xong Kiểm kê → dải biến mất).
+    const [lastLabel, setLastLabel] = useState('')
+    if (!hidden && label !== lastLabel) setLastLabel(label)
+    if (hidden && (onPos || !lastLabel)) return null
 
     // Nền cam nhạt để tách hẳn khỏi header (bg-surface) ngay bên dưới — cùng
     // màu nền với header thì dải bị đọc như 1 phần header và dễ bị lướt qua.
     // max-w-lg mx-auto w-full: cùng bề rộng khung trang (các trang bọc nội dung bằng max-w-lg mx-auto) —
     // màn rộng thì dải không tràn ra ngoài header.
     const bar = `shrink-0 flex items-center gap-2.5 min-h-10 py-1.5 px-4 text-[14px] w-full max-w-lg mx-auto ${onPos ? `flex-1 min-w-0 !w-auto h-10 !min-h-0 !py-0 rounded-[14px]` : ''}`
-
-    const items = STEPS[idx].items(local)
-    const current = items.find(i => !i.done)
-    if (current?.hideBar && !journalOnPos && !pageGuide) return null
-    const label = journalOnPos ? 'Tiếp theo, bấm xem nhật ký' : pageGuide ?? current?.label ?? ''
-    return (
+    const content = (
         <div className={`${bar} relative bg-primary/15 text-text`}>
             {/* Chữ gõ dần (Typewriter); bản ẩn cùng nội dung giữ chỗ để dải không đổi chiều cao lúc đang gõ. */}
             <span className="flex-1 relative uppercase text-center tracking-wider text-[12px] font-black">
-                <span className="invisible line-clamp-2">{label}</span>
-                <span className="absolute inset-0 line-clamp-2"><Typewriter text={label} /></span>
+                <span className="invisible line-clamp-2">{lastLabel}</span>
+                <span className="absolute inset-0 line-clamp-2"><Typewriter text={lastLabel} /></span>
             </span>
+        </div>
+    )
+    if (onPos) return content
+    return (
+        <div className={`grid transition-[grid-template-rows] duration-300 ${hidden ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]'}`}>
+            <div className="min-h-0 overflow-hidden">{content}</div>
         </div>
     )
 }
