@@ -19,7 +19,7 @@ import { ingredientLabel, getIngredientUnit } from '../utils/ingredients'
 import { readOnboardingState, writeOnboardingState, DEFAULT_ONBOARDING_STATE, isCashFlowProgressDone, isInventoryProgressDone } from '../utils/onboardingStorage'
 import { useOnboardingProgressPersist } from '../hooks/useOnboardingProgressPersist'
 import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
-import { onboardingHintClass } from '../utils/onboardingHint'
+import { onboardingHintClass, REPORT_FORWARD_MS } from '../utils/onboardingHint'
 import Typewriter from '../components/common/Typewriter'
 import { dateStringVN, isSameDayVN } from '../utils/dateVN'
 import { overlayProduction } from '../utils/production'
@@ -250,7 +250,7 @@ export default function DailyReportPage() {
     const [forwardReady, setForwardReady] = useState(false)
     useEffect(() => {
         if (!hintGoToInventory) return
-        const t = setTimeout(() => setForwardReady(true), 3300)
+        const t = setTimeout(() => setForwardReady(true), REPORT_FORWARD_MS)
         return () => clearTimeout(t)
     }, [hintGoToInventory])
     // Bước cuối: nhập kho xong quay về đây → cuộn tới Thực chi, mở nhóm Tồn kho (CashFlowCard, ~1,4s); 2,4s sau đó
@@ -674,8 +674,8 @@ export default function DailyReportPage() {
         <Link ref={ctaRef} to="/signup" className={`m-3 h-10 px-4 flex items-center rounded-[14px] bg-primary/15 text-text text-[12px] font-black uppercase tracking-wider active:scale-[0.98] transition ${onboardingHintClass(true, 'solid')}`}>
             {/* Cùng kiểu dải guide: chữ gõ dần, canh giữa; bản ẩn giữ chỗ để chữ không trôi khi đang gõ. */}
             <span className="flex-1 relative text-center">
-                <span className="invisible">Hoàn thành! Tạo quán của bạn</span>
-                <span className="absolute inset-0"><Typewriter text="Hoàn thành! Tạo quán của bạn" /></span>
+                <span className="invisible">Bây giờ, tạo quán của bạn</span>
+                <span className="absolute inset-0"><Typewriter text="Bây giờ, tạo quán của bạn" /></span>
             </span>
         </Link>
     ) : (

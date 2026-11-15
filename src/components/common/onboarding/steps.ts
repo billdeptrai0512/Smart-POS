@@ -1,7 +1,8 @@
 import { isInventoryProgressDone, type OnboardingState } from '../../../utils/onboardingStorage'
 
-// hideBar: tới việc này thì ẩn dải guide — nút cần bấm đã sáng, thêm chữ chỉ rối.
-export interface StepItem { label: string; done: boolean; hideBar?: boolean }
+// hideBar: tới việc này thì ẩn dải guide — nút cần bấm đã sáng, thêm chữ chỉ rối. Việc hideBar không có label:
+// chữ dẫn của nó (nếu có) nằm ở pageGuide / journalOnPos trong OnboardingGuide.tsx.
+export interface StepItem { label?: string; done: boolean; hideBar?: boolean }
 export interface Step { title: string; items: (ctx: OnboardingState) => StepItem[] }
 
 // Kịch bản "một ngày của quán" (6 bước): đầu ca lấy hàng từ kho ra quầy → bán 1 đơn (app tự sinh cả ngày bán
@@ -27,13 +28,13 @@ export const STEPS: Step[] = [
     {
         title: 'Nhật ký',
         items: ({ journalProgress: j }) => [
-            { label: 'Sang báo cáo kết ca', done: j.viewedReport, hideBar: true },
+            { done: j.viewedReport, hideBar: true }, // bấm sang báo cáo kết ca
         ],
     },
     {
         title: 'Kết ca',
         items: ({ cashFlowProgress: c }) => [
-            { label: 'Bấm ô Tiền mặt hoặc Chuyển khoản', done: c.cash && c.transfer, hideBar: true },
+            { done: c.cash && c.transfer, hideBar: true }, // bấm ô Tiền mặt và Chuyển khoản
         ],
     },
     {
@@ -41,14 +42,14 @@ export const STEPS: Step[] = [
         items: ({ inventoryProgress: i }) => [
             // Chi tiết Sử dụng + Lý thuyết còn đã hiện sẵn trên dòng, khách chỉ việc đếm → nhập Cuối kỳ. Số gợi ý nhập: `suggest` (tab Kiểm kê tính theo mấy ly pha
             // không bấm bill), chưa có thì Lý thuyết − 20g; rời ô là tự lưu.
-            { label: 'Nhập Cuối kỳ cà phê', done: isInventoryProgressDone(i), hideBar: true },
+            { done: isInventoryProgressDone(i), hideBar: true }, // nhập Cuối kỳ cà phê
         ],
     },
     {
         title: 'Bổ sung tồn kho',
         items: ({ restockProgress: r }) => [
             // Xong là Đóng sheet → app tự đưa về Báo cáo xem Thực chi (WarehousePrepNotice), không còn là việc của khách.
-            { label: 'Nhập kho thử 1 món, app nhập nốt phần còn lại', done: r.bought, hideBar: true },
+            { done: r.bought, hideBar: true }, // nhập kho thử 1 món, app nhập nốt phần còn lại
         ],
     },
 ]

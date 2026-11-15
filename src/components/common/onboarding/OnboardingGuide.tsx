@@ -1,20 +1,19 @@
 import { useState, useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
-import { Lightbulb } from 'lucide-react'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useAddress } from '../../../contexts/AddressContext'
 import { trackGuestOnboardingStage } from '../../../services/onboardingFunnelService'
 import { readOnboardingState, DEFAULT_ONBOARDING_STATE, ONBOARDING_EVENT } from '../../../utils/onboardingStorage'
+import { JOURNAL_FORWARD_MS, REPORT_FORWARD_MS } from '../../../utils/onboardingHint'
 import Typewriter from '../Typewriter'
 import { STEPS } from './steps'
 
-// Hướng dẫn "Bắt đầu bán hàng" — 1 dải IN-FLOW trên đỉnh layout (App.tsx OnboardingLayout đặt
+// Hướng dẫn "một ngày của quán" — 1 dải IN-FLOW trên đỉnh layout (App.tsx OnboardingLayout đặt
 // nó trên <Outlet/>), chiếm chỗ thật nên không đè lên gì và cùng 1 chỗ trên mọi trang — khỏi né
-// thanh đáy riêng của từng trang (Tạo đơn, footer tab, FAB). Chỉ ghi việc cần làm ngay + số việc đã xong
-// trên tổng (done/total); không liệt kê cả checklist vì mỗi việc đã có spotlight nhấp nháy ngay trên
-// nút/món cần bấm. Hết các bước → dải thành nút đăng ký tài khoản thật (guest data chỉ sống trong
-// localStorage).
-// onPos: POS chỉ hiện dải ở bước 2 (Bán hàng: "KOPHiN xin chào") — bước 1 pill "Bạn cần chuẩn bị" đã tự sáng, từ bước 3 trở đi các nút cần bấm tự sáng. Pill nằm chung hàng với pill bàn (không số bước, không thanh tiến độ).
+// thanh đáy riêng của từng trang (Tạo đơn, footer tab, FAB). Chỉ 1 câu dẫn, căn giữa, chữ gõ dần — không
+// số bước/thanh tiến độ; mỗi việc đã có spotlight ngay trên nút/món cần bấm. Hết các bước → không dải:
+// CTA đăng ký nằm cuối Báo cáo (DailyReportPage). Từ bước Nhật ký trở đi chữ dẫn do pageGuide quyết định theo trang.
+// onPos: POS chỉ hiện dải ở bước 2 (Bán hàng: "Chạm vào món rồi bấm tạo đơn") và bước Nhật ký — bước 1 pill "Bạn cần chuẩn bị" đã tự sáng. Pill nằm chung hàng với pill bàn.
 export default function OnboardingGuide({ onPos = false }: { onPos?: boolean }) {
     const { isGuest } = useAuth()
     const { addressId } = useAddress()
@@ -50,13 +49,25 @@ export default function OnboardingGuide({ onPos = false }: { onPos?: boolean }) 
     // idx -1 = xong hết: không dải — CTA đăng ký nằm cuối Báo cáo (DailyReportPage), các trang khác sáng đường về đó.
     // Trên POS dải còn hiện ở bước Nhật ký (idx 2): thẻ Nhật ký đang sáng, dải nói rõ phải bấm vào đó.
     const journalOnPos = onPos && idx === 2
-    // Dải theo trang (căn giữa, không icon/số bước/thanh tiến độ): Nhật ký giải thích số liệu; Kết ca nói đây là lúc đối chiếu tiền — nút cần bấm tự sáng.
-    const pageGuide = onHistory && idx === 2 && !pathname.endsWith('/expense') ? 'Bên dưới là thống kê bán hàng'
-        : pathname.startsWith('/report') && !pathname.endsWith('/revenue') ? (idx === 3 ? 'Cuối ca, đếm tiền mặt và chuyển khoản' : idx === 4 ? 'Đối chiếu chênh lệch với doanh thu' : null)
-        : pathname.startsWith('/inventory') && !pathname.startsWith('/inventory/stocking') && idx === 4 ? 'Sau đó, nhập tồn cà phê cuối kỳ' : null
+    // Chữ dẫn theo trang — nút cần bấm tự sáng. Nhật ký giải thích số liệu; Kết ca nói đây là lúc đếm/đối chiếu tiền.
+    // Nhật ký và Kết ca (Đối chiếu) đều: chữ giải thích → (cùng lúc mũi tên "tiến" sáng) câu cầu nối sang bước sau.
+    // idx 3 vẫn ở /history = lúc bấm mũi tên (viewedReport ghi trước khi chuyển trang): giữ dải, không thì nó biến mất rồi hiện lại ở /report → trang nhảy 40px.
+    const onJournal = onHistory && (idx === 2 || idx === 3) && !pathname.endsWith('/expense')
+    const onReport = pathname.startsWith('/report') && !pathname.endsWith('/revenue')
+    const bridgeFrom = onJournal ? JOURNAL_FORWARD_MS : onReport && idx === 4 ? REPORT_FORWARD_MS : 0
+    const [bridge, setBridge] = useState(false)
+    useEffect(() => {
+        setBridge(false)
+        if (!bridgeFrom) return
+        const t = setTimeout(() => setBridge(true), bridgeFrom)
+        return () => clearTimeout(t)
+    }, [bridgeFrom])
+    const pageGuide = onJournal ? (bridge || idx === 3 ? 'Sau khi bán xong, bấm sang báo cáo' : 'Bên dưới là thống kê bán hàng')
+        : onReport ? (idx === 3 ? 'Nhập tiền mặt và chuyển khoản' : idx === 4 ? (bridge ? 'Sau đó, kiểm kê tồn nguyên vật liệu' : 'Đối chiếu chênh lệch với doanh thu') : null)
+        : pathname.startsWith('/inventory') && !pathname.startsWith('/inventory/stocking') && idx === 4 ? 'Nhập tồn cà phê cuối kỳ' : null // không "Sau đó": câu cầu nối ở /report vừa mở đầu bằng nó
     if ((onPos && idx !== 1 && !journalOnPos) || (onHistory && idx === 1) || !isGuest || !addressId || idx === -1) return null
 
-    // Nền cam nhạt + icon để tách hẳn khỏi header (bg-surface) ngay bên dưới — cùng
+    // Nền cam nhạt để tách hẳn khỏi header (bg-surface) ngay bên dưới — cùng
     // màu nền với header thì dải bị đọc như 1 phần header và dễ bị lướt qua.
     // max-w-lg mx-auto w-full: cùng bề rộng khung trang (các trang bọc nội dung bằng max-w-lg mx-auto) —
     // màn rộng thì dải không tràn ra ngoài header.
@@ -68,17 +79,11 @@ export default function OnboardingGuide({ onPos = false }: { onPos?: boolean }) 
     const label = journalOnPos ? 'Tiếp theo, bấm xem nhật ký' : pageGuide ?? current?.label ?? ''
     return (
         <div className={`${bar} relative bg-primary/15 text-text`}>
-            {!onPos && !pageGuide && <>
-                <span className="shrink-0 grid place-items-center size-6 rounded-full bg-primary/20 text-primary"><Lightbulb size={14} /></span>
-                <span className="shrink-0 text-[11px] font-black tabular-nums text-primary">{idx + 1}/{STEPS.length}</span>
-            </>}
             {/* Chữ gõ dần (Typewriter); bản ẩn cùng nội dung giữ chỗ để dải không đổi chiều cao lúc đang gõ. */}
-            <span className={`flex-1 relative uppercase ${onPos || pageGuide ? 'text-center' : ''} tracking-wider text-[12px] font-black`}>
+            <span className="flex-1 relative uppercase text-center tracking-wider text-[12px] font-black">
                 <span className="invisible line-clamp-2">{label}</span>
                 <span className="absolute inset-0 line-clamp-2"><Typewriter text={label} /></span>
             </span>
-            {/* Thanh tiến độ mảnh dưới đáy dải: khách thấy còn bao xa. */}
-            {!onPos && !pageGuide && <span className="absolute bottom-0 left-0 h-0.5 bg-primary transition-all duration-500" style={{ width: `${(idx / STEPS.length) * 100}%` }} />}
         </div>
     )
 }
