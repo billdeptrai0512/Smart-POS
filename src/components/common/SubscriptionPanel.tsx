@@ -70,6 +70,9 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
         addresses.map(a => [a.id, computeSubscriptionStatus(subscriptionRowsMap[a.id])])
     ), [addresses, subscriptionRowsMap])
     const accessLoaded = !subscriptionLoading
+    // Cam kết hoàn tiền chỉ cho lần trả tiền ĐẦU TIÊN của tài khoản: chưa địa chỉ nào từng có dòng amount_paid > 0
+    // (gói tặng/ân hạn 0đ không tính). Mở thêm chi nhánh hay gia hạn thì không hiện.
+    const firstPurchase = accessLoaded && !Object.values(subscriptionRowsMap).flat().some(r => r.amount_paid > 0)
 
     // Xác nhận thanh toán: hiện panel thành công, user tự bấm "Xong" (không auto-redirect).
     // Làm tươi rows/status dùng chung (badge từng card + thứ tự sort + panel này) —
@@ -372,6 +375,8 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
                             <span className="text-[11px] text-text-dim">
                                 ≈ {formatVND(Math.round(total / 30))} / ngày
                             </span>
+                            {/* Cam kết hoàn tiền — đường yêu cầu là mục "Liên hệ hỗ trợ" ngay bên dưới, xử lý tay. */}
+                            {firstPurchase && <span className="mt-1.5 text-[11px] font-bold text-success">Hoàn tiền trong 7 ngày nếu không phù hợp</span>}
                         </div>
                     )}
 
