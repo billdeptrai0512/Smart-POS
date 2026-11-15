@@ -21,7 +21,7 @@ import { readOnboardingState, writeOnboardingState } from '../utils/onboardingSt
 import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
 import OrdersList from '../components/HistoryPage/OrdersList'
-import { onboardingHintClass } from '../utils/onboardingHint'
+import { onboardingHintClass, JOURNAL_FORWARD_MS } from '../utils/onboardingHint'
 import SalesCard from '../components/DailyReportPage/SalesCard'
 import ExpensePanel from '../components/HistoryPage/ExpensePanel'
 import AddExpenseModal from '../components/HistoryPage/AddExpenseModal'
@@ -82,7 +82,7 @@ export default function HistoryPage() {
     const [forwardReady, setForwardReady] = useState(false)
     useEffect(() => {
         if (journalHint !== 'report') return
-        const t = setTimeout(() => setForwardReady(true), 2800)
+        const t = setTimeout(() => setForwardReady(true), JOURNAL_FORWARD_MS)
         return () => clearTimeout(t)
     }, [journalHint])
 
