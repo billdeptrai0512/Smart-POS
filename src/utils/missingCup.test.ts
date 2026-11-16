@@ -94,6 +94,45 @@ describe('phân rã từng ly (cups)', () => {
     })
 })
 
+// Ngày 16/11/2026: 11 ly hụt, két dư 237k, sữa tươi hụt 164ml. Cappuchino khớp hao hụt nhất nhưng 14 ngày không ai gọi → bản cũ nêu
+// 3 ly Cappuchino (320ml sữa tươi). Món chưa bán ly nào không được nêu tên; ly không món bán chạy nào đỡ nổi là "chưa rõ món".
+describe('độ phổ biến món', () => {
+    const row = (product_id: string, ingredient: string, amount: number) => ({ product_id, ingredient, amount })
+    const shop = {
+            products: [{ id: 'cap', name: 'Cappuchino', price: 21000, is_active: true }, { id: 'ame', name: 'Americano', price: 14000, is_active: true }, { id: 'tra', name: 'Trà Đá', price: 0, is_active: true }],
+            recipes: [
+                row('cap', 'cà_phê', 17), row('cap', 'sữa_tươi', 80), row('cap', 'ly_350ml', 1), row('cap', 'nắp', 1),
+                row('ame', 'cà_phê', 17), row('ame', 'ly_350ml', 1), row('ame', 'nắp', 1),
+                row('tra', 'ly_350ml', 1), row('tra', 'nắp', 1),
+            ],
+            productExtras: { cap: [{ id: 'CL', name: 'Lớn', price: 6000 }], ame: [{ id: 'AL', name: 'Lớn', price: 6000 }] },
+            extraIngredients: {
+                CL: [{ ingredient: 'sữa_tươi', amount: 40 }, { ingredient: 'ly_350ml', amount: -1 }, { ingredient: 'ly_470ml', amount: 1 }],
+                AL: [{ ingredient: 'cà_phê', amount: 8 }, { ingredient: 'ly_350ml', amount: -1 }, { ingredient: 'ly_470ml', amount: 1 }],
+            },
+            ingredientsList: ['cà_phê', 'sữa_tươi', 'ly_350ml', 'ly_470ml', 'nắp'].map(ingredient => ({ ingredient, unit_cost: 100 })),
+            soldByVariant: { 'ame|': 100, 'ame|AL': 30, 'tra|': 200 },
+    }
+    it('Cappuchino 0 ly/14 ngày → không nêu tên dù khớp sữa tươi; vẫn đủ 11 ly', () => {
+        const [c] = findMissingCupCandidates({
+            ...shop, haoHutByIngredient: { cà_phê: -106, sữa_tươi: -164, ly_350ml: -7, ly_470ml: -4, nắp: -8 },
+            noiseByIngredient: { cà_phê: 147, sữa_tươi: 150 }, cashDiff: 237000,
+        } as never)
+        expect(c.cups.length).toBeGreaterThan(0)
+        expect(c.cups.some(cup => cup.name.includes('Cappuchino'))).toBe(false)
+        expect(c.cups.length + c.restCups).toBe(11)
+    })
+    it('món 0đ có người gọi (Trà Đá miễn phí) vẫn được nêu tên: mất ly + nắp mà không mất nguyên liệu', () => {
+        const [c] = findMissingCupCandidates({ ...shop, haoHutByIngredient: { cà_phê: -34, sữa_tươi: 0, ly_350ml: -3, ly_470ml: 0, nắp: -3 } } as never)
+        expect(c.cups.map(cup => cup.name).sort()).toEqual(['Americano', 'Americano', 'Trà Đá'])
+    })
+    it('két dư → món 0đ không được nêu tên (không giải thích được đồng nào), ly đó về "chưa rõ món"', () => {
+        const [c] = findMissingCupCandidates({ ...shop, haoHutByIngredient: { cà_phê: -34, sữa_tươi: 0, ly_350ml: -3, ly_470ml: 0, nắp: -3 }, cashDiff: 28000 } as never)
+        expect(c.cups.map(cup => cup.name)).toEqual(['Americano', 'Americano'])
+        expect(c.restCups).toBe(1)
+    })
+})
+
 describe('computeIngredientNoise', () => {
     it('1 ngày bán thiếu thật không làm phồng độ nhiễu (median/MAD)', () => {
         const days = Object.fromEntries([-1, 0, 1, 0, -1, 1, -200].map((v, i) => [`d${i}`, { cà_phê: v }]))

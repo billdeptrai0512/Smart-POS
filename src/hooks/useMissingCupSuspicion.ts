@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
     attachRepeatHistory, buildDailyHaoHutMap, buildDayCandidateSets,
-    computeHaoHut, computeIngredientNoise, findMissingCupCandidates,
+    computeHaoHut, computeIngredientNoise, countSoldByVariant, findMissingCupCandidates,
 } from '../utils/inventory'
 import { lookupByLabel } from '../utils/ingredients'
 import { dedupeShiftClosingsByDay } from '../utils/reportStats'
@@ -90,6 +90,9 @@ export function useMissingCupSuspicion({
     // cứng dùng chung mọi nguyên liệu (xem computeIngredientNoise).
     const ingredientNoise = useMemo(() => computeIngredientNoise(historicalDailyHaoHut), [historicalDailyHaoHut])
 
+    // Độ phổ biến từng biến thể (món + extra) trong 14 ngày: món ít người gọi khó là ly bị bấm thiếu dù công thức khớp hao hụt.
+    const soldByVariant = useMemo(() => countSoldByVariant(history.orders, extraIngredients), [history, extraIngredients])
+
     // 2 memo tách rời có chủ đích: phần quét 14 ngày lịch sử KHÔNG phụ thuộc ô đang gõ,
     // nên nó đứng yên suốt lúc nhân viên kiểm kê. Gộp 1 memo thì mỗi phím gõ quét lại
     // cả 14 ngày (haoHutByIngredient đổi theo từng keystroke) — lag thấy rõ trên máy yếu.
@@ -102,7 +105,7 @@ export function useMissingCupSuspicion({
     // công thức mỗi phím gõ rồi vứt kết quả đi.
     return useMemo(() => {
         if (!enabled) return NO_CANDIDATES
-        const today = findMissingCupCandidates({ ingredientsList, haoHutByIngredient, recipes, products, noiseByIngredient: ingredientNoise, extraIngredients, productExtras, cashDiff })
+        const today = findMissingCupCandidates({ ingredientsList, haoHutByIngredient, recipes, products, noiseByIngredient: ingredientNoise, extraIngredients, productExtras, cashDiff, soldByVariant })
         return attachRepeatHistory(today, dayCandidateSets)
-    }, [enabled, ingredientsList, haoHutByIngredient, recipes, products, ingredientNoise, extraIngredients, productExtras, cashDiff, dayCandidateSets])
+    }, [enabled, ingredientsList, haoHutByIngredient, recipes, products, ingredientNoise, extraIngredients, productExtras, cashDiff, dayCandidateSets, soldByVariant])
 }
