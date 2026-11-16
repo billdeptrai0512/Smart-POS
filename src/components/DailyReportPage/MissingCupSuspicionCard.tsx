@@ -6,14 +6,14 @@ import { formatVND } from '../../utils'
 import type { RepeatedMissingCupCandidate } from '../../utils/inventory'
 
 // PROTOTYPE — "có thể pha bán nhưng chưa bấm bill". Cùng kiểu thẻ Tổng hao hụt ngay trên (tiêu đề + tổng ở đầu, vạch, các dòng).
-// Mỗi ly = tên món + giá (phải), công thức "17g cà phê + 36ml sữa đặc + ly + nắp" (dưới) — cộng các ly ra đúng hao hụt hôm nay
-// (phân rã ở findMissingCupCandidates, có thể lẫn nhiều món). Cuối thẻ: giá bán cả N ly so với tiền két lệch (≈).
+// Mỗi dòng = (N×) tên món + giá (phải), công thức 1 ly "17g cà phê + 36ml sữa đặc + ly + nắp" (dưới) — các ly nêu tên nằm gọn trong
+// hao hụt hôm nay (phân rã ở findMissingCupCandidates, có thể lẫn nhiều món). Cuối thẻ: két dư ÷ số ly hụt = giá 1 ly, so khoảng giá menu.
 // Tự ẩn khi không có ứng viên đủ tin cậy.
 // cash = { diff: Thực thu − Doanh thu hôm nay (thẻ "So sánh" ở Báo cáo), system: Doanh thu hệ thống }; null = chưa nhập thực thu.
 // Gợi ý để soi lại, KHÔNG phải kết luận.
 type Cash = { diff: number; system: number }
 
-const MAX_CUPS = 6
+const MAX_LINES = 6
 const fmtN = (x: number) => Math.round(x * 10) / 10
 
 export default function MissingCupSuspicionCard({ candidates = [], cash = null }: { candidates?: RepeatedMissingCupCandidate[]; cash?: Cash | null }) {
@@ -25,10 +25,16 @@ export default function MissingCupSuspicionCard({ candidates = [], cash = null }
     const restCups = c.restCups // ly có hụt nhưng không món nào đỡ nổi phần hao hụt còn lại
     const n = c.cups.length + restCups
     if (!n) return null
-    // Giá bán của chính các ly đã tách (mỗi món một giá); ly chưa rõ món tính theo giá món chính của nghi vấn.
-    const restPrice = restCups * c.estimatedRevenue / c.estimatedCups
-    const total = c.cups.reduce((s, cup) => s + cup.price, 0) + restPrice
-    const cashOk = !!cash && cash.diff > 0 && Math.abs(cash.diff - total) <= Math.max(5000, total * 0.2) // ≈: tiền két ít khi khớp 100% (làm tròn, bill lẻ, tip)
+    // Ly trùng món + giá gộp 1 dòng "2× Cappuchino (Lớn)".
+    const groups: { cup: typeof c.cups[number]; count: number }[] = []
+    for (const cup of c.cups) {
+        const g = groups.find(x => x.cup.name === cup.name && x.cup.price === cup.price)
+        if (g) g.count++; else groups.push({ cup, count: 1 })
+    }
+    // Két là bằng chứng ĐỘC LẬP với kho: két dư ÷ số ly hụt ra giá 1 ly, nằm trong khoảng giá menu thì khớp. Không so với tổng giá
+    // các ly đã nêu tên — chúng được chọn để vừa két nên so vậy là tự khớp với chính mình.
+    const perCup = cash && cash.diff > 0 ? cash.diff / n : null
+    const cashOk = perCup != null && perCup >= c.priceRange[0] && perCup <= c.priceRange[1]
     const isCup = (ingredient: string) => /^(ly|nắp)/.test(ingredientLabel(ingredient).toLowerCase())
     // Viết gọn: ly/nắp 1 cái thì chỉ ghi tên ("ly + nắp"), còn lại "17g cà phê" (đơn vị ngắn dính liền số).
     const term = ({ ingredient, amount }: { ingredient: string; amount: number }) => {
@@ -40,11 +46,11 @@ export default function MissingCupSuspicionCard({ candidates = [], cash = null }
     // Thứ tự đọc: cà phê → nguyên liệu khác → ly/nắp.
     const rank = (ingredient: string) => isCup(ingredient) ? 2 : /^cà phê/.test(ingredientLabel(ingredient).toLowerCase()) ? 0 : 1
     // Một ly = 2 dòng: tên món (nổi) rồi công thức "17g cà phê + 36ml sữa đặc + ly + nắp" (nền nhạt) — không bao giờ rớt chữ lẻ.
-    const equation = (key: string | number, rows: { ingredient: string; amount: number }[], result: string, price: number) => (
+    const equation = (key: string | number, rows: { ingredient: string; amount: number }[], result: string, price?: number) => (
         <div key={key} className="leading-snug">
             <div className="flex items-baseline justify-between gap-2 text-[12px] font-semibold tabular-nums">
                 <span className="text-text">{result}</span>
-                <span className="text-text-secondary">{formatVND(price)}</span>
+                {price != null && <span className="text-text-secondary">{formatVND(price)}</span>}
             </div>
             {/* Mỗi nguyên liệu là 1 khối không bẻ giữa chừng, "+" dính vào đầu khối sau → chỉ xuống dòng GIỮA các nguyên liệu, và cân đều 2 dòng. */}
             <div className="text-[12px] text-text-dim max-w-[85%] text-balance">
@@ -64,20 +70,22 @@ export default function MissingCupSuspicionCard({ candidates = [], cash = null }
             </button>
             {open && (<>
             <div className="mt-2 pt-2 border-t border-border/40 flex flex-col gap-1.5">
-                {c.cups.slice(0, MAX_CUPS).map((cup, i) => equation(i, cup.rows, cup.name, cup.price))}
-                {c.cups.length > MAX_CUPS && <span className="text-[11px] text-text-dim">… và {c.cups.length - MAX_CUPS} ly nữa</span>}
-                {restCups > 0 && equation('rest', c.rest, `${restCups} ly chưa rõ món`, restPrice)}
+                {groups.slice(0, MAX_LINES).map(({ cup, count }, i) => equation(i, cup.rows, count > 1 ? `${count}× ${cup.name}` : cup.name, count * cup.price))}
+                {groups.length > MAX_LINES && <span className="text-[11px] text-text-dim">… và {groups.slice(MAX_LINES).reduce((s, g) => s + g.count, 0)} ly nữa</span>}
+                {restCups > 0 && equation('rest', c.rest, `${restCups} ly chưa rõ món`)}
             </div>
             {cash && (
                 <div className="mt-2 pt-2 border-t border-border/40 flex flex-col gap-1 text-[12px] tabular-nums">
                     <div className="flex items-baseline justify-between gap-2">
-                        <span className="text-text-secondary">Giá bán {n} ly</span>
-                        <span className="font-semibold text-text">{formatVND(total)}</span>
+                        <span className="text-text-secondary">{cash.diff < 0 ? 'Thực thu thiếu' : 'Thực thu dư'}</span>
+                        <span className={`font-bold ${cash.diff < 0 ? 'text-danger' : 'text-text'}`}>{cash.diff < 0 ? '−' : ''}{formatVND(Math.abs(cash.diff))}</span>
                     </div>
-                    <div className="flex items-baseline justify-between gap-2">
-                        <span className="text-text-secondary">{cash.diff < 0 ? 'Thực thu thiếu' : 'Thực thu lệch'}</span>
-                        <span className={`font-bold ${cash.diff < 0 ? 'text-danger' : cashOk ? 'text-warning' : 'text-text-dim'}`}>{cash.diff < 0 ? '−' : cashOk ? '≈ ' : ''}{formatVND(Math.abs(cash.diff))}</span>
-                    </div>
+                    {perCup != null && (
+                        <div className="flex items-baseline justify-between gap-2">
+                            <span className="text-text-secondary">Chia {n} ly hụt</span>
+                            <span className={`font-bold ${cashOk ? 'text-warning' : 'text-text-dim'}`}>{formatVND(Math.round(perCup))}/ly</span>
+                        </div>
+                    )}
                     {cash.diff < 0 && <span className="text-[11px] text-text-dim">Két không dư nên chưa chốt được số ly — soi lại bill</span>}
                 </div>
             )}
