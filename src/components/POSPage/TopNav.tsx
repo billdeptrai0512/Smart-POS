@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Banknote, Bell, ClipboardCheck, FileText, LayoutGrid, MapPin, Menu, Package, Receipt, ShoppingBag, Tag, TrendingUp, Users, Wallet, X, type LucideIcon } from 'lucide-react'
+import { Bell, Menu, X } from 'lucide-react'
 import { useAddress } from '../../contexts/AddressContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useHistory } from '../../contexts/HistoryContext'
@@ -12,19 +12,9 @@ import { ingredientDetailPath } from '../IngredientManagementPage/DebtSection'
 import WarehousePrepNotice from '../IngredientManagementPage/WarehousePrepNotice'
 import { Dialog } from '../common/ModalShell'
 import AddressSwitcher from './AddressSwitcher'
+import { NAV_SECTIONS, type NavItem } from '../../constants/navSections'
 
 const ICON_BTN = 'relative shrink-0 w-10 h-10 flex items-center justify-center rounded-[14px] bg-bg border border-border/60 text-text-secondary active:bg-border/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40'
-// Mọi trang của app, nhóm theo khu vực (tab con của mỗi trang là một mục riêng) — khỏi bấm ‹ › lần lượt.
-// manager: chỉ quản lý/admin thấy. state: truyền cho trang đích (Nhân viên = tab "staff" của /addresses).
-type Item = { icon: LucideIcon; label: string; tone: string; route: string; wide?: boolean; manager?: boolean; noGuest?: boolean; state?: { tab: string } }
-const SECTIONS: { title: string; items: Item[] }[] = [
-    { title: '', items: [{ icon: MapPin, label: 'Địa chỉ', tone: 'primary', route: '/addresses', noGuest: true }, { icon: ShoppingBag, label: 'Tạo đơn', tone: 'primary', route: '/pos' }] },
-    { title: 'Nhật ký', items: [{ icon: Receipt, label: 'Đơn bán', tone: 'primary', route: '/history/sales' }, { icon: Wallet, label: 'Chi phí', tone: 'primary', route: '/history/expense' }] },
-    { title: 'Báo cáo', items: [{ icon: Banknote, label: 'Dòng tiền', tone: 'success', route: '/report/cashflow' }, { icon: TrendingUp, label: 'Lợi nhuận', tone: 'success', route: '/report/revenue' }] },
-    { title: 'Tồn kho', items: [{ icon: ClipboardCheck, label: 'Kiểm kê', tone: 'primary', route: '/inventory/management' }, { icon: Package, label: 'Lưu trữ', tone: 'primary', route: '/inventory/stocking' }] },
-    { title: 'Danh mục', items: [{ icon: LayoutGrid, label: 'Menu', tone: 'primary', route: '/category/overall' }, { icon: FileText, label: 'Công thức', tone: 'primary', route: '/category/recipes' }, { icon: Tag, label: 'Chương trình khuyến mãi', tone: 'warning', route: '/category/discounts', wide: true }] },
-    { title: 'Quản lý', items: [{ icon: Users, label: 'Nhân viên', tone: 'primary', route: '/addresses', manager: true, noGuest: true, wide: true, state: { tab: 'staff' } }] },
-]
 
 // Số kho còn việc theo bản đã tính gần nhất (cache của "Việc cần làm") — đọc rẻ, không tải gì thêm lúc đang bán.
 // Số tươi hơn có khi mở sheet (nó tải nền rồi cập nhật cache).
@@ -56,7 +46,7 @@ export default function TopNav() {
     const [showMenu, setShowMenu] = useState(false)
     const [pending, setPending] = useState(pendingCount)
 
-    function go({ route, state }: Item) {
+    function go({ route, state }: NavItem) {
         setShowMenu(false)
         navigate(route + carryDateParams(pathname, route, search), { state })
         if (route.startsWith('/history')) handleLoadHistory()
@@ -95,7 +85,7 @@ export default function TopNav() {
                         </button>
                     </div>
                     <div className="overflow-y-auto px-3 pt-3 pb-5 flex flex-col gap-4">
-                        {SECTIONS.map(sec => {
+                        {NAV_SECTIONS.map(sec => {
                             const items = sec.items.filter(i => (!i.manager || isManager || isAdmin) && !(i.noGuest && isGuest))
                             return items.length > 0 && (
                                 <div key={sec.title}>

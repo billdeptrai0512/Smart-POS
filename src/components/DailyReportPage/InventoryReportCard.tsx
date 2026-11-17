@@ -59,6 +59,8 @@ interface Props {
     hintFill?: number
     // Chen ngay trên "Tổng hao hụt" (vd dòng Xác nhận kiểm kê của tab).
     beforeTotal?: ReactNode
+    // Màu viền thẻ bọc các nhóm + dải trạng thái (beforeTotal) ở đầu thẻ: success = đã xác nhận kiểm kê, primary = chưa.
+    statusTone?: "success" | "primary"
     // Dưới Tổng hao hụt, cùng cột (laptop: cột phải dính).
     afterTotal?: ReactNode
 }
@@ -111,7 +113,7 @@ export default function InventoryReportCard({
     // Nguyên liệu đang được onboarding phase 4 gợi ý bấm vào — xem DailyReportPage.tsx
     // (hintCoffeeIngredient) + onboarding/steps.ts.
     hintIngredient = null,
-    hintStep = null, hintFill, beforeTotal, afterTotal,
+    hintStep = null, hintFill, beforeTotal, afterTotal, statusTone = "primary",
 }: Props) {
     // Sort by status priority so staff sees "Chưa nhập" first, then anomalies,
     // then matched rows at the bottom. Tie-break by display name for stability.
@@ -247,6 +249,8 @@ export default function InventoryReportCard({
         />
     )
 
+    const tone = statusTone === 'success' ? { border: 'border-success/40', bg: 'bg-success/10' } : { border: 'border-primary/40', bg: 'bg-primary/10' }
+
     // Footer tổng — tiền hao hụt cộng dồn, chỉ hiện khi đã kiểm ít nhất 1 NVL.
     const totalRow = countedCount > 0 && (
         <div ref={totalRef} className="scroll-mt-4">
@@ -281,13 +285,16 @@ export default function InventoryReportCard({
     if (sections) {
         return (
             <div className="flex flex-col gap-3 lg:grid lg:grid-cols-[minmax(0,1fr)_460px] lg:items-start lg:gap-4">
-                <div className="flex flex-col gap-3 min-w-0">
+                {/* Một thẻ bọc: dải trạng thái kiểm kê ở đầu (cùng màu viền) + các nhóm ngăn bằng vạch. */}
+                <div className={`bg-surface rounded-[20px] border shadow-sm min-w-0 ${beforeTotal ? tone.border : 'border-border/60'}`}>
+                {beforeTotal && <div className={`px-3 py-2.5 border-b rounded-t-[19px] ${tone.border} ${tone.bg}`}>{beforeTotal}</div>}
                 {sections.map(sec => {
                     const done = sec.items.filter(i => { const v = inventoryInputs[i.ingredient]; return v !== undefined && v !== '' }).length
                     const secOpen = toggled[sec.id] ?? sec.id === defaultOpenId
                     return (
                         <CollapsibleCard
                             key={sec.id}
+                            flat
                             title={sec.name}
                             titleExtra={done === sec.items.length && <Check size={13} className="text-success" />}
                             count={`${done}/${sec.items.length}`}
@@ -299,10 +306,9 @@ export default function InventoryReportCard({
                     )
                 })}
                 </div>
-                {/* Laptop+: cột phải dính đầu khung cuộn — Xác nhận + Tổng hao hụt luôn thấy khi đếm. */}
-                {(beforeTotal || totalRow || afterTotal) && (
+                {/* Laptop+: cột phải dính đầu khung cuộn — Tổng hao hụt luôn thấy khi đếm. */}
+                {(totalRow || afterTotal) && (
                     <div className="flex flex-col gap-3 lg:sticky lg:top-0">
-                        {beforeTotal}
                         {totalRow && <div className="bg-surface rounded-[20px] px-3 py-3 border border-border/60 shadow-sm">{totalRow}</div>}
                         {afterTotal}
                     </div>
@@ -321,7 +327,7 @@ export default function InventoryReportCard({
             onToggle={() => onToggleOpen?.()}
         >
             <div className="flex flex-col">{sortedList.map(renderRow)}</div>
-            {beforeTotal}
+            {beforeTotal && <div className={`mt-3 rounded-[14px] border px-3 py-2.5 ${tone.border} ${tone.bg}`}>{beforeTotal}</div>}
             {totalRow && <div className="pt-3 mt-1 border-t border-border/40">{totalRow}</div>}
         </CollapsibleCard>
         {afterTotal}

@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import {
     Pencil, Trash2, ClipboardCopy, MoreVertical, X,
-    Coffee, FileText, Package, ChevronRight, Eraser,
-    Receipt, TrendingUp, Warehouse, Printer, LayoutGrid, Plus, Search,
+    Coffee, FileText, ChevronRight, Eraser,
+    Warehouse, Printer, Plus, Search,
 } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
 import Skeleton from '../common/Skeleton'
@@ -17,7 +17,7 @@ import PrinterIpModal from './PrinterIpModal'
 import WarehouseGroupModal from './WarehouseGroupModal'
 import ConfirmByNameModal from './ConfirmByNameModal'
 import { Dialog } from '../common/ModalShell'
-import { RECIPE_TABS } from '../../constants/menuTabs'
+import { NAV_SECTIONS } from '../../constants/navSections'
 import type { Address, Row, UUID, WarehouseGroup } from '../../types/domain'
 
 const isManagerRole = (role?: string) => (role === 'manager' || role === 'co-manager') ? 1 : 0
@@ -28,13 +28,6 @@ const deltaPct = (cur: number, prev: number) => prev > 0 ? Math.round(((cur - pr
 
 type SubModal = { type: 'rename' | 'printers' | 'delete' | 'backup' | 'wipe' | 'group'; addressId: UUID }
 
-// Lối tắt: 1 pill / mục menu, vào trang đầu của mục (tab con chuyển bên trong trang).
-const SHORTCUTS = [
-    { icon: Receipt, label: 'Nhật ký', tone: 'primary', path: '/history/sales' },
-    { icon: TrendingUp, label: 'Báo cáo', tone: 'success', path: '/report/cashflow' },
-    { icon: Package, label: 'Tồn kho', tone: 'primary', path: '/inventory/management' },
-    { icon: LayoutGrid, label: 'Danh mục', tone: 'primary', path: `/category/${RECIPE_TABS[0].key}` },
-]
 
 interface Props {
     addresses: Address[]
@@ -246,7 +239,8 @@ export default function BranchGrid({
                                         <p className="text-text font-black text-sm leading-none truncate pr-2">{addr.name}</p>
                                         <button
                                             onClick={() => setExpandedActionsId(null)}
-                                            className="p-1.5 text-text-secondary hover:text-text transition-colors rounded-lg hover:bg-surface-light shrink-0"
+                                            aria-label="Đóng"
+                                            className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/60 text-text-secondary hover:text-text transition-all shrink-0"
                                         >
                                             <X size={16} />
                                         </button>
@@ -256,20 +250,27 @@ export default function BranchGrid({
                                         ref={checkActionsScrollFade}
                                         onScroll={(e) => checkActionsScrollFade(e.currentTarget)}
                                     >
-                                        <div>
-                                            <p className="px-1 pb-2 text-[10px] font-black uppercase tracking-wider text-text-secondary">Lối tắt</p>
-                                            <div className="grid grid-cols-2 gap-2">
-                                                {SHORTCUTS.map(p => (
-                                                    <ActionPill
-                                                        key={p.label}
-                                                        icon={<p.icon size={16} />}
-                                                        label={p.label}
-                                                        tone={p.tone}
-                                                        onClick={() => { onNavigate(addr, p.path); setExpandedActionsId(null) }}
-                                                    />
-                                                ))}
-                                            </div>
-                                        </div>
+                                        {/* Lối tắt = cùng danh sách trang với menu "Điều hướng" (NAV_SECTIONS), bỏ mục không gắn với 1 địa chỉ (Địa chỉ, Nhân viên). */}
+                                        {NAV_SECTIONS.map(sec => {
+                                            const items = sec.items.filter(i => i.route !== '/addresses')
+                                            return items.length > 0 && (
+                                                <div key={sec.title}>
+                                                    {sec.title && <p className="px-1 pb-2 text-[10px] font-black uppercase tracking-wider text-text-secondary">{sec.title}</p>}
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        {items.map(i => (
+                                                            <ActionPill
+                                                                key={i.label}
+                                                                icon={<i.icon size={16} />}
+                                                                label={i.label}
+                                                                tone={i.tone}
+                                                                wide={i.wide || items.length === 1} // mục lẻ (Tạo đơn khi bỏ Địa chỉ) giãn hết hàng, khỏi chừa ô trống
+                                                                onClick={() => { onNavigate(addr, i.route); setExpandedActionsId(null) }}
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
 
                                         <div>
                                             <p className="px-1 pb-2 text-[10px] font-black uppercase tracking-wider text-text-secondary">Quản lý</p>
