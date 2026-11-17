@@ -115,9 +115,8 @@ export default function AddExpenseModal({
         >
                 <SheetHeader title={isEditing ? 'Sửa chi phí' : 'Thêm chi phí'} onClose={onClose} />
 
-                <Divider />
-
-                {/* Phân loại — dropdown chọn nhóm */}
+                {/* Phân loại (nhóm) + Nhãn cạnh nhau cho gọn; panel dropdown rộng hơn ô nên dùng w-max. */}
+                <div className="grid grid-cols-2 gap-3">
                 <Field label="Phân loại">
                     <SelectRow
                         valueLabel={groupMeta(activeGroup).label}
@@ -139,21 +138,10 @@ export default function AddExpenseModal({
                     </SelectRow>
                 </Field>
 
-                {/* Nhãn — dropdown chọn nhãn thuộc nhóm đang chọn + quản lý nhãn */}
-                <div className="flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">Nhãn</span>
-                        {/* Lối tắt vào màn Quản lý nhãn — không phải mở dropdown mới thấy. */}
-                        <button
-                            type="button"
-                            onClick={() => { setOpenDd(null); setManageOpen(true) }}
-                            className="flex items-center gap-1 text-[11px] font-bold text-text-secondary hover:text-primary transition-all"
-                        >
-                            <Settings2 size={12} strokeWidth={2.5} />
-                            Quản lý
-                        </button>
-                    </div>
+                {/* Nhãn — dropdown chọn nhãn thuộc nhóm đang chọn; "Quản lý nhãn" nằm cuối dropdown */}
+                <Field label="Nhãn">
                     <SelectRow
+                        alignRight
                         valueLabel={groupLabels.find(c => c.id === selectedCategoryId)?.name}
                         valueDot={groupMeta(activeGroup).dotCls}
                         placeholder="Chọn nhãn…"
@@ -181,11 +169,11 @@ export default function AddExpenseModal({
                             Quản lý nhãn
                         </button>
                     </SelectRow>
+                </Field>
                 </div>
 
-                <Divider />
-
-                {/* Ngày chi — full-width. Mặc định hôm nay; chọn ngày quá khứ để ghi lùi. */}
+                {/* Ngày chi + Sử dụng cạnh nhau. Mặc định hôm nay; chọn ngày quá khứ để ghi lùi. */}
+                <div className="grid grid-cols-2 gap-3">
                 <Field label="Ngày chi">
                     <DatePicker
                         value={expenseDate || today}
@@ -204,13 +192,13 @@ export default function AddExpenseModal({
                         )}
                     />
                 </Field>
-
                 <SegmentToggle
                     label="Sử dụng"
                     value={paymentMethod}
                     onChange={onPaymentMethodChange}
                     options={[{ value: 'cash', label: 'Tiền mặt' }, { value: 'transfer', label: 'Bank' }]}
                 />
+                </div>
 
                 <SegmentToggle
                     label="Thời điểm"
@@ -218,8 +206,6 @@ export default function AddExpenseModal({
                     onChange={onAfterShiftChange}
                     options={[{ value: false, label: 'Trong ca' }, { value: true, label: 'Sau ca' }]}
                 />
-
-                <Divider />
 
                 <Field label="Tên chi phí">
                     <input
@@ -251,8 +237,6 @@ export default function AddExpenseModal({
                         alwaysUnit
                     />
                 </Field>
-
-                <Divider />
 
                 <button
                     onClick={() => canSubmit && onSubmit()}
@@ -306,8 +290,6 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
     )
 }
 
-const Divider = () => <div className="h-px bg-border/40" />
-
 // Dropdown select dùng chung cho Phân loại + Nhãn. Trigger hiện giá trị (chấm màu
 // + tên); panel mở XUỐNG (2 dropdown ở đầu sheet, mở lên bị cắt) chứa các option (children).
 // Click ra ngoài (trigger + panel) → đóng (onClose). ref bọc cả trigger nên bấm
@@ -315,9 +297,10 @@ const Divider = () => <div className="h-px bg-border/40" />
 interface SelectRowProps {
     valueLabel?: string; valueDot: string; placeholder?: string; disabled?: boolean
     open: boolean; onToggle: () => void; onClose?: () => void; children: ReactNode
+    alignRight?: boolean // ô nằm cột phải → panel bám mép phải, tránh tràn ra ngoài sheet
 }
 
-function SelectRow({ valueLabel, valueDot, placeholder = 'Chọn…', disabled, open, onToggle, onClose, children }: SelectRowProps) {
+function SelectRow({ valueLabel, valueDot, placeholder = 'Chọn…', disabled, open, onToggle, onClose, children, alignRight }: SelectRowProps) {
     const ref = useRef<HTMLDivElement>(null)
     useClickOutside(ref, () => onClose?.(), { active: open })
     return (
@@ -339,7 +322,7 @@ function SelectRow({ valueLabel, valueDot, placeholder = 'Chọn…', disabled, 
                 <ChevronDown size={16} className={`text-text-secondary shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
             </button>
             {open && (
-                <div className="absolute top-full left-0 right-0 mt-1.5 z-10 bg-surface border border-border/60 rounded-[12px] shadow-xl p-2 flex flex-col gap-1 max-h-[50vh] overflow-y-auto hide-scrollbar">
+                <div className={`absolute top-full ${alignRight ? 'right-0' : 'left-0'} min-w-full w-max max-w-[calc(100vw-3rem)] mt-1.5 z-10 bg-surface border border-border/60 rounded-[12px] shadow-xl p-2 flex flex-col gap-1 max-h-[50vh] overflow-y-auto hide-scrollbar`}>
                     {children}
                 </div>
             )}
@@ -372,7 +355,9 @@ function SegmentToggle<T extends string | boolean>({ label, options, value, onCh
     return (
         <div className="flex flex-col gap-1.5">
             <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">{label}</span>
-            <SegmentedControl options={options} value={value} onChange={onChange} />
+            {/* cùng chiều cao + bo với ô chọn/ngày (py-3 · rounded-12) để các hàng khớp nhau */}
+            <SegmentedControl options={options} value={value} onChange={onChange} className="w-full bg-surface-light border border-border/60 rounded-[12px]" buttonClassName="flex-1 px-1 py-[10px] text-[13px]" />
+
         </div>
     )
 }

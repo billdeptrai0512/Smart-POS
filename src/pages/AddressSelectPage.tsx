@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { useAddress } from '../contexts/AddressContext'
 import { useAddressStats } from '../contexts/AddressStatsContext'
 import { useAuth } from '../contexts/AuthContext'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { fetchDefaultIngredientSort } from '../services/authService'
 import { fetchProducts, fetchAllRecipes, fetchIngredientCostsAndUnits, fetchProductExtras, fetchExtraIngredients } from '../services/orderService'
 import { cloneFromShareCode, getSharedConfig } from '../services/backupService'
@@ -35,7 +35,9 @@ export default function AddressSelectPage() {
     const { enabled: monetization, loading: flagLoading } = useMonetizationEnabled()
     const navigate = useNavigate()
 
-    const [activeTab, setActiveTab] = useState('branches')
+    // Menu điều hướng trên thanh POS: state.tab='staff' mở thẳng tab Nhân sự.
+    const { state: navState } = useLocation()
+    const [activeTab, setActiveTab] = useState<string>(navState?.tab ?? 'branches')
     const [showCreateStaffModal, setShowCreateStaffModal] = useState(false)
     const [error, setError] = useState('')
     const [newAddressName, setNewAddressName] = useState('')

@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react'
 import HistoryTabsBar from './HistoryTabsBar'
 import DatePicker, { type DateRange } from '../common/DatePicker'
 import { formatIsoShort, formatIsoDisplay, type PresetRange } from '../common/datePickerUtils'
+import { useAuth } from '../../contexts/AuthContext'
 import { onboardingHintClass } from '../../utils/onboardingHint'
 import { ICON_BTN } from '../common/ModalShell'
 
@@ -48,17 +49,17 @@ export default function HistoryHeader({
     activeTab, onTabSelect, belowTabs,
     ...picker
 }: HistoryHeaderProps) {
+    // ‹ › chỉ còn cho khách dùng thử (guide đi từng trang bằng mũi tên); người dùng thật đi trang bằng thanh điều hướng phía trên.
+    const { isGuest } = useAuth()
     return (
-        <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 px-4 lg:px-8">
+        <header className="shrink-0 pt-3 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 px-4 lg:px-8">
             <div className="flex flex-col gap-3 lg:max-w-[1280px] lg:mx-auto">
             <div className="flex items-center gap-3">
-                <button
-                    onClick={onBack}
-                    className={ICON_BTN}
-                    aria-label="Trang trước"
-                >
-                    <ArrowLeft size={20} strokeWidth={2.5} />
-                </button>
+                {isGuest && (
+                    <button onClick={onBack} className={ICON_BTN} aria-label="Trang trước">
+                        <ArrowLeft size={20} strokeWidth={2.5} />
+                    </button>
+                )}
 
                 <div className="flex-1 bg-primary/5 border border-primary/10 shadow-sm rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center">
                     <span className="text-[12px] font-black text-primary uppercase line-clamp-1">{title}</span>
@@ -69,13 +70,11 @@ export default function HistoryHeader({
                     )}
                 </div>
 
-                <button
-                    onClick={onForward}
-                    aria-label="Trang tiếp"
-                    className={`${ICON_BTN} ${onboardingHintClass(hintForward)}`}
-                >
-                    <ArrowRight size={20} strokeWidth={2.5} />
-                </button>
+                {isGuest && (
+                    <button onClick={onForward} aria-label="Trang tiếp" className={`${ICON_BTN} ${onboardingHintClass(hintForward)}`}>
+                        <ArrowRight size={20} strokeWidth={2.5} />
+                    </button>
+                )}
             </div>
 
             {activeTab && <HistoryTabsBar activeTab={activeTab} onSelect={onTabSelect} />}

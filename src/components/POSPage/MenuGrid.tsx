@@ -66,7 +66,7 @@ const ProductCard = memo(function ProductCard({ product, qty, onAdd, onRemove, d
                     onAdd(product)
                 }
             }}
-            className={`menu-btn relative rounded-[1.5rem] p-3 sm:p-4 text-left min-h-[100px] flex flex-col justify-between cursor-pointer transition-all duration-300 focus:outline-none focus-visible:ring-4 focus-visible:ring-primary/30 ${held
+            className={`menu-btn relative rounded-[1.25rem] px-3 py-2.5 text-left min-h-[76px] flex flex-col justify-between cursor-pointer transition-all duration-300 focus:outline-none focus-visible:ring-4 focus-visible:ring-primary/30 ${held
                 ? 'bg-surface border-2 border-primary shadow-[0_8px_24px_var(--color-primary-glow)]'
                 : 'bg-surface border border-border/60 shadow-sm hover:border-text/30 hover:shadow-md hover:bg-surface-hover'
                 } ${onboardingHintClass(hint)}`}
@@ -77,14 +77,14 @@ const ProductCard = memo(function ProductCard({ product, qty, onAdd, onRemove, d
             {/* Confirm pulse: a primary ring that pings out on each tap-add, so a repeat tap
                 on an already-selected card still visibly registers. Keyed so it replays
                 every tap. */}
-            {pulseKey > 0 && <span key={pulseKey} className="tap-pulse absolute inset-0 rounded-[1.5rem] ring-2 ring-primary pointer-events-none z-30" />}
+            {pulseKey > 0 && <span key={pulseKey} className="tap-pulse absolute inset-0 rounded-[1.25rem] ring-2 ring-primary pointer-events-none z-30" />}
 
             {/* Badge số ly, góc dưới-phải — cùng cách neo với nút X ở góc trên-phải
                 (offset -4 + p-2.5) nên hai huy hiệu thò ra khỏi card đúng bằng nhau. */}
             {qty > 0 && (
-                <span className="absolute -bottom-4 -right-4 z-20 p-2.5
+                <span className="absolute -bottom-4 -right-4 z-20 p-2
                   " aria-hidden="true">
-                    <span className="badge-pop w-8 h-8 rounded-full flex items-center justify-center bg-text text-bg text-[14px] font-black shadow-lg border-2 border-primary/10">
+                    <span className="badge-pop min-w-6 h-6 px-1 rounded-full flex items-center justify-center bg-text text-bg text-[12px] font-black shadow-lg border-2 border-primary/10">
                         {qty}
                     </span>
                 </span>
@@ -97,10 +97,10 @@ const ProductCard = memo(function ProductCard({ product, qty, onAdd, onRemove, d
                     onPointerUp={stop}
                     onClick={cancel}
                     aria-label={`Huỷ ${product.name}`}
-                    className="absolute -top-4 -right-4 z-20 p-2.5 active:scale-90 transition-transform"
+                    className="absolute -top-4 -right-4 z-20 p-2 active:scale-90 transition-transform"
                 >
-                    <span className="w-7 h-7 rounded-full flex items-center justify-center shadow-lg border-2 border-white/20 bg-primary text-white">
-                        <X size={15} strokeWidth={3} />
+                    <span className="w-6 h-6 rounded-full flex items-center justify-center shadow-lg border-2 border-white/20 bg-primary text-white">
+                        <X size={13} strokeWidth={3} />
                     </span>
                 </button>
             )}
@@ -114,7 +114,7 @@ const ProductCard = memo(function ProductCard({ product, qty, onAdd, onRemove, d
 
             {/* Bottom: Price — chương trình giảm giá đang active hôm nay thì hiện giá gốc gạch
                 ngang + giá mới, để nhân viên thấy ngay không cần bấm vào món. */}
-            <div className="flex items-end justify-between mt-3 relative z-10 w-full gap-2">
+            <div className="flex items-end justify-between mt-1.5 relative z-10 w-full gap-2">
                 {discountedPrice != null ? (
                     <span className="flex items-baseline gap-1.5">
                         <span className="text-[10px] text-text-secondary/60 line-through">{formatVND(product.price)}</span>
@@ -161,7 +161,7 @@ function ExtrasPopover({ activeProductId, extras, toppings, activeItem, enabledS
             <button
                 key={ex.id}
                 onClick={onClick}
-                className={`shrink-0 h-[34px] px-3 rounded-[10px] border font-bold text-[12px] whitespace-nowrap focus:outline-none transition-all shadow-sm uppercase flex items-center gap-1.5 ${on ? 'bg-warning/10 border-warning/50 text-warning' : 'bg-surface-light border-border/80 text-text-secondary hover:text-text'}`}
+                className={`shrink-0 h-[28px] px-2.5 rounded-[8px] border font-bold text-[11px] whitespace-nowrap focus:outline-none transition-all shadow-sm uppercase flex items-center gap-1.5 ${on ? 'bg-warning/10 border-warning/50 text-warning' : 'bg-surface-light border-border/80 text-text-secondary hover:text-text'}`}
             >
                 {on && <span className="w-1.5 h-1.5 rounded-full bg-warning mb-[1px]" />}
                 {ex.name}
@@ -170,8 +170,8 @@ function ExtrasPopover({ activeProductId, extras, toppings, activeItem, enabledS
     }
 
     return (
-        <div ref={ref} className="col-span-2 bg-surface border border-border/80 rounded-[14px] shadow-xl shadow-black/10">
-            <div className="w-full overflow-x-auto py-2.5 px-3 flex gap-2 items-center hide-scrollbar">
+        <div ref={ref} className="col-span-2 bg-surface border border-border/80 rounded-[12px] shadow-xl shadow-black/10">
+            <div className="w-full overflow-x-auto py-1.5 px-2.5 flex gap-1.5 items-center hide-scrollbar">
                 {sticky.map(ex => renderExtraButton(ex, { on: enabledStickyExtraIds.includes(ex.id), onClick: () => onToggleStickyExtra(ex) }))}
 
                 {sticky.length > 0 && normal.length > 0 && (
@@ -182,7 +182,7 @@ function ExtrasPopover({ activeProductId, extras, toppings, activeItem, enabledS
             </div>
 
             {toppings.length > 0 && (
-                <div className="w-full overflow-x-auto pb-2.5 px-3 flex gap-2 items-center hide-scrollbar border-t border-border/40 pt-2">
+                <div className="w-full overflow-x-auto pb-1.5 px-2.5 flex gap-1.5 items-center hide-scrollbar border-t border-border/40 pt-1.5">
                     {toppings.map(tp => renderExtraButton(tp, { on: activeItem?.toppings.some(t => t.id === tp.id) || false, onClick: () => onToggleTopping(tp) }))}
                 </div>
             )}
@@ -324,7 +324,7 @@ export default function MenuGrid({ products, cart, activeItem, onAddItem, onRemo
 
     return (
         <main className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 px-6 pb-6 pt-5 hide-scrollbar">
-            <div className="grid grid-cols-2 gap-4 pt-1">
+            <div className="grid grid-cols-2 gap-3 pt-1">
                 {gridItems}
             </div>
         </main>

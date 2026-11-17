@@ -1,6 +1,7 @@
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import type { ReactNode } from 'react'
 import MenuTabsBar, { type MenuTab } from './MenuTabsBar'
+import { useAuth } from '../../contexts/AuthContext'
 import { ICON_BTN } from './ModalShell'
 
 // Header dùng chung cho /inventory (Tồn kho) và /category (Công thức) — chỉ khác tiêu đề,
@@ -20,24 +21,24 @@ interface Props {
 }
 
 export default function MenuPageHeader({ title, count, unitLabel, subtitle, onBack, onForward, tabs, activeTab, onTabSelect, hintTab }: Props) {
+    // ‹ › chỉ còn cho khách dùng thử (guide đi từng trang bằng mũi tên); người dùng thật đi trang bằng thanh điều hướng phía trên.
+    const { isGuest } = useAuth()
     return (
-        <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 px-4 lg:px-8">
+        <header className="shrink-0 pt-3 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 px-4 lg:px-8">
             <div className="flex flex-col gap-3 lg:max-w-[1280px] lg:mx-auto">
             <div className="flex items-center gap-3">
-                <button
-                    onClick={onBack}
-                    className={ICON_BTN}
-                    title="Trở về"
-                >
-                    <ArrowLeft size={20} strokeWidth={2.5} />
-                </button>
+                {isGuest && (
+                    <button onClick={onBack} className={ICON_BTN} title="Trở về">
+                        <ArrowLeft size={20} strokeWidth={2.5} />
+                    </button>
+                )}
 
                 <div className="flex-1 bg-primary/5 border border-primary/10 shadow-sm rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center">
                     <span className="text-[12px] font-black text-primary uppercase line-clamp-1">{title}</span>
                     {subtitle ?? <span className="text-[12px] font-bold text-text/80 leading-none mt-1 tabular-nums">{count} {unitLabel}</span>}
                 </div>
 
-                {onForward && (
+                {isGuest && onForward && (
                     <button
                         onClick={onForward}
                         className={ICON_BTN}

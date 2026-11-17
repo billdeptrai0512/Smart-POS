@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import {
     Pencil, Trash2, ClipboardCopy, MoreVertical, X,
     Coffee, FileText, Package, ChevronRight, Eraser,
@@ -9,6 +9,7 @@ import Skeleton from '../common/Skeleton'
 import { formatVND } from '../../utils'
 import { normalizeSearchText } from '../../utils/ingredients'
 import { wipeAddressSalesData } from '../../services/adminService'
+import ActionPill from '../common/ActionPill'
 import SubscriptionBadge from './SubscriptionBadge'
 import BackupModal from './BackupModal'
 import RenameAddressModal from './RenameAddressModal'
@@ -455,27 +456,5 @@ function Delta({ pct }: { pct: number | null }) {
         >
             {pct > 0 ? '↑' : '↓'}{Math.abs(pct)}%
         </span>
-    )
-}
-
-// Pill hành động — 2 cột, icon nhỏ + label 1 dòng. Dùng chung cho "Lối tắt" (điều hướng)
-// và "Quản lý" (sửa/xoá địa chỉ), tone danger cho các thao tác nguy hiểm.
-const PILL_TONES: Record<string, string> = {
-    primary: 'bg-primary/10 text-primary',
-    success: 'bg-success/10 text-success',
-    warning: 'bg-warning/10 text-warning',
-    danger: 'bg-danger/10 text-danger',
-}
-function ActionPill({ icon, label, tone = 'primary', onClick }: { icon: ReactNode; label: string; tone?: string; onClick?: () => void }) {
-    return (
-        <button
-            onClick={onClick}
-            className={`flex flex-col items-center gap-1.5 px-2 py-3 rounded-[14px] bg-surface-light border border-border/50 hover:border-primary/40 hover:bg-border/20 active:scale-95 transition-all text-center min-w-0`}
-        >
-            <span className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${PILL_TONES[tone]}`}>
-                {icon}
-            </span>
-            <span className={`text-[10px] font-bold uppercase tracking-wider leading-tight ${tone === 'danger' ? 'text-danger' : 'text-text'}`}>{label}</span>
-        </button>
     )
 }

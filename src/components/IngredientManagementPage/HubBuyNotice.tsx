@@ -19,15 +19,15 @@ import type { Row } from '../../types/domain'
 // "Bổ sung tồn kho" của KHO TỔNG trong nhóm kho chung (thay cho bản tính riêng từng địa chỉ — vốn sai khi cả nhóm dùng chung 1 kho),
 // cùng giao diện card "Mua" như bản thường: cần mua = tồn tối thiểu + tổng dự báo rút ngày mai của MỌI địa chỉ trong nhóm − kho còn,
 // làm tròn LÊN theo đơn vị nhập lớn nhất. Tính khi mở (~5 request × số địa chỉ) chứ không tính sẵn lúc vào trang.
-export default function HubBuyNotice({ onRestocked }: { onRestocked?: () => unknown }) {
+export default function HubBuyNotice({ onRestocked, onClose }: { onRestocked?: () => unknown; onClose?: () => void }) {
     const { selectedAddress, siblingsByAddress } = useAddress()
-    const [open, setOpen] = useState(false)
+    const [open, setOpen] = useState(!!onClose) // onClose = chế độ chỉ-sheet (chuông): không vẽ dải, mở sẵn
     if (!selectedAddress?.id) return null
     return (
         <>
-            <NoticeBar icon={<Package size={15} className="text-primary shrink-0" />} label="Tồn kho cần bổ sung" onClick={() => setOpen(true)} />
+            {!onClose && <NoticeBar icon={<Package size={15} className="text-primary shrink-0" />} label="Tồn kho cần bổ sung" onClick={() => setOpen(true)} />}
             {open && (
-                <Sheet addressId={selectedAddress.id} addresses={[selectedAddress, ...(siblingsByAddress[selectedAddress.id] ?? [])]} onClose={() => setOpen(false)} onRestocked={onRestocked} />
+                <Sheet addressId={selectedAddress.id} addresses={[selectedAddress, ...(siblingsByAddress[selectedAddress.id] ?? [])]} onClose={() => { setOpen(false); onClose?.() }} onRestocked={onRestocked} />
             )}
         </>
     )

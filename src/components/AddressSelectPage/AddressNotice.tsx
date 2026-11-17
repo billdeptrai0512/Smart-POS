@@ -10,8 +10,9 @@ import type { UsageMap } from '../../utils/inventory'
 import NoticeBar from '../common/NoticeBar'
 import NoticeSheet from '../common/NoticeSheet'
 import { HubBuyBody } from '../IngredientManagementPage/HubBuyNotice'
+import { DebtList, ingredientDetailPath, useDebtPay, useIngredientDebts } from '../IngredientManagementPage/DebtSection'
 import { buildHubBuyItems } from '../../utils/hubBuy'
-import type { Address } from '../../types/domain'
+import type { Address, Row } from '../../types/domain'
 
 // "Việc cần làm" của quản lý trên /addresses: tồn kho cần bổ sung của từng kho. Tồn kho nặng (~5 request × kho) nên tính NỀN:
 // sau khi stats tải xong (khỏi tranh băng thông), mỗi lần chạy tối đa STOCK_CONCURRENCY kho; kết quả
@@ -19,7 +20,8 @@ import type { Address } from '../../types/domain'
 // Dữ liệu (danh sách kho, tiến độ, bỏ qua, thứ tự) nằm ở useRestockOverview; file này lo giao diện + điều hướng.
 const STOCK_CONCURRENCY = 3
 
-export default function AddressNotice() {
+// onClose: chế độ "chỉ sheet" (chuông trên thanh POS) — không vẽ dải, mở sẵn, đóng thì báo cha unmount (bộ tải nền chỉ chạy khi sheet đang mở).
+export default function AddressNotice({ onClose }: { onClose?: () => void } = {}) {
     const { setSelectedAddress } = useAddress()
     const navigate = useNavigate()
     // Bấm tên nguyên liệu → sang trang chi tiết (trang này unmount); nút Back của trang đó về /addresses?reopen=<kho> → mở lại sheet + dòng kho đó.
@@ -28,15 +30,20 @@ export default function AddressNotice() {
     const focusRef = useRef<HTMLDivElement>(null)
     const scrollRef = useRef<HTMLDivElement>(null)
     const [scrollTo, setScrollTo] = useState<string | null>(null)
-    const [open, setOpen] = useState(reopenKey !== null)
+    const [open, setOpen] = useState(reopenKey !== null || !!onClose)
     const [expanded, setExpanded] = useState<string | null>(reopenKey) // kho đang mở rộng — accordion: mở kho này thì kho kia tự đóng
+    // Công nợ: form trả nợ là bottom-sheet nên vẽ ngoài sheet này (ẩn sheet khi đang trả); trả xong → các dòng địa chỉ tải lại công nợ.
+    const [debtVer, setDebtVer] = useState(0)
+    const { pay, setPay, node: payNode } = useDebtPay(() => setDebtVer(v => v + 1))
     const { statsLoading, stats, skips, loaded, stockRows, total, doneCount, loadOrder, toggleSkip, onStock } = useRestockOverview(reopenKey, open)
 
     // Chọn địa chỉ đích của kho rồi vào thẳng trang chi tiết nguyên liệu; Back về /addresses.
-    function openIngredient(unitKey: string, target: Address, ingredient: string) {
+    function openIngredient(unitKey: string, target: Address, ingredient: string, tab?: 'history', sinceISO?: string) {
         setSelectedAddress(target)
-        // ?scope=month sẵn trên URL: không thì useDateScope tự ghi (replace) và làm rơi location.state → mất backTo.
-        navigate(`/inventory/stocking/${encodeURIComponent(ingredient)}?scope=month`, { state: { backTo: `/addresses?reopen=${unitKey}` } })
+        setOpen(false)
+        onClose?.() // chuông nằm ở layout, không unmount khi đổi trang → tự đóng sheet kẻo che trang chi tiết
+        // URL luôn mang scope (?scope=month, hoặc khoảng ngày của công nợ): không thì useDateScope tự ghi (replace) và làm rơi location.state → mất backTo.
+        navigate(ingredientDetailPath(ingredient, tab, sinceISO), { state: onClose ? undefined : { backTo: `/addresses?reopen=${unitKey}` } }) // chuông: Back về trang trước, không phải /addresses
     }
 
     const reopenReady = !!(reopenKey && loaded[reopenKey])
@@ -49,9 +56,9 @@ export default function AddressNotice() {
 
     return (
         <>
-            <NoticeBar icon={<ClipboardList size={15} className="text-primary shrink-0" />} label="Việc cần làm" count={total - doneCount} onClick={() => setOpen(true)} />
-            {open && (
-                <NoticeSheet icon={<span className="shrink-0 text-[16px] font-black text-primary tabular-nums">{doneCount}/{total}</span>} title="Việc cần làm" count="" onClose={() => setOpen(false)}>
+            {!onClose && <NoticeBar icon={<ClipboardList size={15} className="text-primary shrink-0" />} label="Việc cần làm" count={total - doneCount} onClick={() => setOpen(true)} />}
+            {open && !pay && (
+                <NoticeSheet icon={<span className="shrink-0 text-[16px] font-black text-primary tabular-nums">{doneCount}/{total}</span>} title="Việc cần làm" count="" onClose={() => { setOpen(false); onClose?.() }}>
                     {stockRows.length > 0 && (
                         <div className="pt-3">
                             {stockRows.map(u => {
@@ -74,6 +81,7 @@ export default function AddressNotice() {
                                         {/* Thụt vào + vạch dọc cam: danh sách món thuộc về kho ngay phía trên, không lẫn với dòng kho kế tiếp. */}
                                         {isOpen && (
                                             <div className="ml-1.5 mb-2 pl-3.5 border-l-2 border-primary/50">
+                                                <AddressDebts key={debtVer} addressId={u.target.id} onPay={invoice => setPay({ addressId: u.target.id, invoice })} onOpenIngredient={(ing, tab, since) => openIngredient(u.key, u.target, ing, tab, since)} />
                                                 <HubBuyBody addressId={u.target.id} prep={data.prep} bought={data.bought} minAsFloor={!u.hub} skipped={skips[u.target.id]} onSkip={ing => toggleSkip(u.target.id, ing)} onOpenIngredient={ing => openIngredient(u.key, u.target, ing)} onAfterRestock={data.refreshBought} />
                                             </div>
                                         )}
@@ -84,9 +92,23 @@ export default function AddressNotice() {
                     )}
                 </NoticeSheet>
             )}
+            {payNode}
             {/* Bộ tải nền: mount dần, mỗi lần tối đa STOCK_CONCURRENCY kho đang chạy */}
             {!statsLoading && loadOrder.slice(0, STOCK_CONCURRENCY + Object.keys(loaded).length).map(u => <StockLoader key={u.key} unit={u} skipped={skips[u.target.id]} onResult={onStock} />)}
         </>
+    )
+}
+
+// Công nợ của địa chỉ đích, ngay trên danh sách "Cần mua" của dòng mở rộng (cùng danh sách + form trả nợ với sheet Bổ sung tồn kho).
+function AddressDebts({ addressId, onPay, onOpenIngredient }: { addressId: string; onPay: (invoice: Row) => void; onOpenIngredient: (ingredient: string, tab: 'history', sinceISO: string) => void }) {
+    const { debts } = useIngredientDebts(addressId) // key đổi sau mỗi lần trả nợ → mount lại: hiện bản cũ rồi tải số mới
+    if (debts.length === 0) return null
+    return (
+        <div className="pt-1 pb-2">
+            <p className="pb-1 text-[11px] font-black uppercase tracking-wide text-warning">Công nợ</p>
+            <DebtList debts={debts} onPay={onPay} onOpenIngredient={onOpenIngredient} />
+            <p className="pt-3 text-[11px] font-black uppercase tracking-wide text-text-secondary">Cần mua</p>
+        </div>
     )
 }
 
