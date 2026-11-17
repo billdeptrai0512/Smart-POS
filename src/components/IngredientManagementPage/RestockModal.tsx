@@ -135,7 +135,7 @@ export default function RestockModal({
     const paidNum = parseVNDInput(paidInput)
     const owing = Math.max(0, amountDue - paidNum)
 
-    const isValid = qty && Number(qty) > 0 && subtotalNum > 0 && amountDue > 0
+    const isValid = qty && Number(qty) > 0 && subtotalNum > 0
     const isBackdated = purchaseDate && purchaseDate !== today
 
     // Mặc định cash_phase: chốt rồi hôm nay, hoặc nhập lùi ngày (quá khứ) → 'post_close';
