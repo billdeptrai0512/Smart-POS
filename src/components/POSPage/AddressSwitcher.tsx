@@ -45,10 +45,10 @@ export default function AddressSwitcher() {
             <button
                 type="button"
                 onClick={addresses.length > 1 ? () => { setQ(''); setOpen(true) } : () => navigate(isGuest ? '/login' : '/addresses')}
-                className="min-w-0 flex-1 h-11 pl-2.5 pr-3.5 flex items-center gap-2 rounded-full bg-bg border border-border/60 active:bg-border/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                className="min-w-0 flex-1 h-10 pl-2 pr-3 flex items-center gap-2 rounded-[14px] bg-bg border border-border/60 active:bg-border/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             >
-                <span className="shrink-0 w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center"><MapPin size={15} className="text-primary" /></span>
-                <span className="flex-1 min-w-0 truncate text-left text-[13px] font-black uppercase tracking-wide text-success">{selectedAddress?.name}</span>
+                <MapPin size={16} className="shrink-0 ml-1 text-success" />
+                <span className="flex-1 min-w-0 truncate text-left text-[13px] font-black uppercase tracking-wide text-text">{selectedAddress?.name}</span>
                 <ChevronDown size={14} strokeWidth={3} className="shrink-0 text-text-secondary" />
             </button>
             {open && (

@@ -1,24 +1,27 @@
-import { useState, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { BarChart3, BookOpen, Bell, ClipboardList, MapPin, Menu, Package } from 'lucide-react'
+import { useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { Banknote, Bell, ClipboardCheck, FileText, LayoutGrid, MapPin, Menu, Package, Receipt, ShoppingBag, Tag, TrendingUp, Users, Wallet, X, type LucideIcon } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useHistory } from '../../contexts/HistoryContext'
 import { STOCK_CACHE_KEY } from '../../hooks/useRestockOverview'
-import { MENU_SEQUENCE } from '../../utils/menuSequence'
 import { readJSON } from '../../utils/storage'
 import AddressNotice from '../AddressSelectPage/AddressNotice'
-import { BottomSheet, SheetHeader, SHEET_PANEL } from '../common/ModalShell'
+import ActionPill from '../common/ActionPill'
+import { Dialog } from '../common/ModalShell'
 import AddressSwitcher from './AddressSwitcher'
 
-const ICON_BTN = 'relative shrink-0 w-11 h-11 flex items-center justify-center rounded-full bg-bg border border-border/60 text-text-secondary active:bg-border/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40'
-
-// Lối tắt tới 4 trang của mũi tên ‹ › (utils/menuSequence.ts) — khỏi bấm lần lượt.
-const PAGE_UI: Record<string, { label: string; icon: ReactNode }> = {
-    sales: { label: 'Nhật ký', icon: <ClipboardList size={18} /> },
-    report: { label: 'Báo cáo', icon: <BarChart3 size={18} /> },
-    main: { label: 'Tồn kho', icon: <Package size={18} /> },
-    recipes: { label: 'Công thức', icon: <BookOpen size={18} /> },
-}
+const ICON_BTN = 'relative shrink-0 w-10 h-10 flex items-center justify-center rounded-[14px] bg-bg border border-border/60 text-text-secondary active:bg-border/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40'
+// Mọi trang của app, nhóm theo khu vực (tab con của mỗi trang là một mục riêng) — khỏi bấm ‹ › lần lượt.
+// manager: chỉ quản lý/admin thấy. state: truyền cho trang đích (Nhân viên = tab "staff" của /addresses).
+type Item = { icon: LucideIcon; label: string; tone: string; route: string; wide?: boolean; manager?: boolean; noGuest?: boolean; state?: { tab: string } }
+const SECTIONS: { title: string; items: Item[] }[] = [
+    { title: '', items: [{ icon: MapPin, label: 'Địa chỉ', tone: 'primary', route: '/addresses', noGuest: true }, { icon: ShoppingBag, label: 'Tạo đơn', tone: 'primary', route: '/pos' }] },
+    { title: 'Nhật ký', items: [{ icon: Receipt, label: 'Đơn bán', tone: 'primary', route: '/history/sales' }, { icon: Wallet, label: 'Chi phí', tone: 'primary', route: '/history/expense' }] },
+    { title: 'Báo cáo', items: [{ icon: Banknote, label: 'Dòng tiền', tone: 'success', route: '/report/cashflow' }, { icon: TrendingUp, label: 'Lợi nhuận', tone: 'success', route: '/report/revenue' }] },
+    { title: 'Tồn kho', items: [{ icon: ClipboardCheck, label: 'Kiểm kê', tone: 'primary', route: '/inventory/management' }, { icon: Package, label: 'Lưu trữ', tone: 'primary', route: '/inventory/stocking' }] },
+    { title: 'Danh mục', items: [{ icon: LayoutGrid, label: 'Menu', tone: 'primary', route: '/category/overall' }, { icon: FileText, label: 'Công thức', tone: 'primary', route: '/category/recipes' }, { icon: Tag, label: 'Chương trình khuyến mãi', tone: 'warning', route: '/category/discounts', wide: true }] },
+    { title: 'Quản lý', items: [{ icon: Users, label: 'Nhân viên', tone: 'primary', route: '/addresses', manager: true, noGuest: true, wide: true, state: { tab: 'staff' } }] },
+]
 
 // Số kho còn việc theo bản đã tính gần nhất (cache của "Việc cần làm") — đọc rẻ, không tải gì thêm lúc đang bán.
 // Số tươi hơn có khi mở sheet (nó tải nền rồi cập nhật cache).
@@ -26,16 +29,17 @@ const pendingCount = () => Object.values(readJSON<Record<string, { need: number 
 
 // Hàng đầu của POS: ô địa chỉ (đổi tại chỗ) · chuông "Việc cần làm" · menu điều hướng.
 export default function TopNav() {
-    const { isGuest } = useAuth()
+    const { isGuest, isManager, isAdmin } = useAuth()
     const { handleLoadHistory } = useHistory()
     const navigate = useNavigate()
+    const { pathname } = useLocation()
     const [showTasks, setShowTasks] = useState(false)
     const [showMenu, setShowMenu] = useState(false)
     const [pending, setPending] = useState(pendingCount)
 
-    function go(route: string) {
+    function go({ route, state }: Item) {
         setShowMenu(false)
-        navigate(route)
+        navigate(route, { state })
         if (route.startsWith('/history')) handleLoadHistory()
     }
 
@@ -55,27 +59,40 @@ export default function TopNav() {
             </button>
             {showTasks && <AddressNotice onClose={() => { setShowTasks(false); setPending(pendingCount()) }} />}
             {showMenu && (
-                <BottomSheet onClose={() => setShowMenu(false)} panelClassName={SHEET_PANEL}>
-                    <SheetHeader title="Đi tới" onClose={() => setShowMenu(false)} />
-                    <div className="grid grid-cols-2 gap-2">
-                        {MENU_SEQUENCE.map(s => (
-                            <button
-                                key={s.route}
-                                type="button"
-                                onClick={() => go(s.route)}
-                                className="flex items-center gap-2.5 px-3 py-3.5 rounded-[14px] bg-bg border border-border/60 text-[14px] font-black text-text active:scale-[0.98] transition-all"
-                            >
-                                <span className="text-primary">{PAGE_UI[s.key].icon}</span>
-                                {PAGE_UI[s.key].label}
-                            </button>
-                        ))}
-                    </div>
-                    {!isGuest && (
-                        <button type="button" onClick={() => go('/addresses')} className="flex items-center justify-center gap-2 py-2 text-[12px] font-black uppercase tracking-wider text-text-secondary">
-                            <MapPin size={14} /> Quản lý địa chỉ
+                <Dialog
+                    onClose={() => setShowMenu(false)}
+                    panelClassName="w-full max-w-sm mx-4 my-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden max-h-[calc(100dvh-2rem)] flex flex-col"
+                >
+                    <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/40 shrink-0">
+                        <p className="text-text font-black text-sm leading-none">Đi tới</p>
+                        <button onClick={() => setShowMenu(false)} aria-label="Đóng" className="p-1.5 text-text-secondary hover:text-text transition-colors rounded-lg hover:bg-surface-light shrink-0">
+                            <X size={16} />
                         </button>
-                    )}
-                </BottomSheet>
+                    </div>
+                    <div className="overflow-y-auto px-3 pt-3 pb-5 flex flex-col gap-4">
+                        {SECTIONS.map(sec => {
+                            const items = sec.items.filter(i => (!i.manager || isManager || isAdmin) && !(i.noGuest && isGuest))
+                            return items.length > 0 && (
+                                <div key={sec.title}>
+                                    {sec.title && <p className="px-1 pb-2 text-[10px] font-black uppercase tracking-wider text-text-secondary">{sec.title}</p>}
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {items.map(i => (
+                                            <ActionPill
+                                                key={i.label}
+                                                icon={<i.icon size={16} />}
+                                                label={i.label}
+                                                tone={i.tone}
+                                                wide={i.wide}
+                                                active={i.route !== '/addresses' && (pathname === i.route || pathname.startsWith(i.route + '/'))}
+                                                onClick={() => go(i)}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            )
+                        })}
+                    </div>
+                </Dialog>
             )}
         </>
     )
