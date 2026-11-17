@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Check, ChevronDown, Home, MapPin, Search } from 'lucide-react'
 import { useAddress } from '../../contexts/AddressContext'
 import { useAuth } from '../../contexts/AuthContext'
@@ -23,6 +23,7 @@ export default function AddressSwitcher() {
     const { cart } = useCart()
     const confirm = useConfirm()
     const navigate = useNavigate()
+    const { pathname } = useLocation()
     const [open, setOpen] = useState(false)
     const [q, setQ] = useState('')
 
@@ -36,8 +37,12 @@ export default function AddressSwitcher() {
         setOpen(false)
         // Cùng cổng gói như /addresses (enter): sắp/đã hết hạn → trang gói của địa chỉ đó.
         const gate = !(monetization || flagLoading) ? 'ok' : computeAccessGate(subscriptionRowsMap[addr.id])
-        if (gate === 'ok') setSelectedAddress(addr)
-        else navigate('/subscription', { state: { preselectAddressId: addr.id, from: '/pos', locked: gate === 'hard', skipTo: '/pos' } })
+        if (gate === 'ok') {
+            setSelectedAddress(addr)
+            // trang chi tiết (≥3 đoạn: /inventory/stocking/x, /category/recipes/x…) gắn id địa chỉ cũ → lùi về danh sách cha
+            const seg = pathname.split('/')
+            if (seg.length > 3) navigate(seg.slice(0, 3).join('/'), { replace: true })
+        } else navigate('/subscription', { state: { preselectAddressId: addr.id, from: '/pos', locked: gate === 'hard', skipTo: '/pos' } })
     }
 
     return (
