@@ -382,8 +382,10 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
                         hintFill={inventoryProgress.suggest}
                         // Cà phê đã lưu → tắt nhấp nháy ngay (dòng vẫn mở ~1,2s chờ tick, xem effect tick coffee) — khỏi tưởng chưa xong.
                         hintStep={coffeeTyped && !inventory.isDirty ? null : hintStep}
+                        // Viền thẻ bọc: xanh khi đã xác nhận và chưa có số mới, còn lại màu chủ đạo. Dòng trạng thái làm dải đầu thẻ (InventoryReportCard vẽ khung).
+                        statusTone={!isGuest ? (confirmedAt && !changedSince ? 'success' : 'primary') : undefined}
                         beforeTotal={!isGuest && (
-                            <div className={`flex items-center justify-between gap-3 rounded-[14px] border px-3 py-2.5 ${changedSince ? 'bg-warning/10 border-warning/30' : confirmedAt ? 'bg-success/10 border-success/30' : 'bg-surface border-border/40'}`}>
+                            <div className="flex items-center justify-between gap-3">
                                 <div className="min-w-0">
                                     <p className={`text-[12px] font-bold ${changedSince ? 'text-warning' : confirmedAt ? 'text-success' : 'text-text'}`}>
                                         {changedSince ? `Có số mới sau lần xác nhận ${timeStringVN(confirmedAt!)}` : confirmedAt ? `Đã xác nhận kiểm kê lúc ${timeStringVN(confirmedAt)}` : 'Chưa xác nhận kiểm kê'}
@@ -394,7 +396,7 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
                                     type="button"
                                     disabled={isSaving || inventory.isDirty || !allCounted || (!!confirmedAt && !changedSince)}   // đã xác nhận mà chưa có số mới: bấm lại sẽ dời mốc trừ đơn, tồn quầy nhảy ngược
                                     onClick={handleConfirmInventory}
-                                    className={`shrink-0 rounded-[10px] px-3 py-2 text-[12px] font-bold disabled:opacity-40 ${confirmedAt && !changedSince ? 'border border-success/40 text-success' : 'bg-success text-bg'}`}
+                                    className={`shrink-0 rounded-[10px] px-3 py-2 text-[12px] font-bold disabled:opacity-40 ${confirmedAt && !changedSince ? 'border border-success/40 text-success' : 'bg-primary text-bg'}`}
                                 >
                                     {confirmedAt ? 'Cập nhật' : 'Xác nhận'}
                                 </button>
