@@ -287,10 +287,10 @@ export default function InventoryReportCard({
             <div className="flex flex-col gap-3 lg:grid lg:grid-cols-[minmax(0,1fr)_460px] lg:items-start lg:gap-4">
                 {/* Một thẻ bọc: dải trạng thái kiểm kê ở đầu (cùng màu viền) + các nhóm ngăn bằng vạch. */}
                 <div className={`bg-surface rounded-[20px] border shadow-sm min-w-0 ${beforeTotal ? tone.border : 'border-border/60'}`}>
-                {/* Dải dính đầu khung cuộn (mọi cỡ màn): nút Xác nhận + tiến độ luôn thấy khi cuộn danh sách dài. Lớp bg-surface chắn dưới lớp tint trong suốt để chữ phía sau không lộ qua.
+                {/* Dải dính đầu khung cuộn (mọi cỡ màn; -top-4 = bù padding py-4 của khung, không thì nội dung lộ qua khe 16px phía trên dải): nút Xác nhận + tiến độ luôn thấy khi cuộn danh sách dài. Lớp bg-surface chắn dưới lớp tint trong suốt để chữ phía sau không lộ qua.
                     Không dùng overflow-hidden ở thẻ ngoài (sẽ chặn sticky) → bo góc trên đặt trên dải. */}
                 {beforeTotal && (
-                    <div className="sticky top-0 z-10 bg-surface rounded-t-[19px]">
+                    <div className="sticky -top-4 z-10 bg-surface rounded-t-[19px]">
                         <div className={`px-3 py-2.5 border-b rounded-t-[19px] ${tone.border} ${tone.bg}`}>{beforeTotal}</div>
                     </div>
                 )}
