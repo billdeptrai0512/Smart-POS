@@ -55,10 +55,9 @@ export default function AddressSwitcher() {
                 <BottomSheet onClose={() => setOpen(false)} panelClassName={`${SHEET_PANEL} max-h-[80dvh]`}>
                     <SheetHeader title="Đổi địa chỉ" onClose={() => setOpen(false)} />
                     {addresses.length > 6 && (
-                        <label className="flex items-center gap-2 h-10 px-3 rounded-[14px] bg-bg border border-border/60">
+                        <label className="shrink-0 flex items-center gap-2 h-12 px-3 rounded-[14px] bg-bg border border-border/60">
                             <Search size={15} className="shrink-0 text-text-secondary" />
                             <input
-                                autoFocus
                                 value={q}
                                 onChange={e => setQ(e.target.value)}
                                 placeholder="Tìm địa chỉ"

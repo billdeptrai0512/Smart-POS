@@ -1,13 +1,15 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Banknote, Bell, ClipboardCheck, FileText, LayoutGrid, MapPin, Menu, Package, Receipt, ShoppingBag, Tag, TrendingUp, Users, Wallet, X, type LucideIcon } from 'lucide-react'
+import { Banknote, Bell, ChevronRight, ClipboardCheck, ClipboardList, FileText, LayoutGrid, MapPin, Menu, Package, Receipt, ShoppingBag, Tag, TrendingUp, Users, Wallet, X, type LucideIcon } from 'lucide-react'
+import { useAddress } from '../../contexts/AddressContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useHistory } from '../../contexts/HistoryContext'
 import { STOCK_CACHE_KEY } from '../../hooks/useRestockOverview'
 import { readJSON } from '../../utils/storage'
-import AddressNotice from '../AddressSelectPage/AddressNotice'
+import AddressNotice, { StockLoader } from '../AddressSelectPage/AddressNotice'
 import ActionPill from '../common/ActionPill'
-import { Dialog } from '../common/ModalShell'
+import WarehousePrepNotice from '../IngredientManagementPage/WarehousePrepNotice'
+import { BottomSheet, Dialog, SheetHeader, SHEET_PANEL } from '../common/ModalShell'
 import AddressSwitcher from './AddressSwitcher'
 
 const ICON_BTN = 'relative shrink-0 w-10 h-10 flex items-center justify-center rounded-[14px] bg-bg border border-border/60 text-text-secondary active:bg-border/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40'
@@ -27,15 +29,38 @@ const SECTIONS: { title: string; items: Item[] }[] = [
 // Số tươi hơn có khi mở sheet (nó tải nền rồi cập nhật cache).
 const pendingCount = () => Object.values(readJSON<Record<string, { need: number }>>(STOCK_CACHE_KEY, {})).filter(s => s.need > 0).length
 
+function BellRow({ icon: Icon, label, note, count, onClick }: { icon: LucideIcon; label: string; note: string; count?: number; onClick: () => void }) {
+    return (
+        <button type="button" onClick={onClick} className="flex items-center gap-3 px-3 py-3 rounded-[14px] bg-bg border border-border/60 text-left active:scale-[0.99] transition-all">
+            <Icon size={18} className="shrink-0 text-primary" />
+            <span className="flex-1 min-w-0">
+                <span className="block text-[14px] font-black text-text">{label}</span>
+                <span className="block text-[12px] font-bold text-text-secondary">{note}</span>
+            </span>
+            {!!count && <span className="shrink-0 min-w-[22px] h-[22px] px-1.5 rounded-full bg-primary text-white text-[11px] font-black flex items-center justify-center">{count}</span>}
+            <ChevronRight size={16} className="shrink-0 text-text-dim" />
+        </button>
+    )
+}
+
 // Hàng đầu của POS: ô địa chỉ (đổi tại chỗ) · chuông "Việc cần làm" · menu điều hướng.
 export default function TopNav() {
     const { isGuest, isManager, isAdmin } = useAuth()
     const { handleLoadHistory } = useHistory()
     const navigate = useNavigate()
     const { pathname } = useLocation()
-    const [showTasks, setShowTasks] = useState(false)
+    const { warehouseRole, selectedAddress, addresses, addressId } = useAddress()
+    const current = addresses.find(a => a.id === addressId)
+    // Số việc bổ sung của địa chỉ đang đứng: tính khi mở sheet (~5 request), không tính sẵn lúc vào trang. Kho tổng (hub) tính gộp nhóm → không hiện số.
+    const [restockNeed, setRestockNeed] = useState<number>()
+    const manager = isManager || isAdmin
+    // Chuông = thông báo cá nhân: "Bổ sung tồn kho" của địa chỉ đang đứng (ai cũng thấy; chi nhánh thành viên kho chung thì không mua hàng)
+    // và "Việc cần làm" gộp mọi địa chỉ (chỉ quản lý). Số trên chuông = số địa chỉ còn việc (đã gồm địa chỉ này) → không cộng dồn hai nhóm.
+    const canRestock = warehouseRole !== 'member' && warehouseRole !== 'pending'
+    const [bell, setBell] = useState<'list' | 'restock' | 'tasks' | null>(null)
     const [showMenu, setShowMenu] = useState(false)
-    const [pending, setPending] = useState(pendingCount)
+    const [cached, setCached] = useState(pendingCount)
+    const pending = manager ? cached : 0 // cache là số của quản lý (mọi địa chỉ) — nhân viên không có số này
 
     function go({ route, state }: Item) {
         setShowMenu(false)
@@ -47,17 +72,35 @@ export default function TopNav() {
         <>
             <AddressSwitcher />
             {!isGuest && (
-                <button type="button" aria-label="Việc cần làm" onClick={() => setShowTasks(true)} className={ICON_BTN}>
+                <button type="button" aria-label="Thông báo" onClick={() => setBell('list')} className={ICON_BTN}>
                     <Bell size={19} />
                     {pending > 0 && (
-                        <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-white text-[10px] font-black flex items-center justify-center leading-none">{pending}</span>
+                        <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-white text-[10px] font-black flex items-center justify-center leading-none">!</span>
                     )}
                 </button>
             )}
             <button type="button" aria-label="Menu" onClick={() => setShowMenu(true)} className={ICON_BTN}>
                 <Menu size={20} />
             </button>
-            {showTasks && <AddressNotice onClose={() => { setShowTasks(false); setPending(pendingCount()) }} />}
+            {bell === 'list' && (
+                <BottomSheet onClose={() => setBell(null)} panelClassName={SHEET_PANEL}>
+                    <SheetHeader title="Thông báo" onClose={() => setBell(null)} />
+                    <div className="flex flex-col gap-1.5">
+                        {canRestock && <BellRow icon={Package} label="Bổ sung tồn kho" note={selectedAddress?.name ?? ''} count={restockNeed} onClick={() => setBell('restock')} />}
+                        {manager && <BellRow icon={ClipboardList} label="Việc cần làm" note={`${pending} địa chỉ`} count={pending} onClick={() => setBell('tasks')} />}
+                    </div>
+                    {canRestock && warehouseRole !== 'hub' && current && (
+                        <StockLoader key={current.id} unit={{ key: current.id, name: current.name, target: current, members: [current], hub: false }} onResult={(_, stat) => setRestockNeed(stat?.need)} />
+                    )}
+                </BottomSheet>
+            )}
+            {bell === 'tasks' && <AddressNotice onClose={() => { setBell(null); setCached(pendingCount()) }} />}
+            {bell === 'restock' && (
+                <WarehousePrepNotice
+                    onClose={() => setBell(null)}
+                    onOpenIngredient={ing => navigate(`/inventory/stocking/${encodeURIComponent(ing)}?scope=month`)}
+                />
+            )}
             {showMenu && (
                 <Dialog
                     onClose={() => setShowMenu(false)}

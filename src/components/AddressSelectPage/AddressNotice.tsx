@@ -114,7 +114,7 @@ function Row({ name, note, tone = 'text-text-secondary', expanded, busy, onClick
 }
 
 // Không vẽ gì — chỉ tải số liệu 1 kho (hook theo cụm địa chỉ) + phần đã mua hôm nay của kho đích, rồi báo tiến độ lên cha.
-function StockLoader({ unit, skipped, onResult }: { unit: StockUnit; skipped?: Record<string, boolean>; onResult: (key: string, stat: StockStat | null, data: Loaded) => void }) {
+export function StockLoader({ unit, skipped, onResult }: { unit: StockUnit; skipped?: Record<string, boolean>; onResult: (key: string, stat: StockStat | null, data: Loaded) => void }) {
     const members = useMemo(() => unit.members.map(a => ({ id: a.id, name: a.name })), [unit.members])
     const prep = useGroupPrep(members, !unit.hub) // địa chỉ lẻ: min là sàn kho (như Lưu trữ); kho tổng nhóm: cộng chồng
     const { plan, error } = prep

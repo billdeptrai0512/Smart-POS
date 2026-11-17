@@ -42,21 +42,24 @@ interface Props {
     onRestocked?: () => unknown
     onOpenIngredient?: (ingredient: string, tab?: 'history', sinceISO?: string) => void
     hint?: boolean
+    // Chế độ "chỉ sheet" (chuông trên thanh điều hướng): không vẽ dải, mở sẵn, đóng thì báo cha unmount. Mọi vai trò đều mở được.
+    onClose?: () => void
 }
 
-export default function WarehousePrepNotice({ onRestocked, onOpenIngredient, hint }: Props) {
-    const { isManager, isAdmin } = useAuth()
+export default function WarehousePrepNotice({ onRestocked, onOpenIngredient, hint, onClose }: Props) {
+    const { isGuest } = useAuth()
     const { addressId, warehouseRole } = useAddress()
     const { isOnline } = useStats()
+    // Dải ở đỉnh trang chỉ còn cho khách dùng thử (guide bước 6 cần nó); người dùng thật vào qua chuông.
     // Nhóm đã có kho tổng: số "cần mua" của từng chi nhánh so riêng với CÙNG 1 kho chung nên sai → kho tổng tính gộp cả nhóm
     // (HubBuyNotice), chi nhánh thành viên không mua hàng nên ẩn.
-    if (!((isManager || isAdmin) && isOnline && addressId) || warehouseRole === 'member' || warehouseRole === 'pending') return null
+    if (!((onClose || isGuest) && isOnline && addressId) || warehouseRole === 'member' || warehouseRole === 'pending') return null
     return warehouseRole === 'hub'
-        ? <HubBuyNotice onRestocked={onRestocked} />
-        : <Notice key={addressId} addressId={addressId} onRestocked={onRestocked} onOpenIngredient={onOpenIngredient} hint={hint} />
+        ? <HubBuyNotice onRestocked={onRestocked} onClose={onClose} />
+        : <Notice key={addressId} addressId={addressId} onRestocked={onRestocked} onOpenIngredient={onOpenIngredient} hint={hint} onClose={onClose} />
 }
 
-function Notice({ addressId, onRestocked, onOpenIngredient, hint }: Props & { addressId: string }) {
+function Notice({ addressId, onRestocked, onOpenIngredient, hint, onClose }: Props & { addressId: string }) {
     const { profile, isGuest } = useAuth()
     const { refreshProducts } = useProducts()
     const { refreshTodayExpenses } = useHistory()
@@ -77,13 +80,13 @@ function Notice({ addressId, onRestocked, onOpenIngredient, hint }: Props & { ad
     // Chỉ còn nợ (không món cần mua) → đếm số NVL nợ; tính mua bị lỗi mà không có nợ → "!" để dải không biến mất im lặng (mở ra có nút Thử lại).
     const progress = total > 0 ? `${doneCount}/${total}` : debts.length || (prep.error ? '!' : 0)
     const show = total > 0 || debts.length > 0 || !!prep.error
-    const [open, setOpen] = useState(reopenSheet)
+    const [open, setOpen] = useState(reopenSheet || !!onClose)
     const [hinted, setHinted] = useState(false)
     const restockProgress = useOnboardingProgress('restockProgress', { isGuest, addressId })
     const openSheet = () => { setOpen(true); setHinted(true) }
     const navigate = useNavigate()
     // Guide bước cuối: nhập kho xong, bấm Đóng → đi thẳng tới Báo cáo xem Thực chi (không bắt khách lần theo ‹ từng trang).
-    const closeSheet = () => { setOpen(false); if (restockProgress.bought && !restockProgress.viewedNet) navigate('/report/cashflow', { state: { wizard: true } }) }
+    const closeSheet = () => { setOpen(false); onClose?.(); if (restockProgress.bought && !restockProgress.viewedNet) navigate('/report/cashflow', { state: { wizard: true } }) }
     useEffect(() => { reopenSheet = false }, [])
     const loadDebts = useCallback(
         () => fetchIngredientDebts(addressId).then(d => { debtSnapshots.set(addressId, d); setDebts(d) }).catch(err => console.error('fetchIngredientDebts', err)),
@@ -105,7 +108,7 @@ function Notice({ addressId, onRestocked, onOpenIngredient, hint }: Props & { ad
     return (
         <>
             {/* Dải hiện sau khi tải xong số liệu: mở dần chiều cao (0fr→1fr) thay vì bật ra đẩy cả trang xuống giật một nhịp. */}
-            {show && (
+            {show && !onClose && (
                 <div className="restock-slide-in grid">
                     <div className="min-h-0 overflow-hidden">
                         <NoticeBar
@@ -137,7 +140,7 @@ function Notice({ addressId, onRestocked, onOpenIngredient, hint }: Props & { ad
                                 <button
                                     key={d.ingredient}
                                     type="button"
-                                    onClick={d.invoices.length === 1 ? () => setPayInvoice(d.invoices[0]) : onOpenIngredient && (() => { reopenSheet = true; onOpenIngredient(d.ingredient, 'history', dateStringVN(new Date(d.invoices[0].created_at))) })}
+                                    onClick={d.invoices.length === 1 ? () => setPayInvoice(d.invoices[0]) : onOpenIngredient && (() => { reopenSheet = !onClose; onOpenIngredient(d.ingredient, 'history', dateStringVN(new Date(d.invoices[0].created_at))) })}
                                     className="w-full flex items-center gap-3 py-2.5 border-b border-border/20 last:border-b-0 text-left active:scale-[0.99] transition"
                                 >
                                     <span className="flex-1 min-w-0">
@@ -156,7 +159,7 @@ function Notice({ addressId, onRestocked, onOpenIngredient, hint }: Props & { ad
                         prep={prep}
                         bought={bought}
                         minAsFloor
-                        onOpenIngredient={onOpenIngredient && (ingredient => { reopenSheet = true; onOpenIngredient(ingredient) })}
+                        onOpenIngredient={onOpenIngredient && (ingredient => { reopenSheet = !onClose; onOpenIngredient(ingredient) })}
                         onAfterRestock={(bought) => {
                             showToast(bought.length > 1 ? `Đã nhập kho ${bought.length} món` : `Đã nhập kho ${ingredientLabel(bought[0])}`, 'success')
                             if (hint) writeOnboardingState(addressId, { restockProgress: { bought: true, viewedNet: false } })
