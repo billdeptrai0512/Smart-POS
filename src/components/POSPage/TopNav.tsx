@@ -30,12 +30,24 @@ const SECTIONS: { title: string; items: Item[] }[] = [
 // Số tươi hơn có khi mở sheet (nó tải nền rồi cập nhật cache).
 const pendingCount = () => Object.values(readJSON<Record<string, { need: number }>>(STOCK_CACHE_KEY, {})).filter(s => s.need > 0).length
 
+// Nhật ký ↔ Báo cáo dùng chung khoảng ngày (useDateScope ghi nó trên URL): đi giữa hai trang này qua menu thì mang theo, khỏi về lại hôm nay.
+const DATED = /^\/(history|report)(\/|$)/
+const DATE_KEYS = ['scope', 'offset', 'start', 'end']
+function carryDateParams(from: string, to: string, search: string) {
+    if (!DATED.test(from) || !DATED.test(to)) return ''
+    const src = new URLSearchParams(search)
+    const out = new URLSearchParams()
+    DATE_KEYS.forEach(k => { const v = src.get(k); if (v !== null) out.set(k, v) })
+    const q = out.toString() // không dùng .size: Safari cũ chưa có
+    return q ? `?${q}` : ''
+}
+
 // Hàng đầu của POS: ô địa chỉ (đổi tại chỗ) · chuông "Việc cần làm" · menu điều hướng.
 export default function TopNav() {
     const { isGuest, isManager, isAdmin } = useAuth()
     const { handleLoadHistory } = useHistory()
     const navigate = useNavigate()
-    const { pathname } = useLocation()
+    const { pathname, search } = useLocation()
     const { warehouseRole, addresses } = useAddress()
     // Chuông = "việc cần làm" của người dùng, không chia đôi: quản lý nhiều địa chỉ → danh sách việc từng địa chỉ (AddressNotice);
     // còn lại (1 địa chỉ, hoặc nhân viên) → bổ sung tồn kho của địa chỉ đang đứng. Chi nhánh thành viên kho chung không mua hàng → không có chuông.
@@ -46,7 +58,7 @@ export default function TopNav() {
 
     function go({ route, state }: Item) {
         setShowMenu(false)
-        navigate(route, { state })
+        navigate(route + carryDateParams(pathname, route, search), { state })
         if (route.startsWith('/history')) handleLoadHistory()
     }
 
