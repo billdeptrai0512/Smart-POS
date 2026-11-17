@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef, type Dispatch, type SetStateAction } from 'react'
+import { Check } from 'lucide-react'
 import { useHistory } from '../../contexts/HistoryContext'
 import { useProducts } from '../../contexts/ProductContext'
 import { useAddress } from '../../contexts/AddressContext'
@@ -89,19 +90,18 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
     // Giờ xác nhận kiểm kê lần cuối = confirmed_at (server đóng bởi set_inventory_confirm, mất khi số đếm đổi) lớn nhất
     // trong phiếu hôm nay; có = số Cuối kỳ đã thành Tồn quầy đang có, đơn sau giờ này trừ tiếp vào đó.
     // changedSince: có entry đã đếm mà chưa xác nhận (sửa số sau lần xác nhận trước). allCounted: mọi NVL đã đếm hoặc bỏ qua.
-    const { confirmedAt, confirmedByIng, changedSince, allCounted } = useMemo(() => {
+    const { confirmedAt, confirmedByIng, changedSince, allCounted, countedN } = useMemo(() => {
         const report = (shiftClosing?.inventory_report as { ingredient: string; remaining?: number | null; skipped?: boolean; confirmed_at?: string }[] | undefined) ?? []
         const confirmedByIng = new Map(report.filter(e => e.confirmed_at).map(e => [e.ingredient, new Date(e.confirmed_at!).getTime()]))
         const times = [...confirmedByIng.values()]
         const byIng = new Map(report.map(e => [e.ingredient, e]))
+        const countedN = inventory.ingredientsList.filter(ing => { const e = byIng.get(ing.ingredient); return e && (e.remaining != null || e.skipped) }).length // đã đếm hoặc bỏ qua
         return {
             confirmedByIng,
             confirmedAt: times.length ? new Date(Math.max(...times)) : null,
             changedSince: times.length > 0 && report.some(e => e.remaining != null && !e.confirmed_at),
-            allCounted: inventory.ingredientsList.length > 0 && inventory.ingredientsList.every(ing => {
-                const e = byIng.get(ing.ingredient)
-                return e && (e.remaining != null || e.skipped)
-            }),
+            countedN,
+            allCounted: inventory.ingredientsList.length > 0 && countedN === inventory.ingredientsList.length,
         }
     }, [shiftClosing, inventory.ingredientsList])
 
@@ -385,22 +385,32 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
                         // Viền thẻ bọc: xanh khi đã xác nhận và chưa có số mới, còn lại màu chủ đạo. Dòng trạng thái làm dải đầu thẻ (InventoryReportCard vẽ khung).
                         statusTone={!isGuest ? (confirmedAt && !changedSince ? 'success' : 'primary') : undefined}
                         beforeTotal={!isGuest && (
-                            <div className="flex items-center justify-between gap-3">
-                                <div className="min-w-0">
-                                    <p className={`text-[12px] font-bold ${changedSince ? 'text-warning' : confirmedAt ? 'text-success' : 'text-text'}`}>
-                                        {changedSince ? `Có số mới sau lần xác nhận ${timeStringVN(confirmedAt!)}` : confirmedAt ? `Đã xác nhận kiểm kê lúc ${timeStringVN(confirmedAt)}` : 'Chưa xác nhận kiểm kê'}
-                                    </p>
-                                    {(inventory.isDirty || !allCounted) && <p className="text-[11px] text-text-dim">{inventory.isDirty ? 'Đang có thay đổi chưa lưu' : 'Đếm hết nguyên liệu để xác nhận'}</p>}
+                            // Đã xác nhận mà chưa có số mới: chỉ báo ✓ + giờ, không nút (bấm lại sẽ dời mốc trừ đơn, tồn quầy nhảy ngược). Còn lại: tiến độ đếm + nút.
+                            confirmedAt && !changedSince ? (
+                                <p className="flex items-center gap-1.5 text-[12px] font-bold text-success">
+                                    <Check size={14} strokeWidth={3} className="shrink-0" />
+                                    Đã xác nhận kiểm kê lúc {timeStringVN(confirmedAt)}
+                                </p>
+                            ) : (
+                                <div className="flex items-center justify-between gap-3">
+                                    <div className="min-w-0">
+                                        <p className={`text-[12px] font-bold ${changedSince ? 'text-warning' : 'text-text'}`}>
+                                            {changedSince ? `Có số mới sau lần xác nhận ${timeStringVN(confirmedAt!)}` : 'Chưa xác nhận kiểm kê'}
+                                        </p>
+                                        <p className="text-[11px] text-text-dim tabular-nums">
+                                            {inventory.isDirty ? 'Đang có thay đổi chưa lưu' : allCounted ? 'Đã đếm đủ — bấm để xác nhận' : `Đã đếm ${countedN}/${inventory.ingredientsList.length} nguyên liệu`}
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        disabled={isSaving || inventory.isDirty || !allCounted}
+                                        onClick={handleConfirmInventory}
+                                        className="shrink-0 rounded-[10px] px-3 py-2 text-[12px] font-bold disabled:opacity-40 bg-primary text-bg"
+                                    >
+                                        {confirmedAt ? 'Cập nhật' : 'Xác nhận'}
+                                    </button>
                                 </div>
-                                <button
-                                    type="button"
-                                    disabled={isSaving || inventory.isDirty || !allCounted || (!!confirmedAt && !changedSince)}   // đã xác nhận mà chưa có số mới: bấm lại sẽ dời mốc trừ đơn, tồn quầy nhảy ngược
-                                    onClick={handleConfirmInventory}
-                                    className={`shrink-0 rounded-[10px] px-3 py-2 text-[12px] font-bold disabled:opacity-40 ${confirmedAt && !changedSince ? 'border border-success/40 text-success' : 'bg-primary text-bg'}`}
-                                >
-                                    {confirmedAt ? 'Cập nhật' : 'Xác nhận'}
-                                </button>
-                            </div>
+                            )
                         )}
                         afterTotal={!isStaff && <MissingCupSuspicionCard candidates={missingCupCandidates} cash={cashDiff == null ? null : { diff: cashDiff, system: systemTotalRevenue }} />}
                     />
