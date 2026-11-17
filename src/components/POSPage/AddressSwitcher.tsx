@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Check, ChevronDown, MapPin, Search } from 'lucide-react'
+import { Check, ChevronDown, Home, MapPin, Search } from 'lucide-react'
 import { useAddress } from '../../contexts/AddressContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAddressStats } from '../../contexts/AddressStatsContext'
@@ -53,7 +53,20 @@ export default function AddressSwitcher() {
             </button>
             {open && (
                 <BottomSheet onClose={() => setOpen(false)} panelClassName={`${SHEET_PANEL} max-h-[80dvh]`}>
-                    <SheetHeader title="Đổi địa chỉ" onClose={() => setOpen(false)} />
+                    <SheetHeader
+                        title={
+                            // Nút vuông bo cùng kiểu nút X (nền + viền), mép trái thẳng với ô tìm kiếm. Chạm → trang chọn địa chỉ (/addresses).
+                            <span className="flex items-center gap-2.5">
+                                {!isGuest && (
+                                    <button type="button" aria-label="Về trang địa chỉ" onClick={() => { setOpen(false); navigate('/addresses') }} className="w-8 h-8 shrink-0 flex items-center justify-center rounded-[10px] bg-surface-light border border-border/60 text-text-secondary hover:text-text active:scale-95 transition-all">
+                                        <Home size={16} />
+                                    </button>
+                                )}
+                                Đổi địa chỉ
+                            </span>
+                        }
+                        onClose={() => setOpen(false)}
+                    />
                     {addresses.length > 6 && (
                         <label className="shrink-0 flex items-center gap-2 h-12 px-3 rounded-[14px] bg-bg border border-border/60">
                             <Search size={15} className="shrink-0 text-text-secondary" />

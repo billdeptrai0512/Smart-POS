@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, Fragment, lazy, Suspense, type ReactNode } from 'react'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
-import { Plus, BadgePercent, GripVertical, FileSpreadsheet, Search } from 'lucide-react'
+import { Plus, GripVertical, FileSpreadsheet, Search } from 'lucide-react'
 import {
     type DragEndEvent,
     DndContext, DragOverlay, MouseSensor, TouchSensor,
@@ -9,7 +9,6 @@ import {
 import { BottomSheet, SheetHeader, SHEET_PANEL } from '../components/common/ModalShell'
 import MenuDivider from '../components/common/MenuDivider'
 import Dropdown from '../components/common/Dropdown'
-import NoticeBar from '../components/common/NoticeBar'
 import { normalizeSearchText, normalizeIngredientKey, sortIngredients, getIngredientUnit } from '../utils/ingredients'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
@@ -28,7 +27,7 @@ import { insertTopping, fetchToppingIngredients, toppingSourcesOf, type ToppingS
 import { upsertRecipes } from '../services/recipeService'
 import { goToMenuStep } from '../utils/menuSequence'
 import { useTabRoute } from '../hooks/useTabRoute'
-import { RECIPE_TABS, DISCOUNT_TAB } from '../constants/menuTabs'
+import { RECIPE_TABS } from '../constants/menuTabs'
 import type { Row } from '../types/domain'
 import { groupRecipesByProduct } from '../utils/inventory'
 
@@ -89,7 +88,7 @@ export default function RecipeMenuPage() {
     const navigate = useNavigate()
     const location = useLocation()
     const backTo = location.state?.from || '/history/sales'
-    const { products, batchProducts, toppings, recipes, ingredientCosts, ingredientUnits, ingredientGroups, discountPrograms, refreshProducts } = useProducts()
+    const { products, batchProducts, toppings, recipes, ingredientCosts, ingredientUnits, ingredientGroups, refreshProducts } = useProducts()
     const { addressId, selectedAddress } = useAddress()
     const { isManager, isAdmin, isGuest } = useAuth()
     const canEdit = isManager || isAdmin
@@ -340,15 +339,6 @@ export default function RecipeMenuPage() {
     return (
         <div className="flex flex-col h-full max-w-lg lg:max-w-none mx-auto bg-bg relative">
             <Toast toast={toast} />
-
-            {canEdit && !isGuest && (
-                <NoticeBar
-                    icon={<BadgePercent size={15} className="text-primary shrink-0" />}
-                    label={DISCOUNT_TAB.label}
-                    count={(discountPrograms || []).filter(p => p.enabled).length}
-                    onClick={() => navigate(`/category/${DISCOUNT_TAB.key}`, { state: location.state })}
-                />
-            )}
 
             <MenuPageHeader
                 title="Danh mục"

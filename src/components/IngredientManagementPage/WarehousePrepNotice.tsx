@@ -1,30 +1,23 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Package, ChevronRight } from 'lucide-react'
+import { Package } from 'lucide-react'
 import { useAddress } from '../../contexts/AddressContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useStats } from '../../contexts/StatsContext'
 import { useHistory } from '../../contexts/HistoryContext'
-import { useToast } from '../../hooks/useToast'
-import { useSavingAction } from '../../hooks/useSavingAction'
 import { useProducts } from '../../contexts/ProductContext'
 import { useGroupPrep } from '../../hooks/useGroupPrep'
-import { recordInvoicePayment } from '../../services/orderService'
-import { fetchIngredientDebts, fetchTodayExpenses, type IngredientDebt } from '../../services/expenseService'
+import { fetchTodayExpenses } from '../../services/expenseService'
 import type { UsageMap } from '../../utils/inventory'
 import { buildHubBuyItems } from '../../utils/hubBuy'
 import { buildTodayBoughtMap } from '../../utils/prepToday'
-import { dateStringVN } from '../../utils/dateVN'
-import { formatVND } from '../../utils/money'
 import { ingredientLabel } from '../../utils/ingredients'
 import { writeOnboardingState } from '../../utils/onboardingStorage'
 import { useOnboardingProgress } from '../../hooks/useOnboardingProgress'
 import HubBuyNotice, { HubBuyBody } from './HubBuyNotice'
 import NoticeBar from '../common/NoticeBar'
 import NoticeSheet from '../common/NoticeSheet'
-import InvoicePaymentSheet, { type InvoicePayment } from './InvoicePaymentSheet'
-import Toast from '../POSPage/Toast'
-import type { Row } from '../../types/domain'
+import { DebtList, useDebtPay, useIngredientDebts } from './DebtSection'
 
 // Dải notice "Bổ sung tồn kho" ở đỉnh /inventory (Tồn kho): NVL/bao bì cần MUA thêm để đủ bán ngày
 // mai (target = max(dự báo mai, tồn tối thiểu) − tổng tồn kho + quầy). Bấm → danh sách; nút "Mua N …"
@@ -34,10 +27,6 @@ import type { Row } from '../../types/domain'
 // Bấm tên nguyên liệu → sang trang chi tiết (trang cha unmount); cờ module này cho lần mount kế
 // (back về /inventory) mở lại đúng bảng — cùng kiểu cache `saved` của IngredientManagementPage.
 let reopenSheet = false
-// Công nợ lần tải gần nhất theo địa chỉ: về lại từ trang chi tiết thì section Công nợ có NGAY (như ảnh chụp của useSnapshot
-// bên danh sách Cần mua) thay vì hiện sau → khỏi đẩy danh sách xuống. Tải xong thì thay bằng số thật.
-const debtSnapshots = new Map<string, IngredientDebt[]>()
-
 interface Props {
     onRestocked?: () => unknown
     onOpenIngredient?: (ingredient: string, tab?: 'history', sinceISO?: string) => void
@@ -53,14 +42,17 @@ export default function WarehousePrepNotice({ onRestocked, onOpenIngredient, hin
     // Dải ở đỉnh trang chỉ còn cho khách dùng thử (guide bước 6 cần nó); người dùng thật vào qua chuông.
     // Nhóm đã có kho tổng: số "cần mua" của từng chi nhánh so riêng với CÙNG 1 kho chung nên sai → kho tổng tính gộp cả nhóm
     // (HubBuyNotice), chi nhánh thành viên không mua hàng nên ẩn.
-    if (!((onClose || isGuest) && isOnline && addressId) || warehouseRole === 'member' || warehouseRole === 'pending') return null
+    const blocked = !((onClose || isGuest) && isOnline && addressId) || warehouseRole === 'member' || warehouseRole === 'pending'
+    // Chế độ chuông mà không vẽ được (offline, chi nhánh thành viên) → báo cha đóng, kẻo cờ mở còn đó rồi sheet bật ra khi có mạng lại.
+    useEffect(() => { if (blocked) onClose?.() }, [blocked]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (blocked) return null
     return warehouseRole === 'hub'
         ? <HubBuyNotice onRestocked={onRestocked} onClose={onClose} />
         : <Notice key={addressId} addressId={addressId} onRestocked={onRestocked} onOpenIngredient={onOpenIngredient} hint={hint} onClose={onClose} />
 }
 
 function Notice({ addressId, onRestocked, onOpenIngredient, hint, onClose }: Props & { addressId: string }) {
-    const { profile, isGuest } = useAuth()
+    const { isGuest } = useAuth()
     const { refreshProducts } = useProducts()
     const { refreshTodayExpenses } = useHistory()
     // Cùng đường tính với dải "Việc cần làm" ở /addresses (useGroupPrep + buildHubBuyItems) → hai nơi luôn khớp.
@@ -76,8 +68,7 @@ function Notice({ addressId, onRestocked, onOpenIngredient, hint, onClose }: Pro
     // Món đã mua đủ (done) vẫn nằm trong danh sách → đếm tiến độ "đã mua / tổng", mẫu số đứng yên suốt ngày.
     const total = items.length
     const doneCount = items.filter(it => it.done).length
-    const [debts, setDebts] = useState<IngredientDebt[]>(() => debtSnapshots.get(addressId) ?? [])
-    // Chỉ còn nợ (không món cần mua) → đếm số NVL nợ; tính mua bị lỗi mà không có nợ → "!" để dải không biến mất im lặng (mở ra có nút Thử lại).
+    const { debts, reload: loadDebts } = useIngredientDebts(addressId)
     const progress = total > 0 ? `${doneCount}/${total}` : debts.length || (prep.error ? '!' : 0)
     const show = total > 0 || debts.length > 0 || !!prep.error
     const [open, setOpen] = useState(reopenSheet || !!onClose)
@@ -88,20 +79,7 @@ function Notice({ addressId, onRestocked, onOpenIngredient, hint, onClose }: Pro
     // Guide bước cuối: nhập kho xong, bấm Đóng → đi thẳng tới Báo cáo xem Thực chi (không bắt khách lần theo ‹ từng trang).
     const closeSheet = () => { setOpen(false); onClose?.(); if (restockProgress.bought && !restockProgress.viewedNet) navigate('/report/cashflow', { state: { wizard: true } }) }
     useEffect(() => { reopenSheet = false }, [])
-    const loadDebts = useCallback(
-        () => fetchIngredientDebts(addressId).then(d => { debtSnapshots.set(addressId, d); setDebts(d) }).catch(err => console.error('fetchIngredientDebts', err)),
-        [addressId])
-    useEffect(() => { loadDebts() }, [loadDebts])
-    // Nợ chỉ 1 phiếu → mở thẳng form trả nợ; nhiều phiếu thì vào Nhật ký của nguyên liệu để chọn phiếu cần trả.
-    const [payInvoice, setPayInvoice] = useState<Row | null>(null)
-    const { toast: payToast, showToast, showError } = useToast()
-    const { saving, withSaving } = useSavingAction(showError)
-    const handlePay = ({ amount, paymentMethod, paidAt, cashPhase }: InvoicePayment) => withSaving('Ghi nhận thanh toán', async () => {
-        await recordInvoicePayment(payInvoice!.address_id || addressId, payInvoice!.id, amount, paymentMethod, profile?.name, paidAt, cashPhase)
-        await Promise.all([loadDebts(), refreshTodayExpenses?.()])
-        setPayInvoice(null)
-        showToast('Đã ghi nhận thanh toán', 'success')
-    })
+    const { pay, setPay, node: payNode, showToast } = useDebtPay(loadDebts)
 
     if (!show && !open) return null
 
@@ -123,9 +101,8 @@ function Notice({ addressId, onRestocked, onOpenIngredient, hint, onClose }: Pro
                     </div>
                 </div>
             )}
-            <Toast toast={payToast} />
 
-            {open && !payInvoice && (
+            {open && !pay && (
                 <NoticeSheet
                     icon={<span className="shrink-0 text-[16px] font-black text-primary tabular-nums">{progress}</span>}
                     title="Tồn kho cần bổ sung"
@@ -136,21 +113,7 @@ function Notice({ addressId, onRestocked, onOpenIngredient, hint, onClose }: Pro
                     {debts.length > 0 && (
                         <>
                             <SectionHeading first tone="warning">Công nợ</SectionHeading>
-                            {debts.map(d => (
-                                <button
-                                    key={d.ingredient}
-                                    type="button"
-                                    onClick={d.invoices.length === 1 ? () => setPayInvoice(d.invoices[0]) : onOpenIngredient && (() => { reopenSheet = !onClose; onOpenIngredient(d.ingredient, 'history', dateStringVN(new Date(d.invoices[0].created_at))) })}
-                                    className="w-full flex items-center gap-3 py-2.5 border-b border-border/20 last:border-b-0 text-left active:scale-[0.99] transition"
-                                >
-                                    <span className="flex-1 min-w-0">
-                                        <span className="block text-[14px] font-bold leading-tight text-text">{ingredientLabel(d.ingredient)}</span>
-                                        <span className="block mt-0.5 text-[11px] text-text-dim">{d.invoices.length} phiếu chưa trả đủ</span>
-                                    </span>
-                                    <span className="shrink-0 text-[15px] font-black text-warning tabular-nums">{formatVND(d.owing)}</span>
-                                    <ChevronRight size={15} className="shrink-0 text-text-dim -ml-1" />
-                                </button>
-                            ))}
+                            <DebtList debts={debts} onPay={invoice => setPay({ addressId, invoice })} onOpenIngredient={onOpenIngredient && ((ing, tab, since) => { reopenSheet = !onClose; onOpenIngredient(ing, tab, since) })} />
                             {total > 0 && <SectionHeading tone="neutral">Cần mua</SectionHeading>}
                         </>
                     )}
@@ -170,9 +133,7 @@ function Notice({ addressId, onRestocked, onOpenIngredient, hint, onClose }: Pro
                 </NoticeSheet>
             )}
 
-            {payInvoice && (
-                <InvoicePaymentSheet invoice={payInvoice} saving={saving} onClose={() => setPayInvoice(null)} onConfirm={handlePay} />
-            )}
+            {payNode}
 
         </>
     )
