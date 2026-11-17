@@ -201,6 +201,16 @@ body {
   outline-offset: -3px;
   animation: onboarding-hint 0.9s ease-in-out infinite;
 }
+/* .onboarding-hint-calm: bản ~75% của .onboarding-hint cho việc thường ngày (pill "Bạn cần chuẩn bị" của người dùng thật) — viền + glow nhạt ~75%, nhịp chậm hơn. */
+@keyframes onboarding-hint-calm {
+  0%, 100% { outline-color: transparent; box-shadow: inset 0 0 0 0 transparent; }
+  50% { outline-color: color-mix(in srgb, var(--color-primary) 75%, transparent); box-shadow: inset 0 0 21px 1px color-mix(in srgb, var(--color-primary-glow) 75%, transparent); }
+}
+.onboarding-hint-calm {
+  outline: 3px solid transparent;
+  outline-offset: -3px;
+  animation: onboarding-hint-calm 1.8s ease-in-out infinite;
+}
 /* .onboarding-look: "nhìn vào đây" (không phải "bấm") — viền hiện dần, đứng yên, tắt dần; chạy đúng 1 lần, không nhấp nháy. */
 @keyframes onboarding-look {
   0%, 100% { outline-color: transparent; box-shadow: inset 0 0 0 0 transparent; }

@@ -11,7 +11,7 @@ import { ingredientLabel } from './ingredients'
 // variant 'look' (.onboarding-look) = "nhìn vào đây", không phải "bấm": sáng đứng yên 1 lần ~2s rồi tắt, không nhấp nháy.
 export function onboardingHintClass(active: unknown, variant = 'default') {
     if (!active) return ''
-    return variant === 'solid' ? 'onboarding-hint-solid' : variant === 'soft' ? 'onboarding-hint-soft' : variant === 'look' ? 'onboarding-look' : 'onboarding-hint'
+    return variant === 'solid' ? 'onboarding-hint-solid' : variant === 'soft' ? 'onboarding-hint-soft' : variant === 'look' ? 'onboarding-look' : variant === 'calm' ? 'onboarding-hint-calm' : 'onboarding-hint'
 }
 
 // Nhật ký (guide): sau chừng này ms chữ gõ xong + thẻ thống kê sáng xong → mũi tên "tiến" sáng VÀ dải đổi sang câu cầu nối.
