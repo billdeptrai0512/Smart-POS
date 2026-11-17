@@ -4,18 +4,15 @@ import Typewriter from '../common/Typewriter'
 import type { LastOrder } from '../../services/cartOps'
 
 interface Props {
-    dayName: string
-    dateOnly: string
     onOpenHistory: () => void
-    addressName?: string | null
-    onAddressClick: () => void
+    nav: ReactNode // thanh điều hướng trên cùng (ô địa chỉ)
     recentOrders?: LastOrder[]
     enterKey: string | null
     showOnboardingHint?: boolean
     notice?: ReactNode // dải notice dưới 2 thẻ, vẫn trong header (PrepPinBar)
 }
 
-export default function Header({ dayName, dateOnly, onOpenHistory, addressName, onAddressClick, recentOrders = [], enterKey, showOnboardingHint = false, notice }: Props) {
+export default function Header({ onOpenHistory, nav, recentOrders = [], enterKey, showOnboardingHint = false, notice }: Props) {
     const hintClass = onboardingHintClass(showOnboardingHint, 'solid')
     // Saved orders only, newest first (max 3). isNew matches only the exact row just
     // committed locally (enterKey) → it slides in and types out; the realtime DB echo,
@@ -28,32 +25,17 @@ export default function Header({ dayName, dateOnly, onOpenHistory, addressName, 
     }))
     return (
         <header className="shrink-0 pt-6 pb-6 bg-surface border-b border-border/60 shadow-[0_8px_30px_rgba(0,0,0,0.03)] relative z-20">
-            <div className="px-6 grid grid-cols-[7fr_10fr] dine-split:grid-cols-4 gap-3 mb-1">
-                {/* Card 1: Address & Status */}
-                <div
-                    onClick={onAddressClick}
-                    role="button"
-                    tabIndex={0}
-                    className="cursor-pointer bg-bg hover:bg-surface active:bg-border/20 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 rounded-[20px] p-3 sm:p-3.5 border border-border/60 shadow-sm flex flex-col justify-center gap-[2px] relative overflow-hidden h-full"
-                >
-                    <div className="flex flex-col justify-between items-start relative z-10 w-full">
-                        <span className="text-[12px] sm:text-[13px] text-text-secondary font-black uppercase tracking-wider">Địa chỉ</span>
-                        {addressName && <span className="w-full mt-0.5 text-[12px] text-success font-black uppercase tracking-wide line-clamp-1">{addressName}</span>}
-                    </div>
-                    <div className="w-full h-[1px] bg-border/60 rounded-full relative z-10 my-[3px] mt-[4px]"></div>
-                    <div className="flex flex-col justify-between items-start relative z-10 mt-[6px]">
-                        <span className="text-[13px] text-text-secondary font-bold uppercase tracking-wider">{dayName}</span>
-                        <span className="text-[14px] text-text font-black uppercase tracking-tight">{dateOnly}</span>
-                    </div>
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-success/5 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none" />
-                </div>
-
-                {/* Card 2: Revenue / Cost / Profit */}
+            {/* Thanh điều hướng: ô địa chỉ (đổi tại chỗ). */}
+            <div className="px-6 flex items-center gap-2 mb-3">
+                {nav}
+            </div>
+            <div className="px-6 mb-1">
+                {/* Nhật ký — trải hết chiều ngang */}
                 <div
                     onClick={onOpenHistory}
                     role="button"
                     tabIndex={0}
-                    className={`dine-split:col-span-3 cursor-pointer bg-bg rounded-[20px] p-3 sm:p-3.5 border border-primary/35 hover:border-primary/60 shadow-sm flex flex-col gap-[2px] relative overflow-hidden h-full transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${hintClass}`}
+                    className={`cursor-pointer bg-bg rounded-[20px] p-3 sm:p-3.5 border border-primary/35 hover:border-primary/60 shadow-sm flex flex-col gap-[2px] relative overflow-hidden h-full transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${hintClass}`}
                 >
                     <div className="flex flex-col justify-between items-start relative z-10 w-full">
                         <span className="text-[12px] sm:text-[13px] text-primary font-black uppercase tracking-wider">Nhật ký</span>

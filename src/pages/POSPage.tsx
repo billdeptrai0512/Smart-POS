@@ -7,10 +7,9 @@ import { useAuth } from '../contexts/AuthContext'
 import { useOrderOnboardingProgress } from '../hooks/useOrderOnboardingProgress'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { ChevronDown } from 'lucide-react'
-import { DAY_NAMES } from '../constants/products'
-import { dateFullVN } from '../utils/dateVN'
 
 import Header from '../components/POSPage/Header'
+import TopNav from '../components/POSPage/TopNav'
 import MenuGrid from '../components/POSPage/MenuGrid'
 import CheckoutBar from '../components/POSPage/CheckoutBar'
 import TableModal from '../components/POSPage/TableModal'
@@ -23,7 +22,7 @@ export default function POSPage() {
     const location = useLocation()
     const { isGuest } = useAuth()
     const { products, productExtras, productToppings, productDiscounts } = useProducts()
-    const { addressId, selectedAddress } = useAddress()
+    const { addressId } = useAddress()
     const {
         cart,
         handleAddItem, handleRemoveItem, handleToggleExtra, handleToggleTopping,
@@ -57,7 +56,6 @@ export default function POSPage() {
     // fallback while it loads. Same module App.tsx lazy-imports → warms the same chunk.
     useEffect(() => { import('./HistoryPage') }, [])
 
-    const today = new Date()
 
     function handleOpenHistory() {
         navigate('/history/sales')
@@ -77,11 +75,8 @@ export default function POSPage() {
             {/* Header phủ cả 2 cột ở dine-split (4 cột bên trong, xem Header.tsx). */}
             <div className="[grid-area:header] min-w-0 w-full max-w-lg mx-auto dine-split:max-w-none">
                 <Header
-                    dayName={DAY_NAMES[today.getDay()]}
-                    dateOnly={dateFullVN(today)}
                     onOpenHistory={handleOpenHistory}
-                    addressName={selectedAddress?.name}
-                    onAddressClick={() => navigate(isGuest ? '/login' : '/addresses')}
+                    nav={<TopNav />}
                     recentOrders={recentOrders}
                     enterKey={enterKey}
                     showOnboardingHint={showHistoryHint}

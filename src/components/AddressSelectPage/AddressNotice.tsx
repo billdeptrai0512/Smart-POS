@@ -19,7 +19,8 @@ import type { Address } from '../../types/domain'
 // Dữ liệu (danh sách kho, tiến độ, bỏ qua, thứ tự) nằm ở useRestockOverview; file này lo giao diện + điều hướng.
 const STOCK_CONCURRENCY = 3
 
-export default function AddressNotice() {
+// onClose: chế độ "chỉ sheet" (chuông trên thanh POS) — không vẽ dải, mở sẵn, đóng thì báo cha unmount (bộ tải nền chỉ chạy khi sheet đang mở).
+export default function AddressNotice({ onClose }: { onClose?: () => void } = {}) {
     const { setSelectedAddress } = useAddress()
     const navigate = useNavigate()
     // Bấm tên nguyên liệu → sang trang chi tiết (trang này unmount); nút Back của trang đó về /addresses?reopen=<kho> → mở lại sheet + dòng kho đó.
@@ -28,7 +29,7 @@ export default function AddressNotice() {
     const focusRef = useRef<HTMLDivElement>(null)
     const scrollRef = useRef<HTMLDivElement>(null)
     const [scrollTo, setScrollTo] = useState<string | null>(null)
-    const [open, setOpen] = useState(reopenKey !== null)
+    const [open, setOpen] = useState(reopenKey !== null || !!onClose)
     const [expanded, setExpanded] = useState<string | null>(reopenKey) // kho đang mở rộng — accordion: mở kho này thì kho kia tự đóng
     const { statsLoading, stats, skips, loaded, stockRows, total, doneCount, loadOrder, toggleSkip, onStock } = useRestockOverview(reopenKey, open)
 
@@ -49,9 +50,9 @@ export default function AddressNotice() {
 
     return (
         <>
-            <NoticeBar icon={<ClipboardList size={15} className="text-primary shrink-0" />} label="Việc cần làm" count={total - doneCount} onClick={() => setOpen(true)} />
+            {!onClose && <NoticeBar icon={<ClipboardList size={15} className="text-primary shrink-0" />} label="Việc cần làm" count={total - doneCount} onClick={() => setOpen(true)} />}
             {open && (
-                <NoticeSheet icon={<span className="shrink-0 text-[16px] font-black text-primary tabular-nums">{doneCount}/{total}</span>} title="Việc cần làm" count="" onClose={() => setOpen(false)}>
+                <NoticeSheet icon={<span className="shrink-0 text-[16px] font-black text-primary tabular-nums">{doneCount}/{total}</span>} title="Việc cần làm" count="" onClose={() => { setOpen(false); onClose?.() }}>
                     {stockRows.length > 0 && (
                         <div className="pt-3">
                             {stockRows.map(u => {

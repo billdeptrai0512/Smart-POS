@@ -99,7 +99,8 @@ function RequireAddress() {
   useWakeLock()
   if (loading) return <PageLoading />
   if (!selectedAddress) return <Navigate to="/addresses" replace />
-  return <Outlet />
+  // key theo địa chỉ: đổi địa chỉ tại chỗ (ô địa chỉ trên thanh POS) remount Product/POSProvider như lúc đi vòng qua /addresses — không giữ giỏ/menu của địa chỉ cũ.
+  return <Outlet key={selectedAddress.id ?? 'default'} />
 }
 
 export default function App() {

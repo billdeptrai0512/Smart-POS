@@ -7,7 +7,7 @@ import type { UsageMap } from '../utils/inventory'
 import type { Prep } from '../components/IngredientManagementPage/HubBuyNotice'
 import type { Address } from '../types/domain'
 
-const STOCK_CACHE_KEY = 'notice_restock_stats_v3'
+export const STOCK_CACHE_KEY = 'notice_restock_stats_v3'
 const SKIP_KEY = 'notice_restock_skipped' // { date, byUnit: { [unitKey]: { [ingredient]: true } } } — "bỏ qua" chỉ có hiệu lực trong ngày
 const todayKey = () => new Date().toLocaleDateString('en-CA')
 
