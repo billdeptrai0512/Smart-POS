@@ -14,6 +14,7 @@ function useCachedRange(fetchFn: (addressId: string, start: Date, end: Date) => 
     const [data, setData] = useState<Row[]>([])
     const [isLoading, setIsLoading] = useState(false)
     const cacheRef = useRef(new Map<string, Row[]>())
+    const [ver, setVer] = useState(0) // tăng = tải lại khoảng đang xem (sau khi thêm/sửa/xoá)
 
     // The today-scope reset and cache-hit hydrate set state synchronously on purpose
     // (the async fetch path drives the rest). Intentional, not a cascade hazard.
@@ -21,17 +22,21 @@ function useCachedRange(fetchFn: (addressId: string, start: Date, end: Date) => 
         if (!addressId || isReadOnly) return
         if (isTodayScope) { setData([]); return }
         const key = `${addressId}|${startISO}|${endISO}`
+        // Stale-while-revalidate: có cache thì hiện ngay rồi vẫn tải lại ngầm — chi phí/đơn có thể vừa được thêm/sửa/xoá
+        // (ở trang này hoặc từ máy khác) sau lần tải trước; cache cũ mãi thì quay lại ngày cũ thấy số cũ.
         const cached = cacheRef.current.get(key)
-        if (cached) { setData(cached); return }
-        setIsLoading(true)
+        if (cached) setData(cached); else setIsLoading(true)
+        let stale = false
         fetchFn(addressId, rangeStart, rangeEnd)
-            .then(result => { cacheRef.current.set(key, result); setData(result) })
-            .finally(() => setIsLoading(false))
+            .then(result => { cacheRef.current.set(key, result); if (!stale) setData(result) })
+            .catch(err => console.error('range fetch', err))
+            .finally(() => { if (!stale) setIsLoading(false) })
+        return () => { stale = true }
         // ponytail: keyed on startISO/endISO (derived), not rangeStart/rangeEnd — the Date
         // objects get a new reference every render even on the same day, which would
         // refetch every render instead of only when the actual range changes.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [addressId, startISO, endISO, isTodayScope, isReadOnly])
+    }, [addressId, startISO, endISO, isTodayScope, isReadOnly, ver])
 
     // Vá 1 dòng theo id ở cả state lẫn cache, để thẻ đổi ngay và quay lại cùng khoảng ngày không thấy bản cũ.
     const patch = (id: string, updates: Row) => {
@@ -42,7 +47,7 @@ function useCachedRange(fetchFn: (addressId: string, start: Date, end: Date) => 
         if (cached) cacheRef.current.set(key, apply(cached))
     }
 
-    return { data, isLoading, patch }
+    return { data, isLoading, patch, reload: () => setVer(v => v + 1) }
 }
 
 export function useHistoryRangeFetch({ addressId, rangeStart, rangeEnd, isTodayScope, isReadOnly }: Pick<RangeCtx, 'addressId' | 'rangeStart' | 'rangeEnd' | 'isTodayScope' | 'isReadOnly'>) {
@@ -50,8 +55,8 @@ export function useHistoryRangeFetch({ addressId, rangeStart, rangeEnd, isTodayS
     const endISO = rangeEnd.toISOString()
     const rangeCtx = { addressId, rangeStart, rangeEnd, startISO, endISO, isTodayScope, isReadOnly }
 
-    const { data: rangeExpenses, isLoading: isLoadingRange, patch: patchExpense } = useCachedRange(fetchExpensesByRange, rangeCtx)
+    const { data: rangeExpenses, isLoading: isLoadingRange, patch: patchExpense, reload: reloadExpenses } = useCachedRange(fetchExpensesByRange, rangeCtx)
     const { data: rangeOrders, isLoading: isLoadingRangeOrders, patch: patchOrder } = useCachedRange(fetchOrdersByRange, rangeCtx)
 
-    return { rangeExpenses, rangeOrders, isLoadingRange, isLoadingRangeOrders, patchExpense, patchOrder }
+    return { rangeExpenses, rangeOrders, isLoadingRange, isLoadingRangeOrders, patchExpense, patchOrder, reloadExpenses }
 }

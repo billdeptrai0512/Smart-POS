@@ -164,7 +164,7 @@ export default function HistoryPage() {
     const isRangeScope = scope === 'week' || scope === 'month' || (scope === 'custom' && !isSameDayVN(rangeStart, rangeEnd))
 
     // ─── Range data fetchers ──────────────────────────────────────────
-    const { rangeExpenses, rangeOrders, isLoadingRange, isLoadingRangeOrders, patchExpense: patchRangeExpense, patchOrder: patchRangeOrder } = useHistoryRangeFetch({
+    const { rangeExpenses, rangeOrders, isLoadingRange, isLoadingRangeOrders, patchExpense: patchRangeExpense, patchOrder: patchRangeOrder, reloadExpenses } = useHistoryRangeFetch({
         addressId,
         rangeStart, rangeEnd,
         isTodayScope, isReadOnly,
@@ -332,6 +332,7 @@ export default function HistoryPage() {
                 await updateExpense(editingExpense.id, buildExpenseUpdates(editingExpense, {
                     name: costName, amount, paymentMethod, categoryId: selectedCategoryId, date: expenseDate, isAfterShift,
                 }))
+                if (!isTodayScope) reloadExpenses() // đổi ngày chi → dòng có thể sang khoảng khác
                 setShowAddModal(false)
                 return
             }
@@ -340,6 +341,7 @@ export default function HistoryPage() {
             const isBackdated = expenseDate && expenseDate !== today
             const createdAt = isBackdated ? new Date(`${expenseDate}T12:00:00+07:00`).toISOString() : null
             await handleAddExpense(costName.trim(), amount, isAfterShift, paymentMethod, metadata, false, selectedCategoryId, createdAt)
+            if (!isTodayScope) reloadExpenses() // context chỉ vá danh sách hôm nay; đang xem khoảng khác thì tải lại để thấy dòng mới
             setShowAddModal(false)
         } catch { /* lỗi đã được context surface qua toast */ }
         finally { setIsSubmitting(false) }
@@ -354,6 +356,7 @@ export default function HistoryPage() {
         // fetch — trigger refreshProducts so unit cost / ingredient list stay in sync.
         const { id, amount, is_refill, metadata } = editingExpense
         await handleDeleteExpense(id, amount)
+        if (!isTodayScope) reloadExpenses()
         if (is_refill && metadata?.ingredient) await refreshProducts?.()
         setShowAddModal(false)
     }
