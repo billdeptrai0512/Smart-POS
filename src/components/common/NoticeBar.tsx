@@ -6,16 +6,16 @@ import Typewriter from './Typewriter'
 // Dải notice 1 dòng ở đỉnh trang (cùng chỗ OnboardingGuide): icon + nhãn + số đếm + mũi tên. Rộng
 // bằng cột nội dung (max-w-lg) để khớp header trang bên dưới; tablet chia đôi thì giãn như header.
 // hint: spotlight của guide khách dùng thử (onboarding/steps.ts).
-interface Props { icon?: ReactNode; label: string; count?: number | string; onClick?: () => void; chevron?: boolean; hint?: boolean; typed?: boolean }
+interface Props { icon?: ReactNode; label: string; count?: number | string; onClick?: () => void; chevron?: boolean; hint?: boolean; typed?: boolean; calm?: boolean }
 
 // typed: chữ gõ dần (mặc định theo hint — chỉ dải guide). Truyền riêng khi hint bật trễ hơn lúc dải hiện, để chữ không gõ lại giữa chừng.
-export default function NoticeBar({ icon, label, count, onClick, chevron = true, hint = false, typed = hint }: Props) {
+export default function NoticeBar({ icon, label, count, onClick, chevron = true, hint = false, typed = hint, calm = false }: Props) {
     return (
         <button
             type="button"
             onClick={onClick}
             disabled={!onClick}
-            className={`shrink-0 w-full max-w-lg mx-auto dine-split:max-w-none flex items-center gap-2.5 h-10 px-4 text-[14px] font-bold bg-primary/15 text-text text-left ${onboardingHintClass(hint)}`}
+            className={`shrink-0 w-full max-w-lg mx-auto dine-split:max-w-none flex items-center gap-2.5 h-10 px-4 text-[14px] font-bold bg-primary/15 text-text text-left ${onboardingHintClass(hint, calm ? 'calm' : 'default')}`}
         >
             {icon}
             <span className="flex-1 truncate uppercase tracking-wider text-[12px] font-black">{typed ? <Typewriter text={label} /> : label}</span>
