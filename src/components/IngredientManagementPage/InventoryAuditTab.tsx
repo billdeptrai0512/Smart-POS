@@ -343,8 +343,7 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
             {!isReady ? (
                 // Hình dạng như nội dung thật (2 thẻ nhóm + thẻ tổng) để lúc hiện ra không nhảy chiều cao.
                 <div className="flex flex-col gap-3 animate-pulse">
-                    <div className="bg-surface-light rounded-[20px] h-[54px]" />
-                    <div className="bg-surface-light rounded-[20px] h-[54px]" />
+                    <div className="bg-surface-light rounded-[20px] h-[170px]" />
                     <div className="bg-surface-light rounded-[20px] h-[110px]" />
                 </div>
             ) : isTodayScope ? (

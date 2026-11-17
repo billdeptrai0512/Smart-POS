@@ -12,12 +12,13 @@ interface Props {
     open: boolean
     onToggle: () => void
     borderClass?: string
+    flat?: boolean // nằm trong thẻ bọc ngoài: không khung riêng, chỉ vạch ngăn với phần kế tiếp
     children: ReactNode
 }
 
-export default function CollapsibleCard({ icon, title, titleExtra, count, open, onToggle, borderClass = 'border-border/60', children }: Props) {
+export default function CollapsibleCard({ icon, title, titleExtra, count, open, onToggle, borderClass = 'border-border/60', flat = false, children }: Props) {
     return (
-        <div className={`bg-surface rounded-[20px] p-3 border ${borderClass} shadow-sm`}>
+        <div className={flat ? "p-3 border-b border-border/40 last:border-b-0" : `bg-surface rounded-[20px] p-3 border ${borderClass} shadow-sm`}>
             <button
                 type="button"
                 onClick={onToggle}

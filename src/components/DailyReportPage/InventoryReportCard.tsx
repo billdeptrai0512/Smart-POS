@@ -281,13 +281,15 @@ export default function InventoryReportCard({
     if (sections) {
         return (
             <div className="flex flex-col gap-3 lg:grid lg:grid-cols-[minmax(0,1fr)_460px] lg:items-start lg:gap-4">
-                <div className="flex flex-col gap-3 min-w-0">
+                {/* Một thẻ bọc: các nhóm (vạch ngăn) + dòng xác nhận kiểm kê làm chân thẻ — xác nhận là bước cuối sau khi đếm hết các nhóm. */}
+                <div className="bg-surface rounded-[20px] border border-border/60 shadow-sm min-w-0">
                 {sections.map(sec => {
                     const done = sec.items.filter(i => { const v = inventoryInputs[i.ingredient]; return v !== undefined && v !== '' }).length
                     const secOpen = toggled[sec.id] ?? sec.id === defaultOpenId
                     return (
                         <CollapsibleCard
                             key={sec.id}
+                            flat
                             title={sec.name}
                             titleExtra={done === sec.items.length && <Check size={13} className="text-success" />}
                             count={`${done}/${sec.items.length}`}
@@ -298,11 +300,11 @@ export default function InventoryReportCard({
                         </CollapsibleCard>
                     )
                 })}
+                {beforeTotal && <div className="p-3 pt-2">{beforeTotal}</div>}
                 </div>
-                {/* Laptop+: cột phải dính đầu khung cuộn — Xác nhận + Tổng hao hụt luôn thấy khi đếm. */}
-                {(beforeTotal || totalRow || afterTotal) && (
+                {/* Laptop+: cột phải dính đầu khung cuộn — Tổng hao hụt luôn thấy khi đếm. */}
+                {(totalRow || afterTotal) && (
                     <div className="flex flex-col gap-3 lg:sticky lg:top-0">
-                        {beforeTotal}
                         {totalRow && <div className="bg-surface rounded-[20px] px-3 py-3 border border-border/60 shadow-sm">{totalRow}</div>}
                         {afterTotal}
                     </div>
