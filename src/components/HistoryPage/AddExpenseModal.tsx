@@ -355,7 +355,9 @@ function SegmentToggle<T extends string | boolean>({ label, options, value, onCh
     return (
         <div className="flex flex-col gap-1.5">
             <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">{label}</span>
-            <SegmentedControl options={options} value={value} onChange={onChange} />
+            {/* cùng chiều cao + bo với ô chọn/ngày (py-3 · rounded-12) để các hàng khớp nhau */}
+            <SegmentedControl options={options} value={value} onChange={onChange} className="w-full bg-surface-light border border-border/60 rounded-[12px]" buttonClassName="flex-1 px-1 py-[10px] text-[13px]" />
+
         </div>
     )
 }
