@@ -54,8 +54,9 @@ function PinBar({ addressId }: { addressId: string }) {
                 label={intro ? 'Đầu tiên, bạn cần chuẩn bị' : 'Bạn cần chuẩn bị'}
                 count={pendingCount} // số việc đang chờ lấy ra quầy
                 chevron={false}
+                typed={isGuest} // chữ gõ dần chỉ cho khách (mặc định theo hint, mà hint giờ cũng bật cho người dùng thật)
                 onClick={ready ? () => setOpen(true) : undefined} // số từ ảnh chụp: chờ tính xong mới cho thao tác
-                hint={isGuest && ready && !open && !prep.done && !allTaken}
+                hint={ready && !open && (!isGuest || (!prep.done && !allTaken))} // viền sáng nhấp nháy như dải guide của khách; người dùng thật cũng thấy (còn việc chờ lấy ra quầy)
             />}
             <Toast toast={toast} />
 
