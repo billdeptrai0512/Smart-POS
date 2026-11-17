@@ -21,8 +21,9 @@ export function OnboardingLayout() {
       <SubscriptionGuard />
       {/* /pos có TopNav riêng trong Header; mọi trang khác dùng chung 1 hàng này (địa chỉ · việc cần làm · menu). */}
       {!onPos && (
-        <div className="shrink-0 bg-surface pt-3">
-          <div className={`max-w-lg ${lgMax} mx-auto px-4 lg:px-8`}>
+        <div className="shrink-0">
+          {/* nền surface nằm trên khung đã giới hạn (cùng khung header trang) — để ngoài thì dải nền chạy full màn, lệch với header */}
+          <div className={`max-w-lg ${lgMax} mx-auto px-4 lg:px-8 pt-3 bg-surface`}>
             <div className="lg:max-w-[1280px] lg:mx-auto flex items-center gap-2"><TopNav /></div>
           </div>
         </div>
