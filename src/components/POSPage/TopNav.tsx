@@ -19,7 +19,7 @@ const ICON_BTN = 'relative shrink-0 w-10 h-10 flex items-center justify-center r
 type Item = { icon: LucideIcon; label: string; tone: string; route: string; wide?: boolean; manager?: boolean; noGuest?: boolean; state?: { tab: string } }
 const SECTIONS: { title: string; items: Item[] }[] = [
     { title: '', items: [{ icon: MapPin, label: 'Địa chỉ', tone: 'primary', route: '/addresses', noGuest: true }, { icon: ShoppingBag, label: 'Tạo đơn', tone: 'primary', route: '/pos' }] },
-    { title: 'Nhật ký', items: [{ icon: Receipt, label: 'Đơn bán', tone: 'primary', route: '/history/sales' }, { icon: Wallet, label: 'Chi phí', tone: 'primary', route: '/history/expense' }] },
+    { title: 'Nhật ký', items: [{ icon: Receipt, label: 'Đơn bán', tone: 'primary', route: '/history/sales' }, { icon: Wallet, label: 'Thu chi', tone: 'primary', route: '/history/expense' }] },
     { title: 'Báo cáo', items: [{ icon: Banknote, label: 'Dòng tiền', tone: 'success', route: '/report/cashflow' }, { icon: TrendingUp, label: 'Lợi nhuận', tone: 'success', route: '/report/revenue' }] },
     { title: 'Tồn kho', items: [{ icon: ClipboardCheck, label: 'Kiểm kê', tone: 'primary', route: '/inventory/management' }, { icon: Package, label: 'Lưu trữ', tone: 'primary', route: '/inventory/stocking' }] },
     { title: 'Danh mục', items: [{ icon: LayoutGrid, label: 'Menu', tone: 'primary', route: '/category/overall' }, { icon: FileText, label: 'Công thức', tone: 'primary', route: '/category/recipes' }, { icon: Tag, label: 'Chương trình khuyến mãi', tone: 'warning', route: '/category/discounts', wide: true }] },
