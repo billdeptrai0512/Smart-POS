@@ -172,7 +172,7 @@ export default function AddExpenseModal({
                 </Field>
                 </div>
 
-                {/* Ngày chi + Sử dụng cạnh nhau. Mặc định hôm nay; chọn ngày quá khứ để ghi lùi. */}
+                {/* Ngày chi + Thời điểm cạnh nhau. Mặc định hôm nay; chọn ngày quá khứ để ghi lùi. */}
                 <div className="grid grid-cols-2 gap-3">
                 <Field label="Ngày chi">
                     <DatePicker
@@ -193,18 +193,18 @@ export default function AddExpenseModal({
                     />
                 </Field>
                 <SegmentToggle
-                    label="Sử dụng"
-                    value={paymentMethod}
-                    onChange={onPaymentMethodChange}
-                    options={[{ value: 'cash', label: 'Tiền mặt' }, { value: 'transfer', label: 'Bank' }]}
-                />
-                </div>
-
-                <SegmentToggle
                     label="Thời điểm"
                     value={isAfterShift}
                     onChange={onAfterShiftChange}
                     options={[{ value: false, label: 'Trong ca' }, { value: true, label: 'Sau ca' }]}
+                />
+                </div>
+
+                <SegmentToggle
+                    label="Sử dụng"
+                    value={paymentMethod}
+                    onChange={onPaymentMethodChange}
+                    options={[{ value: 'cash', label: 'Tiền mặt' }, { value: 'transfer', label: 'Chuyển khoản' }]}
                 />
 
                 <Field label="Tên chi phí">
