@@ -1,6 +1,6 @@
 const TABS = [
     { key: 'sales', label: 'Bán hàng', activeColor: 'bg-primary' },
-    { key: 'expense', label: 'Thu chi', activeColor: 'bg-danger' },
+    { key: 'expense', label: 'Chi phí', activeColor: 'bg-danger' },
 ]
 
 interface Props { activeTab: string; onSelect?: (key: string) => void }
