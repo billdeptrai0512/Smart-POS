@@ -1,5 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { Hand } from 'lucide-react'
+import { useProducts } from '../../contexts/ProductContext'
+import { useHistory } from '../../contexts/HistoryContext'
+import { useCashClosedToday } from '../../hooks/useCashClosedToday'
+import { processIngredientRestock } from '../../services/orderService'
+import type { PrepItem } from '../../utils/prepToday'
+import RestockModal from '../IngredientManagementPage/RestockModal'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAddress } from '../../contexts/AddressContext'
 import { useStats } from '../../contexts/StatsContext'
@@ -28,8 +35,14 @@ export default function PrepPinBar({ bell }: { bell?: BellProps }) {
 }
 
 function PinBar({ addressId, bell }: { addressId: string; bell?: BellProps }) {
-    const { isGuest } = useAuth()
-    const { items, batchItems, checked, skipped, pendingCount, ready, confirmPrep, toggleSkip, settle, toast } = usePrepNotice()
+    const { isGuest, isManager, isAdmin, profile } = useAuth()
+    const { refreshProducts } = useProducts()
+    const { refreshTodayExpenses } = useHistory()
+    const { items, batchItems, checked, skipped, pendingCount, ready, confirmPrep, toggleSkip, settle, toast, reloadStocks } = usePrepNotice()
+    // Món kho = 0 → "Nhập kho" mở phiếu ngay tại đây (hết thật, hoặc đã mua bù chưa nhập sổ). Chỉ chủ/quản lý ghi được phiếu nhập; nhân viên thấy "Hết kho".
+    const canRestock = isManager || isAdmin
+    const [restock, setRestock] = useState<PrepItem | null>(null) // ảnh chụp món lúc mở phiếu — danh sách tải lại sau khi ghi cũng không làm phiếu biến mất
+    const cashClosedToday = useCashClosedToday(addressId, !!restock)
     const [barOpen, setBarOpen] = useState(false)
     const open = bell ? bell.open : barOpen
     const setOpen = (v: boolean) => { setBarOpen(v); if (!v) bell?.onClose() }
@@ -69,9 +82,8 @@ function PinBar({ addressId, bell }: { addressId: string; bell?: BellProps }) {
 
             {open && (
                 <NoticeSheet
-                    icon={<span className="shrink-0 text-[16px] font-black text-primary tabular-nums">{doneCount}/{total}</span>}
+                    icon={<span className="shrink-0 text-[12px] font-black text-primary tabular-nums">{doneCount}/{total}</span>}
                     title="Bạn cần chuẩn bị"
-                    count=""
                     onClose={() => { setOpen(false); settle() }}
                     hintClose={isGuest && allTaken} // không gate prep.done: hook sống, lấy đủ là done ngay → nút Đóng phải sáng đúng lúc đó
                 >
@@ -85,9 +97,35 @@ function PinBar({ addressId, bell }: { addressId: string; bell?: BellProps }) {
                         skipped={skipped}
                         onToggle={confirmPrep}
                         onSkip={toggleSkip}
+                        stockGate
+                        onOpen={canRestock ? (ing) => setRestock(items.find(i => i.ingredient === ing) ?? null) : undefined} // kho = 0 → "Nhập kho" mở phiếu
                     />
                     <BatchPrepList items={batchItems} />
                 </NoticeSheet>
+            )}
+            {/* Portal ra body: dải này nằm trong header POS (z-20 = stacking context riêng) nên phiếu z-[100] sẽ kẹt DƯỚI sheet (sheet đã portal ra body). */}
+            {restock && createPortal(
+                <RestockModal
+                    ingredient={restock.ingredient}
+                    unit={restock.unit || 'đv'}
+                    packSize={restock.packSize}
+                    packUnit={restock.packUnit}
+                    pack2={restock.pack2}
+                    initialQty={restock.needPacks || restock.need || null}
+                    cashClosedToday={cashClosedToday}
+                    onClose={() => setRestock(null)}
+                    onConfirm={async ({ ingredient: ing, qty, subtotal, discount, extraCost, paid, paymentMethod, cashPhase, purchaseDate }) => {
+                        const wh = restock.warehouse
+                        const result = await processIngredientRestock(addressId, ing, qty, profile?.name ?? null, {
+                            subtotal, discount, extraCost, paid, paymentMethod, cashPhase, purchaseDate,
+                            ...(wh != null ? { beforeStock: wh } : {}),
+                        })
+                        // Kho đổi → tươi lại kho (viên tự về "Lấy"), giá vốn và chi phí hôm nay.
+                        await Promise.all([reloadStocks(), refreshProducts?.(), refreshTodayExpenses?.()])
+                        return result
+                    }}
+                />,
+                document.body
             )}
         </>
     )

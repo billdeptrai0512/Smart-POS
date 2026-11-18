@@ -58,7 +58,7 @@ export default function AddressNotice({ onClose }: { onClose?: () => void } = {}
         <>
             {!onClose && <NoticeBar icon={<ClipboardList size={15} className="text-primary shrink-0" />} label="Việc cần làm" count={total - doneCount} onClick={() => setOpen(true)} />}
             {open && !pay && (
-                <NoticeSheet icon={<span className="shrink-0 text-[16px] font-black text-primary tabular-nums">{doneCount}/{total}</span>} title="Việc cần làm" count="" onClose={() => { setOpen(false); onClose?.() }}>
+                <NoticeSheet icon={<span className="shrink-0 text-[12px] font-black text-primary tabular-nums">{doneCount}/{total}</span>} title="Việc cần làm" onClose={() => { setOpen(false); onClose?.() }}>
                     {stockRows.length > 0 && (
                         <div className="pt-3">
                             {stockRows.map(u => {
