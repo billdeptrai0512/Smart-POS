@@ -63,7 +63,7 @@ export default function TopNav() {
     const tab = tabs.some(t => t.key === picked) ? picked : tabs[0]?.key
     const pick = (k: string) => { setPicked(k); if (k === 'restock') setRestockSeen(true) }
     const tabBar = tabs.length > 1 ? <HistoryTabsBar tabs={tabs} activeTab={tab} onSelect={pick} /> : null
-    const badge =(onPos && prepCount > 0) || (kind === 'tasks' && pending > 0)
+    const n = (onPos ? prepCount : 0) + (kind === 'tasks' ? pending : 0)
 
     function go({ route, state }: NavItem) {
         setShowMenu(false)
@@ -76,9 +76,10 @@ export default function TopNav() {
             <AddressSwitcher />
             {!isGuest && tabs.length > 0 && (
                 <button type="button" aria-label="Việc cần làm" onClick={() => { setRestockSeen(tab === 'restock'); setBellOpen(true) }} className={NAV_ICON_BTN}>
-                    <Bell size={19} />
-                    {badge && (
-                        <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-white text-[10px] font-black flex items-center justify-center leading-none">!</span>
+                    <Bell size={19} className={n > 0 ? 'text-primary' : ''} />
+                    {/* 1 chữ số: ô vuông 20×20 → tròn hẳn; ≥2 chữ số: giãn ngang thành viên thuốc */}
+                    {n > 0 && (
+                        <span className={`absolute -top-1.5 -right-1.5 h-5 ${n > 9 ? 'px-1.5' : 'w-5 pl-px'} rounded-full bg-primary text-white text-[11px] font-black flex items-center justify-center leading-none pt-px tabular-nums ring-2 ring-surface`}>{n}</span>
                     )}
                 </button>
             )}
