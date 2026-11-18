@@ -25,12 +25,12 @@ export default function Header({ onOpenHistory, nav, recentOrders = [], enterKey
         time: new Date(o.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false }),
     }))
     return (
-        <header className="shrink-0 pt-3 pb-6 bg-surface border-b border-border/60 shadow-[0_8px_30px_rgba(0,0,0,0.03)] relative z-20">
+        <header className="shrink-0 pt-3 pb-2 bg-surface border-b border-border/60 shadow-[0_8px_30px_rgba(0,0,0,0.03)] relative z-20">
             {/* Thanh điều hướng: ô địa chỉ (đổi tại chỗ). */}
-            <div className="px-6 flex items-center gap-2 mb-3">
+            <div className="px-6 flex items-center gap-2 mb-2">
                 {nav}
             </div>
-            <div className="px-6 mb-1">
+            <div className="px-6">
                 {/* Nhật ký — trải hết chiều ngang */}
                 <div
                     onClick={onOpenHistory}
@@ -64,7 +64,6 @@ export default function Header({ onOpenHistory, nav, recentOrders = [], enterKey
                         </div>
                     </div>
                 </div>
-
             </div>
             {/* empty:hidden — notice trả null thì không chừa khoảng trống (kể cả khi chỉ còn hàng bọc rỗng) */}
             <div className="px-6 mt-3 empty:hidden [&:has(>div:empty)]:hidden [&>button]:rounded-[14px]">{notice}</div>

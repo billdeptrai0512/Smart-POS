@@ -323,8 +323,8 @@ export default function MenuGrid({ products, cart, activeItem, onAddItem, onRemo
     })
 
     return (
-        <main className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 px-6 pb-6 pt-5 hide-scrollbar">
-            <div className="grid grid-cols-2 gap-3 pt-1">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 px-6 pb-6 pt-3 hide-scrollbar">
+            <div className="grid grid-cols-2 gap-2.5">
                 {gridItems}
             </div>
         </main>
