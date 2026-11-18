@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { ChevronRight } from 'lucide-react'
 import { onboardingHintClass } from '../../utils/onboardingHint'
 import Typewriter from '../common/Typewriter'
 import type { LastOrder } from '../../services/cartOps'
@@ -14,10 +15,10 @@ interface Props {
 
 export default function Header({ onOpenHistory, nav, recentOrders = [], enterKey, showOnboardingHint = false, notice }: Props) {
     const hintClass = onboardingHintClass(showOnboardingHint, 'solid')
-    // Saved orders only, newest first (max 3). isNew matches only the exact row just
+    // Saved orders only, newest first (max 2). isNew matches only the exact row just
     // committed locally (enterKey) → it slides in and types out; the realtime DB echo,
     // which remounts the row under a new server-timestamp key, can't replay it.
-    const rows = recentOrders.slice(0, 3).map(o => ({
+    const rows = recentOrders.slice(0, 2).map(o => ({
         key: o.id ?? o.createdAt, // id is collision-proof; createdAt (ms) can repeat on same-tick commits
         isNew: o.createdAt === enterKey,
         text: o.items.join(' · '),
@@ -35,13 +36,16 @@ export default function Header({ onOpenHistory, nav, recentOrders = [], enterKey
                     onClick={onOpenHistory}
                     role="button"
                     tabIndex={0}
-                    className={`cursor-pointer bg-bg rounded-[20px] p-3 sm:p-3.5 border border-primary/35 hover:border-primary/60 shadow-sm flex flex-col gap-[2px] relative overflow-hidden h-full transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${hintClass}`}
+                    className={`cursor-pointer bg-bg rounded-[20px] p-3 sm:p-3.5 border border-border/60 hover:border-border shadow-sm flex flex-col gap-[2px] relative overflow-hidden h-full transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${hintClass}`}
                 >
                     <div className="flex flex-col justify-between items-start relative z-10 w-full">
-                        <span className="text-[12px] sm:text-[13px] text-primary font-black uppercase tracking-wider">Nhật ký</span>
+                        <div className="w-full flex items-center justify-between">
+                            <span className="text-[12px] sm:text-[13px] text-primary font-black uppercase tracking-wider">Nhật ký</span>
+                            <ChevronRight size={16} strokeWidth={3} className="text-text-secondary" />
+                        </div>
                         <div className="w-full">
                             {rows.length > 0 ? (
-                                <div className="flex flex-col mt-1.5 gap-2">
+                                <div className="flex flex-col mt-1 gap-1">
                                     {rows.map((r) => (
                                         <div
                                             key={r.key}

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Check, ChevronDown, Home, MapPin, Search } from 'lucide-react'
+import { Check, ChevronDown, Home, Search, X } from 'lucide-react'
 import { useAddress } from '../../contexts/AddressContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAddressStats } from '../../contexts/AddressStatsContext'
@@ -8,7 +8,7 @@ import { useCart } from '../../contexts/CartContext'
 import { useConfirm } from '../../contexts/ConfirmContext'
 import { useMonetizationEnabled } from '../../hooks/useEntitlement'
 import { computeAccessGate } from '../../utils/subscriptionStatus'
-import { BottomSheet, SheetHeader, SHEET_PANEL } from '../common/ModalShell'
+import { BottomSheet, SHEET_PANEL } from '../common/ModalShell'
 import type { Address } from '../../types/domain'
 
 const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').toLowerCase()
@@ -52,28 +52,20 @@ export default function AddressSwitcher() {
                 onClick={addresses.length > 1 ? () => { setQ(''); setOpen(true) } : () => navigate(isGuest ? '/login' : '/addresses')}
                 className="min-w-0 flex-1 h-10 pl-2 pr-3 flex items-center gap-2 rounded-[14px] bg-bg border border-border/60 active:bg-border/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             >
-                <MapPin size={16} className="shrink-0 ml-1 text-success" />
+                <Home size={16} className="shrink-0 ml-1 text-success" />
                 <span className="flex-1 min-w-0 truncate text-left text-[13px] font-black uppercase tracking-wide text-text">{selectedAddress?.name}</span>
                 <ChevronDown size={14} strokeWidth={3} className="shrink-0 text-text-secondary" />
             </button>
             {open && (
                 <BottomSheet onClose={() => setOpen(false)} panelClassName={`${SHEET_PANEL} max-h-[80dvh]`}>
-                    <SheetHeader
-                        title={
-                            // Nút vuông bo cùng kiểu nút X (nền + viền), mép trái thẳng với ô tìm kiếm. Chạm → trang chọn địa chỉ (/addresses).
-                            <span className="flex items-center gap-2.5">
-                                {!isGuest && (
-                                    <button type="button" aria-label="Về trang địa chỉ" onClick={() => { setOpen(false); navigate('/addresses') }} className="w-8 h-8 shrink-0 flex items-center justify-center rounded-[10px] bg-surface-light border border-border/60 text-text-secondary hover:text-text active:scale-95 transition-all">
-                                        <Home size={16} />
-                                    </button>
-                                )}
-                                Đổi địa chỉ
-                            </span>
-                        }
-                        onClose={() => setOpen(false)}
-                    />
-                    {addresses.length > 6 && (
-                        <label className="shrink-0 flex items-center gap-2 h-12 px-3 rounded-[14px] bg-bg border border-border/60">
+                    {/* Hàng đầu: Home (về /addresses) · ô tìm kiếm làm nhãn chính · đóng */}
+                    <div className="shrink-0 flex items-center gap-2">
+                        {!isGuest && (
+                            <button type="button" aria-label="Về trang địa chỉ" onClick={() => { setOpen(false); navigate('/addresses') }} className="w-12 h-12 shrink-0 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-success active:scale-95 transition-all">
+                                <Home size={18} />
+                            </button>
+                        )}
+                        <label className="flex-1 min-w-0 flex items-center gap-2 h-12 px-3 rounded-[14px] bg-bg border border-border/60">
                             <Search size={15} className="shrink-0 text-text-secondary" />
                             <input
                                 value={q}
@@ -82,7 +74,10 @@ export default function AddressSwitcher() {
                                 className="flex-1 min-w-0 bg-transparent text-[14px] font-bold text-text placeholder:text-text-dim focus:outline-none"
                             />
                         </label>
-                    )}
+                        <button type="button" aria-label="Đóng" onClick={() => setOpen(false)} className="w-12 h-12 shrink-0 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text-secondary active:scale-95 transition-all">
+                            <X size={18} />
+                        </button>
+                    </div>
                     <div className="flex-1 min-h-0 overflow-y-auto -mx-1 px-1 flex flex-col gap-1.5">
                         {shown.map(a => (
                             <button
