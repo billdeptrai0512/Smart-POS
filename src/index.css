@@ -117,6 +117,9 @@ body {
        fixed inset-0 ép body phủ full màn hình (viewport-fit=cover), các footer tự đệm safe-area đáy. */
     position: fixed;
     inset: 0;
+    /* height:100% (rule html,body,#root ở trên) đè mất `bottom` của inset-0, mà 100% trên iOS standalone = viewport NGẮN
+       hơn màn hình thật (thiếu vùng home-indicator) → vẫn còn dải trống dưới footer. auto để bottom:0 kéo body tới đáy thật. */
+    height: auto;
   }
 }
 
