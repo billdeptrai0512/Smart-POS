@@ -7,6 +7,8 @@ import {
 import ErrorBanner from '../common/ErrorBanner'
 import Skeleton from '../common/Skeleton'
 import { formatVND } from '../../utils'
+import Delta from '../common/Delta'
+import { deltaPct } from '../../utils/deltaPct'
 import { normalizeSearchText } from '../../utils/ingredients'
 import { wipeAddressSalesData } from '../../services/adminService'
 import ActionPill from '../common/ActionPill'
@@ -22,9 +24,6 @@ import type { Address, Row, UUID, WarehouseGroup } from '../../types/domain'
 
 const isManagerRole = (role?: string) => (role === 'manager' || role === 'co-manager') ? 1 : 0
 
-// Số ly/doanh thu hôm qua tính đến cùng giờ này → delta %. prev = 0 (chưa migrate RPC /
-// hôm qua nghỉ) thì ẩn delta, tránh chia 0.
-const deltaPct = (cur: number, prev: number) => prev > 0 ? Math.round(((cur - prev) / prev) * 100) : null
 
 type SubModal = { type: 'rename' | 'printers' | 'delete' | 'backup' | 'wipe' | 'group'; addressId: UUID }
 
@@ -51,7 +50,6 @@ interface Props {
     onRename: (addressId: UUID, name: string) => Promise<unknown>
     onRemove: (addressId: UUID) => Promise<unknown>
     onDefaultTemplate?: () => void
-    onSupportClick?: () => void
     onCreate?: () => void
     onSetPrinters: (addressId: UUID, printers: { counterPrinterIp: string; kitchenPrinterIp: string }) => Promise<unknown>
     warehouseGroups?: WarehouseGroup[]
@@ -66,7 +64,7 @@ export default function BranchGrid({
     addresses, fetchError, cupsMap, revenueMap, prevCupsMap = {}, prevRevenueMap = {}, actualTotals = { today: {}, prev: {} }, sessionsMap, subscriptionRowsMap = {}, subscriptionStatusMap = {}, subscriptionLoading, statsLoading,
     isStaff, isAdmin, error, setError,
     onSelect, onNavigate,
-    onRename, onRemove, onDefaultTemplate, onSupportClick, onCreate, onSetPrinters,
+    onRename, onRemove, onDefaultTemplate, onCreate, onSetPrinters,
     warehouseGroups = [], onCreateWarehouseGroup, onRenameWarehouseGroup, onRemoveWarehouseGroup, onSetAddressGroup, onSetGroupHub,
 }: Props) {
     // Which per-card sub-modal (rename/delete/backup/wipe/group/printers) is open, and for which
@@ -428,18 +426,6 @@ export default function BranchGrid({
                         <span className="text-text-secondary font-bold text-sm">Mẫu mặc định</span>
                     </button>
                 )}
-
-                {/* Hỗ trợ & Góp ý */}
-                <div className="flex flex-col items-center justify-center p-3">
-                    <button
-                        onClick={onSupportClick}
-                        className="flex items-center gap-2.5 px-5 py-2.5 rounded-full bg-surface-light border border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all duration-300 cursor-pointer"
-                    >
-                        <span className="text-[10px] font-black uppercase tracking-[0.15em] whitespace-nowrap mt-[1px] text-primary">
-                            Bạn cần hỗ trợ / có góp ý?
-                        </span>
-                    </button>
-                </div>
             </div>
 
             <ErrorBanner message={error} small className="mb-3" />
@@ -447,15 +433,3 @@ export default function BranchGrid({
     )
 }
 
-// ↑/↓% so với hôm qua cùng giờ; null hoặc 0 thì ẩn.
-function Delta({ pct }: { pct: number | null }) {
-    if (!pct) return null
-    return (
-        <span
-            title="So với hôm qua cùng giờ"
-            className={`text-[12px] font-bold tabular-nums ${pct > 0 ? 'text-success' : 'text-danger'}`}
-        >
-            {pct > 0 ? '↑' : '↓'}{Math.abs(pct)}%
-        </span>
-    )
-}

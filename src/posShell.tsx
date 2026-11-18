@@ -5,7 +5,8 @@ import { useProducts } from './contexts/ProductContext'
 import { recipeBackUrl } from './utils/recipeBackUrl'
 import OnboardingGuide from './components/common/onboarding/OnboardingGuide'
 import SubscriptionGuard from './components/common/SubscriptionGuard'
-import TopNav, { NAV_ICON_BTN } from './components/POSPage/TopNav'
+import TopNav from './components/POSPage/TopNav'
+import { NAV_ICON_BTN } from './constants/navStyles'
 
 // Gom mọi thứ chỉ vùng POS cần (providers + khung onboarding) vào MỘT chunk để App.tsx lazy-load —
 // /login, /signup, /forgot-password khỏi tải orderService/POSContext/ProductContext.

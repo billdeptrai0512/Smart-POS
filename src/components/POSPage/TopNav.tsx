@@ -15,8 +15,8 @@ import { Dialog } from '../common/ModalShell'
 import PrepPinBar from '../common/PrepPinBar'
 import AddressSwitcher from './AddressSwitcher'
 import { NAV_SECTIONS, type NavItem } from '../../constants/navSections'
+import { NAV_ICON_BTN } from '../../constants/navStyles'
 
-export const NAV_ICON_BTN = 'relative shrink-0 w-10 h-10 flex items-center justify-center rounded-[14px] bg-bg border border-border/60 text-text-secondary active:bg-border/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40'
 
 // Số kho còn việc theo bản đã tính gần nhất (cache của "Việc cần làm") — đọc rẻ, không tải gì thêm lúc đang bán.
 // Số tươi hơn có khi mở sheet (nó tải nền rồi cập nhật cache).
