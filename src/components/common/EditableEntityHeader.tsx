@@ -11,7 +11,7 @@ interface Props {
     name: string
     nameTransform?: (raw: string) => string
     canEdit?: boolean
-    onBack: () => void
+    onBack?: () => void // không truyền = nút ← nằm ở hàng địa chỉ phía trên (posShell)
     onSaveName: (name: string) => void
     price?: number
     priceLabel?: ReactNode
@@ -27,15 +27,17 @@ export default function EditableEntityHeader({
     action, backClassName = '', children,
 }: Props) {
     return (
-        <header className="shrink-0 pt-6 pb-3 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
+        <header className="shrink-0 pt-3 pb-3 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
             <div className="flex items-center gap-3">
-                <button
-                    onClick={onBack}
-                    className={`${ICON_BTN} ${backClassName}`}
-                    title="Trở về"
-                >
-                    <ArrowLeft size={20} strokeWidth={2.5} />
-                </button>
+                {onBack && (
+                    <button
+                        onClick={onBack}
+                        className={`${ICON_BTN} ${backClassName}`}
+                        title="Trở về"
+                    >
+                        <ArrowLeft size={20} strokeWidth={2.5} />
+                    </button>
+                )}
 
                 <div className="flex flex-row gap-2 flex-1 min-w-0">
                     <div className="flex-1 bg-primary/5 border border-primary/10 shadow-sm rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center min-w-0">

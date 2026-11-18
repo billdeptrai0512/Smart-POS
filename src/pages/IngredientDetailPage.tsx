@@ -498,7 +498,6 @@ export default function IngredientDetailPage() {
             <IngredientDetailHeader
                 title={titleLabel}
                 subtitle={viewMode === 'history' ? undefined : costSubtitle}
-                onBack={() => navigate(location.state?.backTo || '/inventory/stocking', { state: location.state?.backTo ? undefined : location.state })}
                 viewMode={viewMode}
                 onViewModeChange={setViewMode}
                 onAdd={canEdit ? () => setRestockOpen(true) : undefined}

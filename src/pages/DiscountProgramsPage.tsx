@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
+import { Plus } from 'lucide-react'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -25,7 +26,6 @@ function programSummary(p: Pick<DiscountProgram, 'type' | 'value' | 'table_scope
 
 export default function DiscountProgramsPage() {
     const navigate = useNavigate()
-    const location = useLocation()
     const { discountPrograms, refreshProducts } = useProducts()
     const { addressId } = useAddress()
     const { isManager, isAdmin } = useAuth()
@@ -73,12 +73,9 @@ export default function DiscountProgramsPage() {
             <IngredientDetailHeader
                 title={DISCOUNT_TAB.label}
                 subtitle={`${activePrograms(discountPrograms).length} đang chạy`}
-                onBack={() => navigate('/category/overall', { state: location.state })}
-                onAdd={canEdit && addressId ? () => setShowCreate(true) : undefined}
-                addTitle="Tạo chương trình mới"
             />
 
-            <main className="flex-1 overflow-y-auto px-4 py-4 pb-8 space-y-3">
+            <main className="flex-1 overflow-y-auto px-4 py-4 pb-24 space-y-3">
                 {!addressId && (
                     <p className="text-warning text-[13px] text-center py-4 bg-warning-soft rounded-[16px] border border-warning/20">
                         Chọn 1 địa chỉ cụ thể trước khi tạo chương trình giảm giá.
@@ -87,7 +84,7 @@ export default function DiscountProgramsPage() {
 
                 {discountPrograms.length === 0 && (
                     <p className="text-text-secondary text-[13px] text-center py-8 bg-surface-light/50 rounded-[16px] border border-border/40">
-                        Chưa có chương trình nào (VD: Đồng giá 10k thứ Hai...)
+                        Chưa có chương trình nào
                     </p>
                 )}
 
@@ -158,6 +155,21 @@ export default function DiscountProgramsPage() {
                     </FormDialog>
                 )}
             </main>
+
+            {/* FAB tạo chương trình — cùng vị trí/kiểu FAB "Thêm chi phí" của Nhật ký. */}
+            {canEdit && addressId && (
+                <div className="fixed bottom-0 left-0 right-0 max-w-lg lg:max-w-[1280px] mx-auto pointer-events-none z-50">
+                    <div className="flex justify-end px-4 lg:px-8 pb-[max(env(safe-area-inset-bottom),16px)] [@media(display-mode:standalone)]:pb-[max(env(safe-area-inset-bottom),28px)] pointer-events-auto">
+                        <button
+                            onClick={() => setShowCreate(true)}
+                            aria-label="Tạo chương trình mới"
+                            className="bg-primary rounded-[12px] px-4 py-2.5 flex items-center justify-center text-bg hover:bg-primary/90 active:scale-95 transition-all shadow-sm"
+                        >
+                            <Plus size={18} />
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

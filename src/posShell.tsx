@@ -1,6 +1,8 @@
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { useAuth } from './contexts/AuthContext'
+import { useProducts } from './contexts/ProductContext'
+import { recipeBackUrl } from './utils/recipeBackUrl'
 import OnboardingGuide from './components/common/onboarding/OnboardingGuide'
 import SubscriptionGuard from './components/common/SubscriptionGuard'
 import TopNav, { NAV_ICON_BTN } from './components/POSPage/TopNav'
@@ -14,9 +16,16 @@ export { POSProvider } from './contexts/POSContext'
 // RequireAddress/ProductProvider, instead of each page wiring it in individually.
 export function OnboardingLayout() {
   // /pos tự đặt guide trong Header (dưới thẻ Địa chỉ + Nhật ký, cạnh "Chuẩn bị hôm nay").
-  const { pathname } = useLocation()
+  const { pathname, state } = useLocation()
   const { isGuest } = useAuth()
   const onPos = pathname === '/pos'
+  const { products, batchProducts, toppings } = useProducts()
+  const recipeId = pathname.match(/^\/category\/(?:recipes|toppings)\/([^/]+)$/)?.[1]
+  const back = pathname.startsWith('/history') ? (isGuest ? null : { to: '/pos', state: undefined })
+    : /^\/inventory\/stocking\/[^/]+$/.test(pathname) ? { to: state?.backTo || '/inventory/stocking', state: state?.backTo ? undefined : state }
+    : recipeId ? { to: recipeBackUrl(recipeId, products, batchProducts, toppings), state }
+    : pathname === '/category/discounts' ? { to: '/category/overall', state }
+    : null
   // Hàng TopNav phải rộng bằng khung của trang bên dưới (mỗi trang tự đặt max-w-lg + trần ở lg): trang chi tiết 4xl, Tổng hợp tồn kho 6xl, còn lại full.
   const lgMax = pathname.split('/').length > 3 ? 'lg:max-w-4xl' : pathname === '/inventory/summary' ? 'lg:max-w-6xl' : 'lg:max-w-none'
   return (
@@ -28,9 +37,9 @@ export function OnboardingLayout() {
           {/* nền surface nằm trên khung đã giới hạn (cùng khung header trang) — để ngoài thì dải nền chạy full màn, lệch với header */}
           <div className={`max-w-lg ${lgMax} mx-auto px-4 lg:px-8 pt-3 bg-surface`}>
             <div className="lg:max-w-[1280px] lg:mx-auto flex items-center gap-2">
-              {/* Nhật ký: nút ← (về POS) bên trái ô địa chỉ; khách dùng thử đã có ← → của guide ở header trang. */}
-              {pathname.startsWith('/history') && !isGuest && (
-                <Link to="/pos" aria-label="Về POS" className={NAV_ICON_BTN}>
+              {/* Nút ← bên trái ô địa chỉ: Nhật ký → POS (khách dùng thử đã có ← → của guide ở header trang); chi tiết nguyên liệu → Lưu trữ (hoặc backTo của nơi đã đến). */}
+              {back && (
+                <Link to={back.to} state={back.state} aria-label="Trở về" className={NAV_ICON_BTN}>
                   <ArrowLeft size={19} />
                 </Link>
               )}

@@ -43,6 +43,7 @@ import ExtrasSection, { type ExtraHandlers } from '../components/RecipeIngredien
 import CopyRecipeModal from '../components/RecipeIngredientPage/CopyRecipeModal'
 import type { CartExtra } from '../types/domain'
 import { groupRecipesByProduct, type RecipeRow } from '../utils/inventory'
+import { recipeBackUrl } from '../utils/recipeBackUrl'
 
 export default function RecipeIngredientPage() {
     const navigate = useNavigate()
@@ -74,7 +75,7 @@ export default function RecipeIngredientPage() {
     const isBatch = !!product?.is_batch
     const isTopping = !product && toppings.some(t => t.id === productId)
     // Back / sau khi xoá: về đúng loại đang xem của danh sách.
-    const backUrl = '/category/recipes' + (isTopping ? '?kind=topping' : isBatch ? '?kind=batch' : '')
+    const backUrl = recipeBackUrl(productId, products, batchProducts, toppings)
     const td = useToppingDetail(isTopping ? productId : null, withSaving, backUrl, () => showToast('Đã lưu', 'success'))
 
     // Index recipes by product — used by the "copy from" picker and to count rows.
@@ -358,7 +359,6 @@ export default function RecipeIngredientPage() {
                     name={topping.name}
                     nameTransform={capitalizeWords}
                     canEdit={canEdit}
-                    onBack={() => navigate(backUrl, { state: location.state })}
                     onSaveName={td.batch ? () => showToast('Tên topping gắn với công thức nấu, không đổi được', 'warning') : td.saveName}
                     price={topping.price}
                     priceLabel="Giá cộng thêm:"
@@ -418,7 +418,7 @@ export default function RecipeIngredientPage() {
 
             {isBatch ? (
                 // Tên thành phẩm = khóa nguyên liệu nên không đổi tên ở đây (đổi sẽ tách nó khỏi tồn kho/công thức món).
-                <EditableEntityHeader name={product.name} canEdit={false} onBack={() => navigate(backUrl, { state: location.state })} onSaveName={() => { }}>
+                <EditableEntityHeader name={product.name} canEdit={false} onSaveName={() => { }}>
                     <div className="flex items-center justify-center gap-1.5 text-[12px] font-bold text-text-secondary">
                         <span>1 mẻ ra:</span>
                         <InlineEditor
@@ -434,7 +434,6 @@ export default function RecipeIngredientPage() {
             ) : <RecipeHeader
                 product={product}
                 canEdit={canEdit}
-                onBack={() => navigate(backUrl, { state: location.state })}
                 onSavePrice={saveProductPrice}
                 onSaveName={saveProductName}
                 countAsCup={product.count_as_cup !== false}

@@ -7,7 +7,6 @@ import { ICON_BTN_BASE } from '../common/ModalShell'
 interface Props {
     product: Row
     canEdit?: boolean
-    onBack: () => void
     onSavePrice: (price: number) => void
     onSaveName: (name: string) => void
     countAsCup: boolean
@@ -16,7 +15,7 @@ interface Props {
 }
 
 export default function RecipeHeader({
-    product, canEdit, onBack, onSavePrice, onSaveName,
+    product, canEdit, onSavePrice, onSaveName,
     countAsCup, onToggleCountAsCup, toggleDisabled,
 }: Props) {
     return (
@@ -24,7 +23,6 @@ export default function RecipeHeader({
             name={product.name}
             nameTransform={capitalizeWords}
             canEdit={canEdit}
-            onBack={onBack}
             onSaveName={onSaveName}
             price={product.price}
             priceLabel="Giá bán:"

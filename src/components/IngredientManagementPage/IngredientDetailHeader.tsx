@@ -5,7 +5,7 @@ import { ICON_BTN, ICON_BTN_BASE } from '../common/ModalShell'
 interface Props {
     title: string
     subtitle?: string | null
-    onBack: () => void
+    onBack?: () => void // không truyền = nút ← nằm ở hàng địa chỉ phía trên (posShell)
     viewMode?: string
     onViewModeChange?: (mode: string) => void
     onAdd?: () => void
@@ -40,15 +40,17 @@ export default function IngredientDetailHeader({
     return (
         <header className="shrink-0 pt-3 pb-3 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
             <div className="flex items-center gap-3">
-                <button
-                    onClick={onBack}
-                    className={ICON_BTN}
-                    title="Trở về"
-                >
-                    <ArrowLeft size={20} strokeWidth={2.5} />
-                </button>
+                {onBack && (
+                    <button
+                        onClick={onBack}
+                        className={ICON_BTN}
+                        title="Trở về"
+                    >
+                        <ArrowLeft size={20} strokeWidth={2.5} />
+                    </button>
+                )}
 
-                <div className="flex-1 bg-primary/5 border border-primary/10 shadow-sm rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center min-w-0">
+                <div className={`flex-1 bg-primary/5 border border-primary/10 shadow-sm rounded-[14px] px-2 ${dateNav ? 'py-[5px]' : 'py-2'} flex flex-col items-center justify-center text-center min-w-0`}>
                     <span className="text-[12px] font-black text-primary uppercase line-clamp-1 truncate w-full">{title}</span>
                     {dateNav}
                     {subtitle && (
@@ -73,7 +75,7 @@ export default function IngredientDetailHeader({
                     >
                         <Plus size={20} strokeWidth={2.5} />
                     </button>
-                ) : (
+                ) : onBack && (
                     <div className="w-10 shrink-0" aria-hidden="true" />
                 )}
             </div>
