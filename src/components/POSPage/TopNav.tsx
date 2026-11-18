@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Bell, Menu, X } from 'lucide-react'
+import { Bell, Home, Menu, X } from 'lucide-react'
 import { useAddress } from '../../contexts/AddressContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useHistory } from '../../contexts/HistoryContext'
@@ -105,9 +105,14 @@ export default function TopNav() {
                     panelClassName="w-full max-w-sm mx-4 my-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden max-h-[calc(100dvh-2rem)] flex flex-col"
                 >
                     <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/40 shrink-0">
-                        <p className="text-text font-black text-sm leading-none">Điều hướng</p>
-                        <button onClick={() => setShowMenu(false)} aria-label="Đóng" className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/60 text-text-secondary hover:text-text transition-all shrink-0">
-                            <X size={16} />
+                        {isGuest ? <span className="w-10 h-10 shrink-0" /> : (
+                            <button type="button" aria-label="Về trang địa chỉ" onClick={() => { setShowMenu(false); navigate('/addresses') }} className="w-10 h-10 shrink-0 flex items-center justify-center rounded-[14px] bg-bg border border-border/60 active:bg-border/20 text-success">
+                                <Home size={19} />
+                            </button>
+                        )}
+                        <p className="flex-1 text-center text-text font-black text-sm leading-none uppercase tracking-wide">Điều hướng</p>
+                        <button onClick={() => setShowMenu(false)} aria-label="Đóng" className="w-10 h-10 shrink-0 flex items-center justify-center rounded-[14px] bg-bg border border-border/60 active:bg-border/20 text-text-secondary">
+                            <X size={19} />
                         </button>
                     </div>
                     <div className="overflow-y-auto px-3 pt-3 pb-5 flex flex-col gap-4">
