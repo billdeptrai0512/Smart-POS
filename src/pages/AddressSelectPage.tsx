@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { fetchDefaultIngredientSort } from '../services/authService'
 import { fetchProducts, fetchAllRecipes, fetchIngredientCostsAndUnits, fetchProductExtras, fetchExtraIngredients } from '../services/orderService'
+import { fetchRangeTotals, type RangeTotals } from '../services/branchCashService'
 import { cloneFromShareCode, getSharedConfig } from '../services/backupService'
 import { Loader } from 'lucide-react'
 import Skeleton from '../components/common/Skeleton'
@@ -79,6 +80,19 @@ export default function AddressSelectPage() {
         const hasActual = addresses.some(a => actualTotals.today[a.id] != null)
         return { cups: sum(cupsMap), revenue: sum(revenueMap), prevCups: sum(prevCupsMap), prevRevenue: sum(prevRevenueMap), actual: hasActual ? sum(actualTotals.today) : null, prevActual: sum(actualTotals.prev) }
     }, [addresses, cupsMap, revenueMap, prevCupsMap, prevRevenueMap, actualTotals])
+
+    // Lọc thẻ tổng: 1 = hôm nay (số có sẵn, poll 30s); 7/30 = tải riêng, lưu theo (danh sách địa chỉ, khoảng) —
+    // đổi qua lại hiện ngay số đã có trong lúc tải lại ngầm, không nháy "—".
+    const [rangeDays, setRangeDays] = useState(1)
+    const [rangeCache, setRangeCache] = useState<Record<string, RangeTotals | null>>({})
+    const rangeKey = `${addressIdsKey}|${rangeDays}`
+    useEffect(() => {
+        if (rangeDays === 1) return
+        let stale = false
+        fetchRangeTotals(addresses.map(a => a.id), rangeDays).then(t => { if (!stale) setRangeCache(c => ({ ...c, [rangeKey]: t })) }).catch(e => console.error('rangeTotals:', e))
+        return () => { stale = true }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [rangeKey])
 
     // PERF: count by role in a single pass instead of two .filter() walks per render.
     const { staffCount, managerCount } = useMemo(() => {
@@ -252,7 +266,9 @@ export default function AddressSelectPage() {
                 onSupportClick={() => setShowSupportModal(true)}
                 onSignOut={handleSignOut}
                 onAdminClick={isAdmin ? () => navigate('/admin/dashboard') : undefined}
-                today={today}
+                today={rangeDays === 1 ? today : rangeCache[rangeKey] ?? null}
+                rangeDays={rangeDays}
+                onRangeChange={setRangeDays}
             />
 
             <div className="address-scroll-list flex-1 overflow-y-auto px-4 pt-4 pb-4 hide-scrollbar">
