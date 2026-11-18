@@ -1,7 +1,9 @@
-import { Outlet, useLocation } from 'react-router-dom'
+import { Link, Outlet, useLocation } from 'react-router-dom'
+import { ArrowLeft } from 'lucide-react'
+import { useAuth } from './contexts/AuthContext'
 import OnboardingGuide from './components/common/onboarding/OnboardingGuide'
 import SubscriptionGuard from './components/common/SubscriptionGuard'
-import TopNav from './components/POSPage/TopNav'
+import TopNav, { NAV_ICON_BTN } from './components/POSPage/TopNav'
 
 // Gom mọi thứ chỉ vùng POS cần (providers + khung onboarding) vào MỘT chunk để App.tsx lazy-load —
 // /login, /signup, /forgot-password khỏi tải orderService/POSContext/ProductContext.
@@ -13,6 +15,7 @@ export { POSProvider } from './contexts/POSContext'
 export function OnboardingLayout() {
   // /pos tự đặt guide trong Header (dưới thẻ Địa chỉ + Nhật ký, cạnh "Chuẩn bị hôm nay").
   const { pathname } = useLocation()
+  const { isGuest } = useAuth()
   const onPos = pathname === '/pos'
   // Hàng TopNav phải rộng bằng khung của trang bên dưới (mỗi trang tự đặt max-w-lg + trần ở lg): trang chi tiết 4xl, Tổng hợp tồn kho 6xl, còn lại full.
   const lgMax = pathname.split('/').length > 3 ? 'lg:max-w-4xl' : pathname === '/inventory/summary' ? 'lg:max-w-6xl' : 'lg:max-w-none'
@@ -24,7 +27,15 @@ export function OnboardingLayout() {
         <div className="shrink-0">
           {/* nền surface nằm trên khung đã giới hạn (cùng khung header trang) — để ngoài thì dải nền chạy full màn, lệch với header */}
           <div className={`max-w-lg ${lgMax} mx-auto px-4 lg:px-8 pt-3 bg-surface`}>
-            <div className="lg:max-w-[1280px] lg:mx-auto flex items-center gap-2"><TopNav /></div>
+            <div className="lg:max-w-[1280px] lg:mx-auto flex items-center gap-2">
+              {/* Nhật ký: nút ← (về POS) bên trái ô địa chỉ; khách dùng thử đã có ← → của guide ở header trang. */}
+              {pathname.startsWith('/history') && !isGuest && (
+                <Link to="/pos" aria-label="Về POS" className={NAV_ICON_BTN}>
+                  <ArrowLeft size={19} />
+                </Link>
+              )}
+              <TopNav />
+            </div>
           </div>
         </div>
       )}

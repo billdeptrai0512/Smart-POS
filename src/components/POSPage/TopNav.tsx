@@ -14,7 +14,7 @@ import { Dialog } from '../common/ModalShell'
 import AddressSwitcher from './AddressSwitcher'
 import { NAV_SECTIONS, type NavItem } from '../../constants/navSections'
 
-const ICON_BTN = 'relative shrink-0 w-10 h-10 flex items-center justify-center rounded-[14px] bg-bg border border-border/60 text-text-secondary active:bg-border/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40'
+export const NAV_ICON_BTN = 'relative shrink-0 w-10 h-10 flex items-center justify-center rounded-[14px] bg-bg border border-border/60 text-text-secondary active:bg-border/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40'
 
 // Số kho còn việc theo bản đã tính gần nhất (cache của "Việc cần làm") — đọc rẻ, không tải gì thêm lúc đang bán.
 // Số tươi hơn có khi mở sheet (nó tải nền rồi cập nhật cache).
@@ -56,14 +56,14 @@ export default function TopNav() {
         <>
             <AddressSwitcher />
             {!isGuest && kind && (
-                <button type="button" aria-label="Việc cần làm" onClick={() => setBellOpen(true)} className={ICON_BTN}>
+                <button type="button" aria-label="Việc cần làm" onClick={() => setBellOpen(true)} className={NAV_ICON_BTN}>
                     <Bell size={19} />
                     {kind === 'tasks' && pending > 0 && (
                         <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-white text-[10px] font-black flex items-center justify-center leading-none">!</span>
                     )}
                 </button>
             )}
-            <button type="button" aria-label="Menu" onClick={() => setShowMenu(true)} className={ICON_BTN}>
+            <button type="button" aria-label="Menu" onClick={() => setShowMenu(true)} className={NAV_ICON_BTN}>
                 <Menu size={20} />
             </button>
             {bellOpen && kind === 'tasks' && <AddressNotice onClose={() => { setBellOpen(false); setPending(pendingCount()) }} />}
