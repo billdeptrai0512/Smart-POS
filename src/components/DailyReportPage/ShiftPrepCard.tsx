@@ -4,6 +4,7 @@ import { Check, X, RotateCcw, Pencil, Plus, Minus, ChevronUp, ChevronDown } from
 import { ingredientLabel } from '../../utils/ingredients'
 import { formatPackCount, formatPackedQty, unitTiersOf } from '../../utils/inventory'
 import { onboardingHintClass } from '../../utils/onboardingHint'
+import { SECTION_BAND } from '../common/NoticeSheet'
 
 // Viên thuốc CTA dùng chung cho cả 2 card (Lấy / Mua) — màu theo trạng thái do từng nơi ghép thêm.
 const PILL = 'shrink-0 min-h-[44px] min-w-[124px] px-3 flex items-center justify-center gap-1 rounded-xl text-[12px] font-black transition'
@@ -161,12 +162,12 @@ export default function ShiftPrepCard({
                                 <button
                                     type="button"
                                     onClick={() => setGroupToggled(o => ({ ...o, [String(urgent)]: !groupOpen }))}
-                                    className={`-mx-5 w-[calc(100%+2.5rem)] px-5 py-2.5 flex items-center gap-2 text-left text-[11px] font-black uppercase tracking-wider ${i === 0 ? '-mt-1' : ''} ${urgent ? 'bg-danger/10 text-danger' : 'bg-surface-light text-text-secondary'}`}
+                                    className={`${SECTION_BAND} ${i === 0 ? '-mt-1' : 'mt-2'} ${urgent ? 'bg-danger/10 text-danger' : 'bg-surface-light text-text-secondary'}`}
                                 >
                                     <span className="flex-1">{urgent ? 'Cần lấy thêm' : 'Soạn đầu ca'}</span>
                                     {/* Đã xử lý / tổng của nhóm — thu gọn rồi vẫn thấy còn bao nhiêu việc. */}
                                     <span className="tabular-nums opacity-70">{group.filter(o => checked[o.ingredient] || skipped[o.ingredient] || o.done).length}/{group.length}</span>
-                                    {groupOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                    {groupOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                                 </button>
                             )
                             if (!groupOpen) return heading && <Fragment key={it.ingredient}>{heading}</Fragment>

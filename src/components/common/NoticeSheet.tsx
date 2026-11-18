@@ -9,6 +9,9 @@ import { BottomSheet } from './ModalShell'
 // hintClose: guide khách dùng thử sáng nút X khi việc trong sheet đã xong.
 interface Props { icon: ReactNode; title: string; count?: number | string; onClose: () => void; children: ReactNode; hintClose?: boolean }
 
+// Dải tiêu đề nhóm/dòng full-bleed trong thân sheet (bù px-5 của khung này); màu/margin do nơi dùng thêm.
+export const SECTION_BAND = '-mx-5 w-[calc(100%+2.5rem)] px-5 py-3.5 flex items-center gap-2 text-left text-[12px] font-black uppercase tracking-wider'
+
 // Thân sheet tính bất đồng bộ: lỗi → nút "Thử lại"; đang tính → chữ chờ; xong thì vẽ children.
 export function SheetBody({ error, loading, onRetry, children }: { error: unknown; loading: boolean; onRetry: () => void; children: ReactNode }) {
     if (error) {
@@ -63,7 +66,7 @@ export default function NoticeSheet({ icon, title, count, onClose, children, hin
                     <Check size={19} strokeWidth={3} />
                 </button>
             </div>
-            <div className="min-h-0 overflow-y-auto px-5 pt-1 pb-8 [@media(display-mode:standalone)]:pb-[max(env(safe-area-inset-bottom),40px)]">{children}</div>
+            <div className="min-h-0 overflow-y-auto px-5 pt-1 pb-[max(env(safe-area-inset-bottom),8px)]">{children}</div>
         </BottomSheet>,
         document.body,
     )

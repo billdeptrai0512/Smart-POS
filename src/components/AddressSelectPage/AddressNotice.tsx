@@ -8,7 +8,7 @@ import { fetchTodayExpenses } from '../../services/expenseService'
 import { buildTodayBoughtMap } from '../../utils/prepToday'
 import type { UsageMap } from '../../utils/inventory'
 import NoticeBar from '../common/NoticeBar'
-import NoticeSheet from '../common/NoticeSheet'
+import NoticeSheet, { SECTION_BAND } from '../common/NoticeSheet'
 import { HubBuyBody } from '../IngredientManagementPage/HubBuyNotice'
 import { DebtList, ingredientDetailPath, useDebtPay, useIngredientDebts } from '../IngredientManagementPage/DebtSection'
 import { buildHubBuyItems } from '../../utils/hubBuy'
@@ -60,17 +60,17 @@ export default function AddressNotice({ onClose }: { onClose?: () => void } = {}
             {open && !pay && (
                 <NoticeSheet icon={<span className="shrink-0 text-[12px] font-black text-primary tabular-nums">{doneCount}/{total}</span>} title="Việc cần làm" onClose={() => { setOpen(false); onClose?.() }}>
                     {stockRows.length > 0 && (
-                        <div className="pt-3">
+                        <div className="-mt-1 flex flex-col gap-2">
                             {stockRows.map(u => {
                                 const st = stats[u.key]
                                 const data = loaded[u.key]
                                 const isOpen = expanded === u.key && !!data
                                 return (
-                                    <div key={u.key} ref={u.key === scrollTo ? scrollRef : u.key === reopenKey ? focusRef : undefined} className="border-b border-border/30 last:border-0">
+                                    <div key={u.key} ref={u.key === scrollTo ? scrollRef : u.key === reopenKey ? focusRef : undefined}>
                                         <Row
                                             name={u.name}
-                                            note={noteOf(st, !!data)}
-                                            tone={!st ? (data ? 'text-danger' : undefined) : st.need === 0 ? 'text-success' : st.need < st.total ? 'text-warning' : 'text-danger'}
+                                            progress={progressOf(st, !!data)}
+                                            tone={toneOf(st, !!data)}
                                             expanded={isOpen}
                                             busy={!data}
                                             onClick={data ? () => {
@@ -80,7 +80,7 @@ export default function AddressNotice({ onClose }: { onClose?: () => void } = {}
                                         />
                                         {/* Thụt vào + vạch dọc cam: danh sách món thuộc về kho ngay phía trên, không lẫn với dòng kho kế tiếp. */}
                                         {isOpen && (
-                                            <div className="ml-1.5 mb-2 pl-3.5 border-l-2 border-primary/50">
+                                            <div className="ml-1.5 my-2 pl-3.5 border-l-2 border-primary/50">
                                                 <AddressDebts key={debtVer} addressId={u.target.id} onPay={invoice => setPay({ addressId: u.target.id, invoice })} onOpenIngredient={(ing, tab, since) => openIngredient(u.key, u.target, ing, tab, since)} />
                                                 <HubBuyBody addressId={u.target.id} prep={data.prep} bought={data.bought} minAsFloor={!u.hub} skipped={skips[u.target.id]} onSkip={ing => toggleSkip(u.target.id, ing)} onOpenIngredient={ing => openIngredient(u.key, u.target, ing)} onAfterRestock={data.refreshBought} />
                                             </div>
@@ -112,24 +112,26 @@ function AddressDebts({ addressId, onPay, onOpenIngredient }: { addressId: strin
     )
 }
 
-// Dòng phụ nói số CÒN PHẢI LÀM (không phải số đã xong) để "0/14" không bị đọc thành "0 nguyên liệu cần bổ sung".
-function noteOf(st: StockStat | undefined, hasData: boolean) {
-    if (!st) return hasData ? 'Không tải được · bấm để thử lại' : 'Đang tính…' // có data mà không có stat = StockLoader báo lỗi
-    const sync = hasData ? '' : ' · đang cập nhật…'
-    return st.need === 0 ? `Đã đủ ${st.total} nguyên liệu${sync}` : `Còn ${st.need}/${st.total} nguyên liệu cần bổ sung${sync}`
+// Số ĐÃ XONG / tổng nguyên liệu của kho (cùng kiểu "4/4" của nhóm trong "Bạn cần chuẩn bị").
+function progressOf(st: StockStat | undefined, hasData: boolean) {
+    if (!st) return hasData ? 'Không tải được · bấm thử lại' : 'Đang tính…' // có data mà không có stat = StockLoader báo lỗi
+    return `${st.total - st.need}/${st.total}`
 }
 
-// tone: màu dòng phụ theo tiến độ — đỏ chưa làm gì, cam đang làm dở, xanh xong hết.
-// busy: chưa có số liệu chi tiết → chưa bấm mở được: hiện vòng xoay thay mũi tên, tắt nút.
-function Row({ name, note, tone = 'text-text-secondary', expanded, busy, onClick }: { name: string; note: string; tone?: string; expanded: boolean; busy: boolean; onClick?: () => void }) {
+// Nền + màu chữ theo tiến độ: đỏ chưa làm gì, cam đang làm dở, xanh xong hết; chưa có số liệu thì xám.
+function toneOf(st: StockStat | undefined, hasData: boolean) {
+    if (!st) return hasData ? 'bg-danger/10 text-danger' : 'bg-surface-light text-text-secondary'
+    return st.need === 0 ? 'bg-success/10 text-success' : st.need < st.total ? 'bg-warning/10 text-warning' : 'bg-danger/10 text-danger'
+}
+
+// Dải cùng kiểu tiêu đề nhóm của ShiftPrepCard. busy: chưa có số liệu chi tiết → chưa bấm mở được: vòng xoay thay mũi tên, tắt nút.
+function Row({ name, progress, tone, expanded, busy, onClick }: { name: string; progress: string; tone: string; expanded: boolean; busy: boolean; onClick?: () => void }) {
     const chevron: ReactNode = busy ? <Loader2 size={16} className="animate-spin" /> : expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />
     return (
-        <button type="button" onClick={onClick} disabled={busy} aria-expanded={busy ? undefined : expanded} className="w-full flex items-center gap-3 py-3 text-left disabled:cursor-default">
-            <span className="flex-1 min-w-0 flex flex-col gap-0.5">
-                <span className="truncate text-[14px] font-black text-text">{name}</span>
-                <span className={`text-[13px] font-bold ${tone}`}>{note}</span>
-            </span>
-            <span className="text-text-dim shrink-0">{chevron}</span>
+        <button type="button" onClick={onClick} disabled={busy} aria-expanded={busy ? undefined : expanded} className={`${SECTION_BAND} disabled:cursor-default ${tone}`}>
+            <span className="flex-1 min-w-0 truncate">{name}</span>
+            <span className="shrink-0 tabular-nums opacity-70">{progress}</span>
+            {chevron}
         </button>
     )
 }
