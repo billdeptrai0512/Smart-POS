@@ -21,7 +21,8 @@ import type { Address, Row } from '../../types/domain'
 const STOCK_CONCURRENCY = 3
 
 // onClose: chế độ "chỉ sheet" (chuông trên thanh POS) — không vẽ dải, mở sẵn, đóng thì báo cha unmount (bộ tải nền chỉ chạy khi sheet đang mở).
-export default function AddressNotice({ onClose }: { onClose?: () => void } = {}) {
+// bell: chuông của header /addresses — không vẽ dải; sheet do cha mở/đóng (open), nhưng bộ tải nền vẫn chạy để badge luôn tươi (onCount = số kho còn việc).
+export default function AddressNotice({ onClose, bell }: { onClose?: () => void; bell?: { open: boolean; onClose: () => void; onCount: (n: number) => void } } = {}) {
     const { setSelectedAddress } = useAddress()
     const navigate = useNavigate()
     // Bấm tên nguyên liệu → sang trang chi tiết (trang này unmount); nút Back của trang đó về /addresses?reopen=<kho> → mở lại sheet + dòng kho đó.
@@ -30,7 +31,9 @@ export default function AddressNotice({ onClose }: { onClose?: () => void } = {}
     const focusRef = useRef<HTMLDivElement>(null)
     const scrollRef = useRef<HTMLDivElement>(null)
     const [scrollTo, setScrollTo] = useState<string | null>(null)
-    const [open, setOpen] = useState(reopenKey !== null || !!onClose)
+    const [openState, setOpen] = useState(reopenKey !== null || !!onClose)
+    const open = bell ? bell.open : openState
+    const close = () => { setOpen(false); onClose?.(); bell?.onClose() }
     const [expanded, setExpanded] = useState<string | null>(reopenKey) // kho đang mở rộng — accordion: mở kho này thì kho kia tự đóng
     // Công nợ: form trả nợ là bottom-sheet nên vẽ ngoài sheet này (ẩn sheet khi đang trả); trả xong → các dòng địa chỉ tải lại công nợ.
     const [debtVer, setDebtVer] = useState(0)
@@ -40,12 +43,12 @@ export default function AddressNotice({ onClose }: { onClose?: () => void } = {}
     // Chọn địa chỉ đích của kho rồi vào thẳng trang chi tiết nguyên liệu; Back về /addresses.
     function openIngredient(unitKey: string, target: Address, ingredient: string, tab?: 'history', sinceISO?: string) {
         setSelectedAddress(target)
-        setOpen(false)
-        onClose?.() // chuông nằm ở layout, không unmount khi đổi trang → tự đóng sheet kẻo che trang chi tiết
+        close()
         // URL luôn mang scope (?scope=month, hoặc khoảng ngày của công nợ): không thì useDateScope tự ghi (replace) và làm rơi location.state → mất backTo.
         navigate(ingredientDetailPath(ingredient, tab, sinceISO), { state: onClose ? undefined : { backTo: `/addresses?reopen=${unitKey}` } }) // chuông: Back về trang trước, không phải /addresses
     }
 
+    useEffect(() => { bell?.onCount(total - doneCount) }, [total, doneCount]) // eslint-disable-line react-hooks/exhaustive-deps
     const reopenReady = !!(reopenKey && loaded[reopenKey])
     useEffect(() => { if (reopenReady) focusRef.current?.scrollIntoView({ block: 'start' }) }, [reopenReady])
     // Mở dòng → cuộn dòng đó lên đầu sheet, khỏi phải kéo xuống tới phần nguyên liệu. Chạy trong effect (sau khi phần mở rộng
@@ -56,9 +59,9 @@ export default function AddressNotice({ onClose }: { onClose?: () => void } = {}
 
     return (
         <>
-            {!onClose && <NoticeBar icon={<ClipboardList size={15} className="text-primary shrink-0" />} label="Việc cần làm" count={total - doneCount} onClick={() => setOpen(true)} />}
+            {!onClose && !bell && <NoticeBar icon={<ClipboardList size={15} className="text-primary shrink-0" />} label="Việc cần làm" count={total - doneCount} onClick={() => setOpen(true)} />}
             {open && !pay && (
-                <NoticeSheet icon={<span className="shrink-0 text-[12px] font-black text-primary tabular-nums">{doneCount}/{total}</span>} title="Việc cần làm" onClose={() => { setOpen(false); onClose?.() }}>
+                <NoticeSheet icon={<span className="shrink-0 text-[12px] font-black text-primary tabular-nums">{doneCount}/{total}</span>} title="Việc cần làm" onClose={close}>
                     {stockRows.length > 0 && (
                         <div className="-mt-1 flex flex-col gap-2">
                             {stockRows.map(u => {

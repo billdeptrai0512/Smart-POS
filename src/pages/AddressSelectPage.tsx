@@ -71,6 +71,15 @@ export default function AddressSelectPage() {
         [addresses, revenueMap],
     )
 
+    // Tổng mọi địa chỉ cho thẻ "Hôm nay" ở header; null khi chưa có số nào (lần tải đầu).
+    const today = useMemo(() => {
+        if (addresses.every(a => cupsMap[a.id] === undefined)) return null
+        const sum = (m: Record<string, number | undefined>) => addresses.reduce((s, a) => s + (m[a.id] || 0), 0)
+        // Thực thu: chỉ cộng địa chỉ có số (như thẻ từng địa chỉ); không địa chỉ nào có → null (hiện "—").
+        const hasActual = addresses.some(a => actualTotals.today[a.id] != null)
+        return { cups: sum(cupsMap), revenue: sum(revenueMap), prevCups: sum(prevCupsMap), prevRevenue: sum(prevRevenueMap), actual: hasActual ? sum(actualTotals.today) : null, prevActual: sum(actualTotals.prev) }
+    }, [addresses, cupsMap, revenueMap, prevCupsMap, prevRevenueMap, actualTotals])
+
     // PERF: count by role in a single pass instead of two .filter() walks per render.
     const { staffCount, managerCount } = useMemo(() => {
         let s = 0, m = 0
@@ -211,11 +220,11 @@ export default function AddressSelectPage() {
     if (loading) {
         return (
             <div className="flex flex-col h-full max-w-lg mx-auto bg-bg">
-                <div className="shrink-0 pt-6 pb-6 bg-surface border-b border-border/60 shadow-[0_8px_30px_rgba(0,0,0,0.03)]">
-                    <div className="px-6 grid grid-cols-2 gap-3">
-                        <Skeleton className="h-24 rounded-[20px]" />
-                        <Skeleton className="h-24 rounded-[20px]" />
-                    </div>
+                {/* Khung theo AddressHeader: hàng nav · thẻ Hôm nay · tab */}
+                <div className="shrink-0 pt-3 pb-3 px-6 flex flex-col gap-3 bg-surface border-b border-border/60 shadow-[0_8px_30px_rgba(0,0,0,0.03)]">
+                    <Skeleton className="h-10 rounded-[14px]" />
+                    <Skeleton className="h-[94px] rounded-[20px]" />
+                    <Skeleton className="h-[42px] rounded-[14px]" />
                 </div>
                 <div className="px-4 pt-4 space-y-3">
                     <Skeleton className="h-24 rounded-[20px]" />
@@ -240,6 +249,9 @@ export default function AddressSelectPage() {
                 addressCount={addresses.length}
                 staffCount={staffCount}
                 managerCount={managerCount}
+                onSupportClick={() => setShowSupportModal(true)}
+                onSignOut={handleSignOut}
+                today={today}
             />
 
             <div className="address-scroll-list flex-1 overflow-y-auto px-4 pt-4 pb-4 hide-scrollbar">
@@ -273,7 +285,6 @@ export default function AddressSelectPage() {
                         onRemoveWarehouseGroup={removeWarehouseGroup}
                         onSetAddressGroup={setAddressGroup}
                         onSetGroupHub={setGroupHub}
-                        onSupportClick={() => setShowSupportModal(true)}
                         onCreate={showCreate ? () => setShowCreateModal(true) : undefined}
                         onDefaultTemplate={async () => {
                             // Load persisted ingredient sort so /inventory respects admin's saved order.
@@ -299,22 +310,14 @@ export default function AddressSelectPage() {
                 )}
             </div>
 
-            {(activeTab === 'staff' || isStaff || isGuest) && (
+            {isAdmin && (activeTab === 'staff' || isStaff || isGuest) && (
                 <div className="shrink-0 flex items-stretch gap-3 px-4 py-2.5 pb-[max(env(safe-area-inset-bottom),10px)] [@media(display-mode:standalone)]:pb-[max(env(safe-area-inset-bottom),28px)] bg-surface border-t border-border/60">
                     <button
-                        onClick={handleSignOut}
-                        className="flex-1 min-w-0 flex items-center justify-center rounded-[12px] border border-border/60 bg-bg px-4 py-3 text-[13px] font-bold uppercase tracking-wider text-text-secondary hover:bg-surface-light hover:text-danger active:scale-95 transition-all"
+                        onClick={() => navigate('/admin/dashboard')}
+                        className="flex-1 min-w-0 flex items-center justify-center rounded-[12px] bg-primary px-4 py-3 text-[13px] font-black uppercase text-bg hover:bg-primary/90 active:scale-95 transition-all"
                     >
-                        <span className="truncate">Đăng xuất</span>
+                        <span className="truncate">Admin Dashboard</span>
                     </button>
-                    {isAdmin && (
-                        <button
-                            onClick={() => navigate('/admin/dashboard')}
-                            className="flex-1 min-w-0 flex items-center justify-center rounded-[12px] bg-primary px-4 py-3 text-[13px] font-black uppercase text-bg hover:bg-primary/90 active:scale-95 transition-all"
-                        >
-                            <span className="truncate">Admin Dashboard</span>
-                        </button>
-                    )}
                 </div>
             )}
 

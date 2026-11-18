@@ -1,8 +1,13 @@
 import { useState } from 'react'
-import { Building2, Users, Mail, Loader2, Check } from 'lucide-react'
+import { Mail, Loader2, Check, X, Bell, MessageCircleQuestion, LogOut, User } from 'lucide-react'
+import { useLocation } from 'react-router-dom'
+import { NAV_ICON_BTN } from '../../constants/navStyles'
 import { useAuth } from '../../contexts/AuthContext'
 import { setMyEmail } from '../../services/authService'
 import AddressNotice from './AddressNotice'
+import Delta from '../common/Delta'
+import { deltaPct } from '../../utils/deltaPct'
+import { formatVND } from '../../utils'
 import { Dialog, ModalHeader } from '../common/ModalShell'
 import type { Profile } from '../../types/domain'
 import { errorMessage } from '../../utils/errorMessage'
@@ -17,122 +22,110 @@ interface Props {
     addressCount: number
     staffCount: number
     managerCount: number
+    onSupportClick: () => void
+    onSignOut: () => void
+    today: { cups: number; revenue: number; prevCups: number; prevRevenue: number; actual: number | null; prevActual: number } | null
 }
 
-export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTab, profile, setError, addressCount, staffCount, managerCount }: Props) {
+export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTab, profile, setError, addressCount, staffCount, managerCount, onSupportClick, onSignOut, today }: Props) {
     const showTabs = !isStaff && !isGuest;
     const [emailOpen, setEmailOpen] = useState(false)
+    // ?reopen=<kho> (Back từ trang chi tiết nguyên liệu) → mở lại sheet; AddressNotice tự mở dòng kho đó.
+    const { search } = useLocation()
+    const [bellOpen, setBellOpen] = useState(() => new URLSearchParams(search).get('reopen') !== null)
+    const [pending, setPending] = useState(0) // AddressNotice báo số kho còn việc (đọc cache ngay, rồi cập nhật nền)
     const email = profile?.email
+    const actual = today?.actual ?? null
 
-    // Card focus = nền primary đặc → chữ trắng theo brand mockup (WCAG chỉ ~2.8:1
-    // nhưng font-black + APCA đọc tốt; đây là lựa chọn thương hiệu có chủ đích).
-    const valColor = (on: boolean) => on ? 'text-white' : 'text-text-secondary'
-    const iconColor = (on: boolean) => on ? 'text-white' : 'text-text-secondary'
-    const lblColor = (on: boolean) => on ? 'text-white/70' : 'text-text-secondary'
+    const tabs = [
+        { id: 'branches', label: 'Địa chỉ', count: addressCount },
+        { id: 'staff', label: 'Nhân sự', count: managerCount + staffCount },
+    ]
 
     return (
-        <header className="shrink-0 pt-6 pb-6 bg-surface border-b border-border/60 shadow-[0_8px_30px_rgba(0,0,0,0.03)] relative z-20">
-            <div className="px-6">
-                {showTabs ? (
-                    <div className="grid grid-cols-2 gap-3 mb-1">
-                        {/* Card trái: user + Cơ sở tab */}
-                        <button
-                            onClick={() => { setActiveTab('branches'); setError('') }}
-                            className={`rounded-[20px] p-3 sm:p-3.5 border text-left flex flex-col justify-center gap-[2px] relative overflow-hidden transition-all focus:outline-none focus:ring-2 focus:ring-primary/40 ${activeTab === 'branches'
-                                ? 'bg-linear-to-b from-primary to-primary-dark border-primary shadow-[0_4px_20px_rgba(244,119,75,0.3)]'
-                                : 'bg-bg border-border/60 hover:bg-surface-light'}`}
-                        >
-                            <div className="flex flex-col justify-between items-start relative z-10 gap-[3px] min-w-0 w-full">
-                                <span className={`text-[12px] sm:text-[13px] font-bold uppercase tracking-wider truncate w-full ${lblColor(activeTab === 'branches')}`}>Xin chào</span>
-                                <span className={`text-[15px] sm:text-[16px] font-black tracking-tight leading-tight truncate w-full ${valColor(activeTab === 'branches')}`}>
-                                    {profile?.name || '...'}
-                                </span>
-                            </div>
-                            <div className={`w-full h-[1px] rounded-full relative z-10 my-[3px] mt-[4px] ${activeTab === 'branches' ? 'bg-white/25' : 'bg-border/60'}`} />
-                            <div className="flex flex-col justify-between items-start relative z-10 mt-[6px] w-full gap-[3px]">
-                                <span className={`text-[12px] sm:text-[13px] font-black uppercase tracking-wider ${lblColor(activeTab === 'branches')}`}>Địa chỉ</span>
-                                <div className="flex items-center gap-1.5">
-                                    <Building2 size={15} className={iconColor(activeTab === 'branches')} />
-                                    <span className={`text-[14px] sm:text-[14px] font-black uppercase tracking-wider ${valColor(activeTab === 'branches')}`}>
-                                        {addressCount}
-                                    </span>
-                                </div>
-                            </div>
-
-
-                            {activeTab === 'branches' && (
-                                <div className="absolute bottom-0 right-0 w-20 h-20 bg-white/15 rounded-full blur-2xl -mr-8 -mb-8 pointer-events-none" />
-                            )}
-                        </button>
-
-                        {/* Card phải: SĐT (mở modal) + Nhân sự tab */}
-                        <button
-                            onClick={() => { setActiveTab('staff'); setError('') }}
-                            className={`rounded-[20px] p-3 sm:p-3.5 border text-left flex flex-col justify-center gap-[2px] relative overflow-hidden transition-all focus:outline-none focus:ring-2 focus:ring-primary/40 ${activeTab === 'staff'
-                                ? 'bg-linear-to-b from-primary to-primary-dark border-primary shadow-[0_4px_20px_rgba(244,119,75,0.3)]'
-                                : 'bg-bg border-border/60 hover:bg-surface-light'}`}
-                        >
-                            {/* Email — span role=button (tránh button lồng button gây hydration error) */}
-                            <span
-                                role="button"
-                                tabIndex={0}
-                                onClick={(e) => { e.stopPropagation(); setEmailOpen(true) }}
-                                className="flex flex-col items-start relative z-10 w-full cursor-pointer gap-[3px]"
-                            >
-                                <span className={`text-[12px] sm:text-[13px] font-bold uppercase tracking-wider truncate w-full ${lblColor(activeTab === 'staff')}`}>Email</span>
-                                <span className={`text-[14px] sm:text-[14px] font-black tracking-tight leading-tight truncate w-full ${email ? valColor(activeTab === 'staff') : (activeTab === 'staff' ? 'text-white/50' : 'text-text-secondary/60')}`}>
-                                    {email || '—'}
-                                </span>
-                            </span>
-                            <div className={`w-full h-[1px] rounded-full relative z-10 my-[2px]  ${activeTab === 'staff' ? 'bg-white/25' : 'bg-border/60'}`} />
-                            <div className="flex flex-col justify-between items-start relative z-10 mt-[6px] w-full gap-[3px]">
-                                <span className={`text-[12px] sm:text-[13px] font-black uppercase tracking-wider ${lblColor(activeTab === 'staff')}`}>Nhân sự</span>
-                                <div className="flex items-center gap-1.5">
-                                    <Users size={15} className={iconColor(activeTab === 'staff')} />
-                                    <span className={`text-[14px] sm:text-[14px] font-black uppercase tracking-wider ${valColor(activeTab === 'staff')}`}>
-                                        {managerCount + staffCount}
-                                    </span>
-                                </div>
-                            </div>
-                            {activeTab === 'staff' && (
-                                <div className="absolute bottom-0 right-0 w-20 h-20 bg-white/15 rounded-full blur-2xl -mr-8 -mb-8 pointer-events-none" />
-                            )}
-                        </button>
-                    </div>
-                ) : (
-                    /* Staff: simple header, no tab */
-                    <div className="bg-bg border border-border/60 rounded-[20px] p-3 sm:p-3.5">
-                        <div className="flex flex-col justify-between items-start">
-                            <span className="text-[12px] sm:text-[13px] text-text-secondary font-bold uppercase tracking-wider">Xin chào</span>
-                            <span className="text-[15px] sm:text-[16px] text-text font-black tracking-tight leading-none">{profile?.name || '...'}</span>
-                        </div>
-                        <div className="w-full h-[1px] bg-border/60 rounded-full my-[3px] mt-[4px]" />
-                        <div className="flex items-center gap-1.5 mt-[6px]">
-                            <Building2 size={13} className="text-text-secondary" />
-                            <span className="text-[12px] sm:text-[13px] font-black text-text-secondary uppercase tracking-wider">Chọn địa chỉ</span>
-                        </div>
-                    </div>
+        <header className="shrink-0 pt-3 pb-3 bg-surface border-b border-border/60 shadow-[0_8px_30px_rgba(0,0,0,0.03)] relative z-20">
+            {/* Hàng nav (cùng kiểu TopNav của POS): pill tên (→ tài khoản) · hỗ trợ · chuông "Việc cần làm" */}
+            <div className="px-6 flex items-center gap-2">
+                {/* Bấm vào tên → modal Tài khoản (email + đăng xuất) */}
+                <button
+                    type="button"
+                    aria-label="Tài khoản"
+                    onClick={() => setEmailOpen(true)}
+                    className="flex-1 min-w-0 h-10 px-3.5 flex items-center rounded-[14px] bg-bg border border-border/60 overflow-hidden text-left active:bg-border/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                >
+                    <span className="text-[15px] font-black tracking-tight truncate text-text">{profile?.name || '...'}</span>
+                    {showTabs && !email && <Mail size={16} className="ml-auto shrink-0 text-warning" aria-hidden />}
+                </button>
+                <button type="button" aria-label="Hỗ trợ / góp ý" onClick={onSupportClick} className={NAV_ICON_BTN}>
+                    <MessageCircleQuestion size={19} />
+                </button>
+                {showTabs && (
+                    <button type="button" aria-label="Việc cần làm" onClick={() => setBellOpen(true)} className={NAV_ICON_BTN}>
+                        <Bell size={19} className={pending > 0 ? 'text-primary' : ''} />
+                        {pending > 0 && (
+                            <span className={`absolute -top-1.5 -right-1.5 h-5 ${pending > 9 ? 'px-1.5' : 'w-5 pl-px'} rounded-full bg-primary text-white text-[11px] font-black flex items-center justify-center leading-none pt-px tabular-nums ring-2 ring-surface`}>{pending}</span>
+                        )}
+                    </button>
                 )}
             </div>
 
             {showTabs && (
-                <div className="mx-6 mt-3 rounded-[14px] overflow-hidden">
-                    <AddressNotice />
-                </div>
+                <>
+                    {/* Tổng hôm nay — thẻ cùng kiểu "Nhật ký" của POS */}
+                    <div className="px-6 mt-3">
+                        <div className="bg-bg rounded-[20px] p-3 sm:p-3.5 border border-border/60 shadow-sm flex flex-col gap-1">
+                            <Stat label="Hôm nay bán:" value={today && `${today.cups} ly`} pct={today && deltaPct(today.cups, today.prevCups)} />
+                            <Stat label="Doanh thu:" value={today && formatVND(today.revenue)} pct={today && deltaPct(today.revenue, today.prevRevenue)} />
+                            <Stat label="Tổng thực thu:" value={actual != null ? formatVND(actual) : null} pct={actual != null && today ? deltaPct(actual, today.prevActual) : null} />
+                        </div>
+                    </div>
+                    {/* Tab — cùng kiểu ReportViewFilter của trang Báo cáo */}
+                    <div className="px-6 mt-3">
+                        <div className="bg-surface border border-border/60 rounded-[14px] p-1 shadow-sm flex gap-1">
+                            {tabs.map(({ id, label, count }) => (
+                                <button
+                                    key={id}
+                                    type="button"
+                                    onClick={() => { setActiveTab(id); setError('') }}
+                                    className={`flex-1 py-2 rounded-[10px] text-[11px] font-black uppercase tracking-wider transition-all duration-150 ${activeTab === id
+                                        ? 'bg-primary text-bg shadow-sm'
+                                        : 'text-text-secondary hover:text-text hover:bg-border/30'}`}
+                                >
+                                    <span className="tabular-nums">{count}</span> {label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </>
             )}
 
-            {emailOpen && <EmailModal email={email} onClose={() => setEmailOpen(false)} />}
+            {showTabs && <AddressNotice bell={{ open: bellOpen, onClose: () => setBellOpen(false), onCount: setPending }} />}
+            {emailOpen && <AccountModal email={email} canEditEmail={showTabs} onSignOut={onSignOut} onClose={() => setEmailOpen(false)} />}
         </header>
     )
 }
 
-// CRUD email tài khoản — lưu qua RPC set_my_email. Đây là đường duy nhất để đặt
+// value null = chưa có số (lần tải đầu) → "—", không hiện "0".
+function Stat({ label, value, pct }: { label: string; value: string | null; pct: number | null }) {
+    return (
+        <div className="flex items-baseline gap-1.5 text-sm">
+            <span className="text-text-secondary">{label}</span>
+            <span className="text-text">{value ?? '—'}</span>
+            <Delta pct={pct} />
+        </div>
+    )
+}
+
+const INLINE_BTN = 'w-9 h-9 flex items-center justify-center rounded-[10px] disabled:opacity-50' // nút icon trong ô email
+
+// Modal Tài khoản: email (chỉ quản lý — lưu qua RPC set_my_email) + Đăng xuất (mọi vai trò). Email là đường duy nhất để đặt
 // lại mật khẩu, nên tài khoản cũ (email NULL) khai bổ sung ở đây.
-function EmailModal({ email, onClose }: { email?: string | null; onClose: () => void }) {
+function AccountModal({ email, canEditEmail, onSignOut, onClose }: { email?: string | null; canEditEmail: boolean; onSignOut: () => void; onClose: () => void }) {
     const { refreshProfile } = useAuth()
     const [value, setValue] = useState(email || '')
     const [busy, setBusy] = useState(false)
     const [err, setErr] = useState('')
+    const changed = value.trim() !== (email || '')
 
     async function handleSave() {
         if (!value.trim() || busy) return
@@ -154,37 +147,45 @@ function EmailModal({ email, onClose }: { email?: string | null; onClose: () => 
             onClose={() => { if (!busy) onClose() }}
             panelClassName="w-full max-w-sm mx-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden"
         >
-                <ModalHeader icon={Mail} title="Email" onClose={onClose} hideClose={busy} />
+                <ModalHeader icon={User} title="Tài khoản" onClose={onClose} hideClose={busy} />
                 <div className="p-5 flex flex-col gap-4">
-                    <input
-                        type="email"
-                        autoFocus
-                        placeholder="Email (dùng để đặt lại mật khẩu)"
-                        value={value}
-                        onChange={e => setValue(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') handleSave() }}
+                    {canEditEmail && (
+                        <>
+                            {/* Hủy/Lưu nằm trong ô, chỉ hiện khi email đã đổi: ✕ trả về giá trị cũ, ✓ lưu. */}
+                            <div className="relative">
+                                <Mail size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none" aria-hidden />
+                                <input
+                                    type="email"
+                                    placeholder="Email (dùng để đặt lại mật khẩu)"
+                                    value={value}
+                                    onChange={e => setValue(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') handleSave() }}
+                                    disabled={busy}
+                                    className={`w-full pl-11 ${changed ? 'pr-[88px]' : 'pr-4'} py-3 rounded-[12px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary disabled:opacity-50`}
+                                />
+                                {changed && (
+                                    <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex gap-1">
+                                        <button type="button" aria-label="Hủy thay đổi" disabled={busy} onClick={() => { setValue(email || ''); setErr('') }} className={`${INLINE_BTN} text-text-secondary hover:bg-surface-light`}>
+                                            <X size={16} />
+                                        </button>
+                                        <button type="button" aria-label="Lưu email" disabled={busy || !value.trim()} onClick={handleSave} className={`${INLINE_BTN} bg-primary text-bg hover:bg-primary/90`}>
+                                            {busy ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                            {err && <p className="text-danger text-xs font-medium px-1">{err}</p>}
+                            <div className="h-px bg-border/60" />
+                        </>
+                    )}
+                    <button
+                        type="button"
                         disabled={busy}
-                        className="w-full px-4 py-3 rounded-[12px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary disabled:opacity-50"
-                    />
-                    {err && <p className="text-danger text-xs font-medium px-1">{err}</p>}
-                    <div className="flex gap-2">
-                        <button
-                            type="button"
-                            disabled={busy}
-                            onClick={onClose}
-                            className="flex-1 py-3 rounded-[14px] bg-bg border border-border/60 text-text-secondary font-bold text-sm hover:bg-surface-light transition-colors disabled:opacity-50"
-                        >
-                            Hủy
-                        </button>
-                        <button
-                            type="button"
-                            disabled={busy || !value.trim()}
-                            onClick={handleSave}
-                            className="flex-1 py-3 rounded-[14px] bg-primary text-bg font-black text-sm hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                        >
-                            {busy ? <Loader2 size={14} className="animate-spin" /> : <><Check size={14} /> Lưu</>}
-                        </button>
-                    </div>
+                        onClick={onSignOut}
+                        className="w-full py-3 rounded-[14px] bg-bg border border-border/60 text-text-secondary font-bold text-sm hover:bg-surface-light hover:text-danger transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                        <LogOut size={15} className="-scale-x-100" /> Đăng xuất
+                    </button>
                 </div>
         </Dialog>
     )
