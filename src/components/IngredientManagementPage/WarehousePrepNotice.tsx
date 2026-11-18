@@ -104,9 +104,8 @@ function Notice({ addressId, onRestocked, onOpenIngredient, hint, onClose }: Pro
 
             {open && !pay && (
                 <NoticeSheet
-                    icon={<span className="shrink-0 text-[16px] font-black text-primary tabular-nums">{progress}</span>}
+                    icon={<span className="shrink-0 text-[12px] font-black text-primary tabular-nums">{progress}</span>}
                     title="Tồn kho cần bổ sung"
-                    count=""
                     onClose={closeSheet}
                     hintClose={restockProgress.bought && !restockProgress.viewedNet} // guide: nhập kho xong → sáng nút Đóng
                 >
@@ -139,7 +138,7 @@ function Notice({ addressId, onRestocked, onOpenIngredient, hint, onClose }: Pro
     )
 }
 
-// Dải full-bleed (bù px-5 + pt-1 của NoticeSheet) cùng kiểu "Cần lấy ngay / Soạn đầu ca" của ShiftPrepCard.
+// Dải full-bleed (bù px-5 + pt-1 của NoticeSheet) cùng kiểu "Cần lấy thêm / Soạn đầu ca" của ShiftPrepCard.
 function SectionHeading({ children, tone, first }: { children: string; tone: 'warning' | 'neutral'; first?: boolean }) {
     return (
         <div className={`-mx-5 px-5 py-1.5 text-[12px] font-black uppercase tracking-wide ${first ? '-mt-1' : 'mb-3'} ${tone === 'warning' ? 'bg-warning/10 text-warning' : 'bg-surface-light text-text-secondary'}`}>

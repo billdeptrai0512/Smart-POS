@@ -19,8 +19,8 @@ export interface PrepItem {
     reason?: string
     warehouse?: number | null
     tare?: number
+    minCounter?: number // tồn quầy tối thiểu (min_counter_stock, đã trừ bì) — 0/không có = không đặt sàn
     restock?: number
-    counted?: number
     // buildDepletedList
     kind?: 'depleted'
     haveLabel?: string
@@ -91,8 +91,8 @@ const openingGross = (ing: Row, openingInputs: Inputs, openingStock: UsageMap) =
 // Ngày dự báo thấp vẫn đưa ra đủ sàn quầy; min_stock (ngưỡng KHO) không chặn việc rút hàng.
 // Có phiếu chia hàng của kho tổng (`sent`) → món đó LUÔN có dòng (kể cả dự báo không cần) và tick đổ đúng số kho đã soạn
 // vào Nhập thêm thay vì số theo dự báo — hàng đã ra khỏi kho tổng thì chi nhánh ghi nhận đúng số đó (sửa tay nếu nhận lệch).
-export function buildPrepTodayList({ ingredientsList, openingInputs, openingStock, restockInputs = {}, inventoryInputs = {}, warehouseStocks, usedMap, lastWeekUsedMap, sent = {} }: {
-    ingredientsList?: Row[] | null; openingInputs: Inputs; openingStock: UsageMap; restockInputs?: Inputs; inventoryInputs?: Inputs
+export function buildPrepTodayList({ ingredientsList, openingInputs, openingStock, restockInputs = {}, warehouseStocks, usedMap, lastWeekUsedMap, sent = {} }: {
+    ingredientsList?: Row[] | null; openingInputs: Inputs; openingStock: UsageMap; restockInputs?: Inputs
     warehouseStocks?: UsageMap | null; usedMap: UsageMap; lastWeekUsedMap: UsageMap; sent?: SentMap
 }) {
     const out: PrepItem[] = []
@@ -115,12 +115,10 @@ export function buildPrepTodayList({ ingredientsList, openingInputs, openingStoc
             const wh = (warehouseStocks || {})[ing.ingredient]
             item.warehouse = wh != null ? r1(wh) : null
             item.tare = tare // >0 → card hiện "bì X + <thật>"
-            // Hành trình trong ca (card kể "Đầu ca / Đã lấy thêm / Cuối ca" cho món đã xử lý): đã lấy ra quầy hôm nay
-            // (Nhập thêm) và số đếm Cuối kỳ (trừ bì). need/fillQty vẫn tính theo đầu ca ở trên.
+            item.minCounter = minCounter
+            // Đã lấy ra quầy hôm nay (Nhập thêm) cho món đã xử lý. need/fillQty vẫn tính theo đầu ca ở trên.
             const restock = r1(restockInputs[ing.ingredient])
             if (restock > 0) item.restock = restock
-            const counted = inventoryInputs[ing.ingredient]
-            if (counted !== undefined && counted !== '') item.counted = Math.max(0, r1(Number(counted) - tare))
             out.push(item)
         }
     }
@@ -180,6 +178,7 @@ export function buildDepletedList({ ingredientsList, openingInputs, openingStock
             kind: 'depleted' as const,
             have: net, // số thật đã trừ bì (có thể âm) — thấy được mức lệch so với số đếm
             tare, // >0 → card hiện "bì X + <thật>", khớp với tiêu chí hết/sắp hết (tính trên net)
+            minCounter,
             haveLabel: 'Tồn quầy lý thuyết',
             need,
             needPacks: packs,

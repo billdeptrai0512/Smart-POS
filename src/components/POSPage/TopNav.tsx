@@ -12,9 +12,7 @@ import ActionPill from '../common/ActionPill'
 import { ingredientDetailPath } from '../IngredientManagementPage/DebtSection'
 import WarehousePrepNotice from '../IngredientManagementPage/WarehousePrepNotice'
 import { Dialog } from '../common/ModalShell'
-import { SheetTabsContext } from '../common/NoticeSheet'
 import PrepPinBar from '../common/PrepPinBar'
-import HistoryTabsBar from '../HistoryPage/HistoryTabsBar'
 import AddressSwitcher from './AddressSwitcher'
 import { NAV_SECTIONS, type NavItem } from '../../constants/navSections'
 
@@ -50,20 +48,12 @@ export default function TopNav() {
     const [bellOpen, setBellOpen] = useState(false)
     const [showMenu, setShowMenu] = useState(false)
     const [pending, setPending] = useState(pendingCount)
-    // Chuông gom 2 tab: "Bạn cần chuẩn bị" (chỉ ở /pos — hook soạn hàng chỉ được mount 1 chỗ) và "Tồn kho cần bổ sung" (chỉ chủ/quản lý). Nhân viên chỉ có tab đầu.
+    // Chuông theo trang: ở /pos chỉ "Bạn cần chuẩn bị" (hook soạn hàng chỉ được mount 1 chỗ); các trang khác chỉ "Cần bổ sung" (chủ/quản lý).
     const [prepCount, setPrepCount] = useState(0)
-    const [picked, setPicked] = useState('prep')
     const onPos = pathname === '/pos'
-    const { isOnline } = useStats() // offline: PrepPinBar không vẽ gì → đừng cho tab/chuông mở sheet rỗng
-    const [restockSeen, setRestockSeen] = useState(false)
-    const tabs = [
-        ...(onPos && !isGuest && isOnline ? [{ key: 'prep', label: 'Cần chuẩn bị', activeColor: 'bg-primary' }] : []),
-        ...(kind ? [{ key: 'restock', label: 'Cần bổ sung', activeColor: 'bg-primary' }] : []),
-    ]
-    const tab = tabs.some(t => t.key === picked) ? picked : tabs[0]?.key
-    const pick = (k: string) => { setPicked(k); if (k === 'restock') setRestockSeen(true) }
-    const tabBar = tabs.length > 1 ? <HistoryTabsBar tabs={tabs} activeTab={tab} onSelect={pick} /> : null
-    const badge =(onPos && prepCount > 0) || (kind === 'tasks' && pending > 0)
+    const { isOnline } = useStats() // offline: PrepPinBar không vẽ gì → đừng cho chuông mở sheet rỗng
+    const hasBell = !isGuest && (onPos ? isOnline : !!kind)
+    const n = onPos ? prepCount : kind === 'tasks' ? pending : 0
 
     function go({ route, state }: NavItem) {
         setShowMenu(false)
@@ -74,31 +64,26 @@ export default function TopNav() {
     return (
         <>
             <AddressSwitcher />
-            {!isGuest && tabs.length > 0 && (
-                <button type="button" aria-label="Việc cần làm" onClick={() => { setRestockSeen(tab === 'restock'); setBellOpen(true) }} className={NAV_ICON_BTN}>
-                    <Bell size={19} />
-                    {badge && (
-                        <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-white text-[10px] font-black flex items-center justify-center leading-none">!</span>
+            {hasBell && (
+                <button type="button" aria-label="Việc cần làm" onClick={() => setBellOpen(true)} className={NAV_ICON_BTN}>
+                    <Bell size={19} className={n > 0 ? 'text-primary' : ''} />
+                    {/* 1 chữ số: ô vuông 20×20 → tròn hẳn; ≥2 chữ số: giãn ngang thành viên thuốc */}
+                    {n > 0 && (
+                        <span className={`absolute -top-1.5 -right-1.5 h-5 ${n > 9 ? 'px-1.5' : 'w-5 pl-px'} rounded-full bg-primary text-white text-[11px] font-black flex items-center justify-center leading-none pt-px tabular-nums ring-2 ring-surface`}>{n}</span>
                     )}
                 </button>
             )}
             <button type="button" aria-label="Menu" onClick={() => setShowMenu(true)} className={NAV_ICON_BTN}>
                 <Menu size={20} />
             </button>
-            {/* Hai sheet cùng mounted khi chuông mở, tab không xem chỉ bị ẩn (hidden) → đổi tab không tải lại, không trượt lên lại.
-                Tab "Cần bổ sung" nặng (~7 request/kho) nên chỉ mount từ lần đầu được xem. */}
-            <SheetTabsContext.Provider value={{ tabs: tabBar, hidden: tab !== 'prep' }}>
-                {onPos && !isGuest && isOnline && <PrepPinBar bell={{ open: bellOpen, onClose: () => setBellOpen(false), onCount: setPrepCount }} />}
-            </SheetTabsContext.Provider>
-            <SheetTabsContext.Provider value={{ tabs: tabBar, hidden: tab !== 'restock' }}>
-                {bellOpen && (tab === 'restock' || restockSeen) && kind === 'tasks' && <AddressNotice onClose={() => { setBellOpen(false); setPending(pendingCount()) }} />}
-                {bellOpen && (tab === 'restock' || restockSeen) && kind === 'restock' && (
-                    <WarehousePrepNotice
-                        onClose={() => setBellOpen(false)}
-                        onOpenIngredient={(ing, t, since) => { setBellOpen(false); navigate(ingredientDetailPath(ing, t, since)) }}
-                    />
-                )}
-            </SheetTabsContext.Provider>
+            {onPos && !isGuest && isOnline && <PrepPinBar bell={{ open: bellOpen, onClose: () => setBellOpen(false), onCount: setPrepCount }} />}
+            {!onPos && bellOpen && kind === 'tasks' && <AddressNotice onClose={() => { setBellOpen(false); setPending(pendingCount()) }} />}
+            {!onPos && bellOpen && kind === 'restock' && (
+                <WarehousePrepNotice
+                    onClose={() => setBellOpen(false)}
+                    onOpenIngredient={(ing, t, since) => { setBellOpen(false); navigate(ingredientDetailPath(ing, t, since)) }}
+                />
+            )}
             {showMenu && (
                 <Dialog
                     onClose={() => setShowMenu(false)}
