@@ -15,10 +15,10 @@ interface Props {
 
 export default function Header({ onOpenHistory, nav, recentOrders = [], enterKey, showOnboardingHint = false, notice }: Props) {
     const hintClass = onboardingHintClass(showOnboardingHint, 'solid')
-    // Saved orders only, newest first (max 2). isNew matches only the exact row just
+    // Saved orders only, newest first (max 3). isNew matches only the exact row just
     // committed locally (enterKey) → it slides in and types out; the realtime DB echo,
     // which remounts the row under a new server-timestamp key, can't replay it.
-    const rows = recentOrders.slice(0, 2).map(o => ({
+    const rows = recentOrders.slice(0, 3).map(o => ({
         key: o.id ?? o.createdAt, // id is collision-proof; createdAt (ms) can repeat on same-tick commits
         isNew: o.createdAt === enterKey,
         text: o.items.join(' · '),
