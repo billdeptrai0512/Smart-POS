@@ -3,12 +3,12 @@ const TABS = [
     { key: 'expense', label: 'Chi phí', activeColor: 'bg-danger' },
 ]
 
-interface Props { activeTab: string; onSelect?: (key: string) => void }
+interface Props { activeTab: string; onSelect?: (key: string) => void; tabs?: typeof TABS }
 
-export default function HistoryTabsBar({ activeTab, onSelect }: Props) {
+export default function HistoryTabsBar({ activeTab, onSelect, tabs = TABS }: Props) {
     return (
         <div className="bg-surface-light border border-border/50 rounded-[14px] flex p-1 gap-1 shadow-sm">
-            {TABS.map(tab => {
+            {tabs.map(tab => {
                 const active = activeTab === tab.key
                 return (
                     <button

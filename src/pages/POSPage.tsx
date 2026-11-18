@@ -84,7 +84,7 @@ export default function POSPage() {
                         <div className="flex gap-2 [&>button]:rounded-[14px] [&>button]:w-auto [&>button]:min-w-0 [&>button:first-child]:flex-1">
                             {/* Pill guide (sáng): ẩn ở bước Chuẩn bị (pill dưới đã sáng), xong rồi mới hiện bước kế. Luôn mount để ghi phễu. */}
                             <OnboardingGuide onPos />
-                            <PrepPinBar />
+                            {isGuest && <PrepPinBar />}
                         </div>
                     </>}
                 />

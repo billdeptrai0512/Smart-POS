@@ -17,18 +17,24 @@ import BatchPrepList from './BatchPrepList'
 // chưa xong, hoặc Lý thuyết ở quầy đã về 0 giữa ca). Bấm → modal checklist, nhân viên
 // xác nhận đã lấy ngay tại chỗ. Offline ẩn — hook cần đọc kho.
 // Guest: bước 1 "Chuẩn bị" của guide (onboarding/steps.ts) — quầy mẫu = 0, kho mẫu = 1 bịch/hộp/cây mỗi món.
-export default function PrepPinBar() {
+// Người dùng thật: không vẽ dải — chuông trên TopNav điều khiển sheet (open/onClose) và nhận số việc (onCount). Khách: vẫn là dải của guide.
+interface BellProps { open: boolean; onClose: () => void; onCount: (n: number) => void }
+export default function PrepPinBar({ bell }: { bell?: BellProps }) {
     const { addressId } = useAddress()
     const { isOnline } = useStats()
     // Thân nằm ở component con chỉ mount cùng POSPage — rời trang thì state `open` + hook unmount theo,
     // quay lại không bị bật lại modal cũ.
-    return isOnline && addressId ? <PinBar addressId={addressId} /> : null
+    return isOnline && addressId ? <PinBar addressId={addressId} bell={bell} /> : null
 }
 
-function PinBar({ addressId }: { addressId: string }) {
+function PinBar({ addressId, bell }: { addressId: string; bell?: BellProps }) {
     const { isGuest } = useAuth()
     const { items, batchItems, checked, skipped, pendingCount, ready, confirmPrep, toggleSkip, settle, toast } = usePrepNotice()
-    const [open, setOpen] = useState(false)
+    const [barOpen, setBarOpen] = useState(false)
+    const open = bell ? bell.open : barOpen
+    const setOpen = (v: boolean) => { setBarOpen(v); if (!v) bell?.onClose() }
+    const onCount = bell?.onCount
+    useEffect(() => { onCount?.(pendingCount) }, [onCount, pendingCount])
 
     const total = items.length + batchItems.length
     const doneCount = total - pendingCount
@@ -49,7 +55,7 @@ function PinBar({ addressId }: { addressId: string }) {
 
     return (
         <>
-            {pendingCount > 0 && <NoticeBar // không icon: pill đã nổi nhờ nền/viền
+            {!bell && pendingCount > 0 && <NoticeBar // không icon: pill đã nổi nhờ nền/viền
                 icon={intro ? <Hand size={18} className="shrink-0 text-primary wave-hand" /> : undefined}
                 label={intro ? 'Đầu tiên, bạn cần chuẩn bị' : 'Bạn cần chuẩn bị'}
                 count={pendingCount} // số việc đang chờ lấy ra quầy
