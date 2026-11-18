@@ -117,9 +117,9 @@ body {
        fixed inset-0 ép body phủ full màn hình (viewport-fit=cover), các footer tự đệm safe-area đáy. */
     position: fixed;
     inset: 0;
-    /* iOS standalone vẫn chừa dải như khi có thanh điều hướng Safari dù không có thanh (height:auto/bottom:0 vẫn tới đáy "viewport ngắn").
-       100lvh = chiều cao lớn nhất (thanh trình duyệt thu hết) = màn hình thật → ép body cao đủ, không phụ thuộc viewport đang báo. */
-    height: 100lvh;
+    /* height:100% (rule html,body,#root ở trên) đè mất `bottom` của inset-0, mà 100% trên iOS standalone = viewport NGẮN
+       hơn màn hình thật (thiếu vùng home-indicator) → vẫn còn dải trống dưới footer. auto để bottom:0 kéo body tới đáy thật. */
+    height: auto;
   }
 }
 
