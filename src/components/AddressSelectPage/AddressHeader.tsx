@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Mail, Loader2, Check, X, Bell, MessageCircleQuestion, LogOut, User, LayoutDashboard } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
+import { Mail, Loader2, Check, X, Bell, MessageCircleQuestion, LogOut, User, LayoutDashboard, ChevronDown } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { NAV_ICON_BTN } from '../../constants/navStyles'
 import { useAuth } from '../../contexts/AuthContext'
@@ -26,10 +26,15 @@ interface Props {
     onSignOut: () => void
     onAdminClick?: () => void // chỉ admin mới truyền
     today: { cups: number; revenue: number; prevCups: number; prevRevenue: number; actual: number | null; prevActual: number } | null
+    rangeDays: number
+    onRangeChange: (days: number) => void
 }
 
-export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTab, profile, setError, addressCount, staffCount, managerCount, onSupportClick, onSignOut, onAdminClick, today }: Props) {
+const RANGES = [{ days: 1, label: 'Hôm nay' }, { days: 7, label: 'Tổng 7 ngày' }, { days: 30, label: 'Tổng 30 ngày' }]
+
+export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTab, profile, setError, addressCount, staffCount, managerCount, onSupportClick, onSignOut, onAdminClick, today, rangeDays, onRangeChange }: Props) {
     const showTabs = !isStaff && !isGuest;
+    const vs = rangeDays === 1 ? undefined : `So với ${rangeDays} ngày liền trước`
     const [emailOpen, setEmailOpen] = useState(false)
     // ?reopen=<kho> (Back từ trang chi tiết nguyên liệu) → mở lại sheet; AddressNotice tự mở dòng kho đó.
     const { search } = useLocation()
@@ -79,10 +84,12 @@ export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTa
                 <>
                     {/* Tổng hôm nay — thẻ cùng kiểu "Nhật ký" của POS */}
                     <div className="px-6 mt-3">
-                        <div className="bg-bg rounded-[20px] p-3 sm:p-3.5 border border-border/60 shadow-sm flex flex-col gap-1">
-                            <Stat label="Hôm nay bán:" value={today && `${today.cups} ly`} pct={today && deltaPct(today.cups, today.prevCups)} />
-                            <Stat label="Doanh thu:" value={today && formatVND(today.revenue)} pct={today && deltaPct(today.revenue, today.prevRevenue)} />
-                            <Stat label="Tổng thực thu:" value={actual != null ? formatVND(actual) : null} pct={actual != null && today ? deltaPct(actual, today.prevActual) : null} />
+                        <div className="relative bg-bg rounded-[20px] p-3 sm:p-3.5 border border-border/60 shadow-sm flex flex-col gap-1">
+                            <RangeRow days={rangeDays} onChange={onRangeChange}>
+                                <Stat label="bán:" value={today && `${today.cups.toLocaleString('vi-VN')} ly`} pct={today && deltaPct(today.cups, today.prevCups)} vs={vs} />
+                            </RangeRow>
+                            <Stat label="Doanh thu:" value={today && formatVND(today.revenue)} pct={today && deltaPct(today.revenue, today.prevRevenue)} vs={vs} />
+                            <Stat label="Tổng thực thu:" value={actual != null ? formatVND(actual) : null} pct={actual != null && today ? deltaPct(actual, today.prevActual) : null} vs={rangeDays === 1 ? 'So với cả ngày hôm qua' : vs} />
                         </div>
                     </div>
                     {/* Tab — cùng kiểu ReportViewFilter của trang Báo cáo */}
@@ -112,12 +119,12 @@ export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTa
 }
 
 // value null = chưa có số (lần tải đầu) → "—", không hiện "0".
-function Stat({ label, value, pct }: { label: string; value: string | null; pct: number | null }) {
+function Stat({ label, value, pct, vs }: { label: string; value: string | null; pct: number | null; vs?: string }) {
     return (
-        <div className="flex items-baseline gap-1.5 text-sm">
+        <div className="flex items-baseline gap-1.5 text-sm whitespace-nowrap">
             <span className="text-text-secondary">{label}</span>
             <span className="text-text">{value ?? '—'}</span>
-            <Delta pct={pct} />
+            <Delta pct={pct} title={vs} />
         </div>
     )
 }
@@ -194,5 +201,45 @@ function AccountModal({ email, canEditEmail, onSignOut, onClose }: { email?: str
                     </button>
                 </div>
         </Dialog>
+    )
+}
+
+// Dòng đầu thẻ tổng: bấm cả dòng (mũi tên ở mép phải) để chọn khoảng thời gian; menu thả xuống, backdrop trong suốt để bấm ra ngoài là đóng.
+function RangeRow({ days, onChange, children }: { days: number; onChange: (days: number) => void; children: ReactNode }) {
+    const [open, setOpen] = useState(false)
+    return (
+        <div className="relative z-30">
+            <div
+                role="button"
+                tabIndex={0}
+                aria-haspopup="listbox"
+                aria-expanded={open}
+                onClick={() => setOpen(o => !o)}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(o => !o) } }}
+                className="flex items-center gap-1 cursor-pointer rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"            >
+                <span className="text-sm text-text-secondary whitespace-nowrap">{RANGES.find(r => r.days === days)?.label}</span>
+                {children}
+                <ChevronDown size={16} className={`ml-auto shrink-0 text-text-secondary transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden />
+            </div>
+            {open && (
+                <>
+                    <div className="fixed inset-0" onClick={() => setOpen(false)} />
+                    <ul role="listbox" className="absolute right-0 top-full mt-2 w-44 p-1 rounded-[14px] bg-surface border border-border/60 shadow-xl">
+                        {RANGES.map(r => (
+                            <li key={r.days} role="option" aria-selected={r.days === days}>
+                                <button
+                                    type="button"
+                                    onClick={() => { onChange(r.days); setOpen(false) }}
+                                    className={`w-full h-9 px-3 flex items-center justify-between rounded-[10px] text-xs font-bold ${r.days === days ? 'bg-primary/10 text-primary' : 'text-text hover:bg-border/30'}`}
+                                >
+                                    {r.label}
+                                    {r.days === days && <Check size={14} aria-hidden />}
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                </>
+            )}
+        </div>
     )
 }
