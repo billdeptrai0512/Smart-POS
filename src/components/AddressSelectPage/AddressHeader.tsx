@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Mail, Loader2, Check, X, Bell, MessageCircleQuestion, LogOut, User } from 'lucide-react'
+import { Mail, Loader2, Check, X, Bell, MessageCircleQuestion, LogOut, User, LayoutDashboard } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { NAV_ICON_BTN } from '../../constants/navStyles'
 import { useAuth } from '../../contexts/AuthContext'
@@ -24,10 +24,11 @@ interface Props {
     managerCount: number
     onSupportClick: () => void
     onSignOut: () => void
+    onAdminClick?: () => void // chỉ admin mới truyền
     today: { cups: number; revenue: number; prevCups: number; prevRevenue: number; actual: number | null; prevActual: number } | null
 }
 
-export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTab, profile, setError, addressCount, staffCount, managerCount, onSupportClick, onSignOut, today }: Props) {
+export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTab, profile, setError, addressCount, staffCount, managerCount, onSupportClick, onSignOut, onAdminClick, today }: Props) {
     const showTabs = !isStaff && !isGuest;
     const [emailOpen, setEmailOpen] = useState(false)
     // ?reopen=<kho> (Back từ trang chi tiết nguyên liệu) → mở lại sheet; AddressNotice tự mở dòng kho đó.
@@ -44,7 +45,7 @@ export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTa
 
     return (
         <header className="shrink-0 pt-3 pb-3 bg-surface border-b border-border/60 shadow-[0_8px_30px_rgba(0,0,0,0.03)] relative z-20">
-            {/* Hàng nav (cùng kiểu TopNav của POS): pill tên (→ tài khoản) · hỗ trợ · chuông "Việc cần làm" */}
+            {/* Hàng nav (cùng kiểu TopNav của POS): pill tên (→ tài khoản) · hỗ trợ · chuông · admin "Việc cần làm" */}
             <div className="px-6 flex items-center gap-2">
                 {/* Bấm vào tên → modal Tài khoản (email + đăng xuất) */}
                 <button
@@ -65,6 +66,11 @@ export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTa
                         {pending > 0 && (
                             <span className={`absolute -top-1.5 -right-1.5 h-5 ${pending > 9 ? 'px-1.5' : 'w-5 pl-px'} rounded-full bg-primary text-white text-[11px] font-black flex items-center justify-center leading-none pt-px tabular-nums ring-2 ring-surface`}>{pending}</span>
                         )}
+                    </button>
+                )}
+                {onAdminClick && (
+                    <button type="button" aria-label="Admin Dashboard" onClick={onAdminClick} className={NAV_ICON_BTN}>
+                        <LayoutDashboard size={19} />
                     </button>
                 )}
             </div>

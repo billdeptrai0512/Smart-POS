@@ -251,6 +251,7 @@ export default function AddressSelectPage() {
                 managerCount={managerCount}
                 onSupportClick={() => setShowSupportModal(true)}
                 onSignOut={handleSignOut}
+                onAdminClick={isAdmin ? () => navigate('/admin/dashboard') : undefined}
                 today={today}
             />
 
@@ -310,16 +311,6 @@ export default function AddressSelectPage() {
                 )}
             </div>
 
-            {isAdmin && (activeTab === 'staff' || isStaff || isGuest) && (
-                <div className="shrink-0 flex items-stretch gap-3 px-4 py-2.5 pb-[max(env(safe-area-inset-bottom),10px)] [@media(display-mode:standalone)]:pb-[max(env(safe-area-inset-bottom),28px)] bg-surface border-t border-border/60">
-                    <button
-                        onClick={() => navigate('/admin/dashboard')}
-                        className="flex-1 min-w-0 flex items-center justify-center rounded-[12px] bg-primary px-4 py-3 text-[13px] font-black uppercase text-bg hover:bg-primary/90 active:scale-95 transition-all"
-                    >
-                        <span className="truncate">Admin Dashboard</span>
-                    </button>
-                </div>
-            )}
 
             {showCreateStaffModal && (
                 <CreateStaffModal
