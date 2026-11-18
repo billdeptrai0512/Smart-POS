@@ -121,6 +121,10 @@ body {
        hơn màn hình thật (thiếu vùng home-indicator) → vẫn còn dải trống dưới footer. auto để bottom:0 kéo body tới đáy thật. */
     height: auto;
   }
+  /* iOS không có viewport-fit=cover: webview đã bắt đầu DƯỚI status bar/Dynamic Island → đệm thêm là thừa (dải trống trên đầu). */
+  @supports (-webkit-touch-callout: none) {
+    body { padding-top: 0; }
+  }
 }
 
 /* ====== Scrollbar ====== */
