@@ -54,6 +54,34 @@ if (import.meta.env.PROD) {
   })
 }
 
+// TẠM (đo dải trống iOS PWA): xoá khối này sau khi có số. Chỉ hiện ở standalone.
+if (window.matchMedia('(display-mode: standalone)').matches) {
+  const box = document.createElement('div')
+  box.style.cssText = 'position:fixed;top:48px;left:4px;z-index:99999;pointer-events:none;background:rgba(0,0,0,.85);color:#0f0;font:11px/1.3 monospace;padding:4px;white-space:pre'
+  const probe = document.createElement('div')
+  probe.style.cssText = 'position:fixed;visibility:hidden;left:0;top:0;padding-bottom:env(safe-area-inset-bottom);height:100lvh;width:1px'
+  const probeD = document.createElement('div')
+  probeD.style.cssText = 'position:fixed;visibility:hidden;left:0;top:0;height:100dvh;width:1px'
+  const probeS = document.createElement('div')
+  probeS.style.cssText = 'position:fixed;visibility:hidden;left:0;top:0;height:100svh;width:1px'
+  const probeB = document.createElement('div')
+  probeB.style.cssText = 'position:fixed;visibility:hidden;left:0;bottom:0;height:1px;width:1px'
+  document.body.append(box, probe, probeD, probeS, probeB)
+  const upd = () => {
+    box.textContent = [
+      `inner ${innerWidth}x${innerHeight}`,
+      `screen ${screen.width}x${screen.height}`,
+      `vv ${Math.round(visualViewport?.height ?? 0)}`,
+      `clientH ${document.documentElement.clientHeight}`,
+      `lvh ${probe.offsetHeight} dvh ${probeD.offsetHeight} svh ${probeS.offsetHeight}`,
+      `safeBot ${parseFloat(getComputedStyle(probe).paddingBottom)}`,
+      `fixedBottomY ${Math.round(probeB.getBoundingClientRect().bottom)}`,
+      `body ${Math.round(document.body.getBoundingClientRect().height)}`,
+    ].join('\n')
+  }
+  upd(); setInterval(upd, 1000)
+}
+
 // Router dữ liệu chỉ để có View Transitions (crossfade trang cũ → mới, CSS ở index.css).
 // Một route splat render nguyên <App /> nên <Routes> trong App.tsx giữ nguyên.
 const router = createBrowserRouter([{
