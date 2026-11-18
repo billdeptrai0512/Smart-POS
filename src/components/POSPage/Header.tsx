@@ -66,8 +66,8 @@ export default function Header({ onOpenHistory, nav, recentOrders = [], enterKey
                 </div>
 
             </div>
-            {/* empty:hidden — notice trả null thì không chừa khoảng trống */}
-            <div className="px-6 mt-3 empty:hidden [&>button]:rounded-[14px]">{notice}</div>
+            {/* empty:hidden — notice trả null thì không chừa khoảng trống (kể cả khi chỉ còn hàng bọc rỗng) */}
+            <div className="px-6 mt-3 empty:hidden [&:has(>div:empty)]:hidden [&>button]:rounded-[14px]">{notice}</div>
         </header>
     )
 }

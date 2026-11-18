@@ -6,7 +6,6 @@ import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useOrderOnboardingProgress } from '../hooks/useOrderOnboardingProgress'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { ChevronDown } from 'lucide-react'
 
 import Header from '../components/POSPage/Header'
 import TopNav from '../components/POSPage/TopNav'
@@ -81,20 +80,11 @@ export default function POSPage() {
                     enterKey={enterKey}
                     showOnboardingHint={showHistoryHint}
                     notice={<>
-                        {/* Pill bàn cùng hàng với "Chuẩn bị hôm nay" ("Mang đi" khi chưa chọn bàn); pill vừa khít tên bàn (tối đa 50%, dài thì truncate), bar kia lấy phần còn lại; bar kia ẩn thì pill giãn full-width.
-                            Ẩn ở dine-split: lưới bàn đã hiện sẵn bên cạnh. Chạm = mở lưới bàn để đổi. */}
+                        {/* Chip bàn ("Mang đi" khi chưa chọn bàn) đã chuyển xuống CheckoutBar, cạnh Tạo đơn. */}
                         <div className="flex gap-2 [&>button]:rounded-[14px] [&>button]:w-auto [&>button]:min-w-0 [&>button:first-child]:flex-1">
                             {/* Pill guide (sáng): ẩn ở bước Chuẩn bị (pill dưới đã sáng), xong rồi mới hiện bước kế. Luôn mount để ghi phễu. */}
                             <OnboardingGuide onPos />
                             <PrepPinBar />
-                            <button
-                                type="button"
-                                onClick={() => setShowTables(true)}
-                                className={`${isGuest ? 'hidden' : 'flex dine-split:hidden'} [&:not(:first-child)]:max-w-[50%] h-10 px-3 items-center justify-center gap-1.5 border border-border/60 bg-surface-light text-[12px] font-black uppercase tracking-wider text-text`}
-                            >
-                                <span className="truncate">{tableName || 'Mang đi'}</span>
-                                <ChevronDown size={14} strokeWidth={3} className="shrink-0 text-text-secondary" />
-                            </button>
                         </div>
                     </>}
                 />
@@ -138,6 +128,7 @@ export default function POSPage() {
                     onItemNote={setItemNote}
                     disabled={!hasOrder}
                     showOnboardingHint={showCheckoutHint}
+                    onPickTable={isGuest ? undefined : () => setShowTables(true)}
                 />
             </div>
         </div>
