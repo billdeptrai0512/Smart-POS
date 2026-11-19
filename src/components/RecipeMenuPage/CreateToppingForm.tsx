@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import MoneyInput from '../common/MoneyInput'
+import FormField, { FIELD_INPUT as FIELD } from './FormField'
 import ToppingSourceSection from '../RecipeIngredientPage/ToppingSourceSection'
 import { parseVNDInput, capitalizeWords } from '../../utils'
 import { normalizeIngredientKey } from '../../utils/ingredients'
@@ -12,8 +13,6 @@ interface Props {
     unitOf: (key: string) => string
     onSubmit: (name: string, price: number, unit: string, source: ToppingSource | null) => void
 }
-
-const FIELD = 'bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors'
 
 // Topping: tên, giá cộng thêm, đơn vị tồn kho (đếm tay ở Kiểm kê). Công thức + món dùng topping chỉnh ở trang chi tiết.
 export default function CreateToppingForm({ saving, sourceOptions = [], unitOf, onSubmit }: Props) {
@@ -31,27 +30,35 @@ export default function CreateToppingForm({ saving, sourceOptions = [], unitOf, 
     return (
         <div className="flex flex-col gap-3">
             <div className="flex gap-2">
-                <input
-                    type="text"
-                    autoCapitalize="words"
-                    placeholder="Tên topping"
-                    value={name}
-                    onChange={e => setName(capitalizeWords(e.target.value))}
-                    className={`flex-1 min-w-0 ${FIELD}`}
-                />
-                <MoneyInput value={price} onChange={setPrice} onKeyDown={e => { if (e.key === 'Enter') submit() }} placeholder="Giá cộng thêm" className="shrink-0 w-[140px]" />
+                <FormField label="Tên topping" className="flex-1 min-w-0">
+                    <input
+                        type="text"
+                        autoFocus
+                        autoCapitalize="words"
+                        placeholder="VD: Trân châu"
+                        value={name}
+                        onChange={e => setName(capitalizeWords(e.target.value))}
+                        className={`w-full ${FIELD}`}
+                    />
+                </FormField>
+                <FormField label="Giá cộng thêm" className="shrink-0 w-[140px]">
+                    <MoneyInput value={price} onChange={setPrice} onKeyDown={e => { if (e.key === 'Enter') submit() }} placeholder="0" />
+                </FormField>
             </div>
             {!source && (
-                <input
-                    type="text"
-                    placeholder="Đơn vị tồn kho (VD: ml, phần...)"
-                    value={unit}
-                    onChange={e => setUnit(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') submit() }}
-                    className={FIELD}
-                />
+                <FormField label="Đơn vị tồn kho">
+                    <input
+                        type="text"
+                        placeholder="VD: ml, phần..."
+                        value={unit}
+                        onChange={e => setUnit(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') submit() }}
+                        className={`w-full ${FIELD}`}
+                    />
+                </FormField>
             )}
             {options.length > 0 && <ToppingSourceSection source={source} options={options} unitOf={unitOf} canEdit up onSave={setSource} />}
+            <hr className="-mx-5 border-border/60" />
             <button
                 onClick={submit}
                 disabled={!canSubmit}

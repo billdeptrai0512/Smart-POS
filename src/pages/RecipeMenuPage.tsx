@@ -23,8 +23,9 @@ import ProductCard from '../components/RecipeMenuPage/ProductCard'
 import CreateProductForm from '../components/RecipeMenuPage/CreateProductForm'
 import CreateBatchForm from '../components/RecipeMenuPage/CreateBatchForm'
 import CreateToppingForm from '../components/RecipeMenuPage/CreateToppingForm'
+import EditProductSheet from '../components/RecipeMenuPage/EditProductSheet'
+import { useConfirm } from '../contexts/ConfirmContext'
 import { insertTopping, fetchToppingIngredients, toppingSourcesOf, type ToppingSource } from '../services/toppingService'
-import { upsertRecipes } from '../services/recipeService'
 import { goToMenuStep } from '../utils/menuSequence'
 import { useTabRoute } from '../hooks/useTabRoute'
 import { RECIPE_TABS } from '../constants/menuTabs'
@@ -69,7 +70,7 @@ function DragRow({ id, enabled, lit, children }: { id: string; enabled: boolean;
             ref={node => { dragRef(node); dropRef(node) }}
             {...listeners}
             onContextMenu={enabled ? e => e.preventDefault() : undefined}
-            className={`select-none [-webkit-touch-callout:none] rounded-[1.5rem] ${isDragging ? 'opacity-30' : lit ? 'ring-2 ring-primary' : ''}`}
+            className={`select-none [-webkit-touch-callout:none] rounded-[1.25rem] ${isDragging ? 'opacity-30' : lit ? 'ring-2 ring-primary' : ''}`}
         >
             {children}
         </div>
@@ -98,6 +99,7 @@ export default function RecipeMenuPage() {
     const { toast, showToast, showError } = useToast()
 
     const { saving, withSaving } = useSavingAction(showError)
+    const confirm = useConfirm()
     // Bản sao local để phản hồi ngay khi thả tay, trước khi round-trip lưu server xong.
     const [orderedProducts, setOrderedProducts] = useState(products)
     useEffect(() => { setOrderedProducts(products) }, [products])
@@ -179,20 +181,55 @@ export default function RecipeMenuPage() {
         return map
     }, [recipesByProduct, ingredientCosts])
 
-    // Món đã có công thức → chọn để chép định lượng sang món mới ở form tạo (chỉ nguyên liệu gốc; tùy chọn/extra chép ở trang chi tiết).
-    const copyable = useMemo(() => products.filter(p => !p.is_divider && recipesByProduct.get(p.id)?.length).map(p => ({ id: p.id, name: p.name })), [products, recipesByProduct])
 
-    const handleCreateProduct = (name: string, price: string, copyFromId: string) => withSaving('Tạo món mới', async () => {
+    // Dời 1 món xuống cuối danh mục categoryId ('' = cuối nhóm "chưa phân danh mục", ngay trước danh mục đầu tiên).
+    async function placeInCategory(productId: string, categoryId: string) {
+        const base = orderedProducts.filter(p => p.id !== productId)
+        const at = categoryId ? base.findIndex(p => p.id === categoryId) : -1
+        if (categoryId && at < 0) return
+        let end = at + 1
+        while (end < base.length && !base[end].is_divider) end++
+        const ids = base.map(p => p.id)
+        ids.splice(end, 0, productId)
+        await updateProductSortOrder(ids)
+    }
+    const categoryOf = (id: string) => sections.find(s => s.items.some(p => p.id === id))?.divider?.id ?? ''
+
+    // Sửa nhanh món ở tab Menu: chỉ gọi API cho phần thực sự đổi.
+    const [editProduct, setEditProduct] = useState<Row | null>(null)
+    // Bấm 1 card ở tab Menu = chọn (viền sáng) → thanh Chỉnh sửa / Xóa hiện ở đáy; bấm lại card đó để bỏ chọn.
+    const [selectedId, setSelectedId] = useState<string | null>(null)
+    const selected = selectedId ? orderedProducts.find(p => p.id === selectedId) ?? null : null
+    const handleEditSave = (p: Row, changes: { name: string; price: number; category: string }) => withSaving('Sửa món', async () => {
+        if (changes.name !== p.name) await updateProductName(p.id, changes.name)
+        if (changes.price !== p.price) await upsertProductPrice(p.id, changes.price)
+        if (changes.category !== categoryOf(p.id)) await placeInCategory(p.id, changes.category)
+        refreshProducts?.()
+        setEditProduct(null)
+        showToast('Đã lưu món', 'success')
+    })
+    async function handleEditDelete(p: Row) {
+        if (!await confirm({ title: `Xóa "${p.name}" khỏi menu?`, danger: true, confirmLabel: 'Xóa' })) return
+        await withSaving('Xóa món khỏi menu', async () => {
+            await removeProductFromAddress(p.id, addressId || null)
+            refreshProducts?.()
+            setEditProduct(null)
+            setSelectedId(null)
+            showToast('Đã xóa món', 'success')
+        })
+    }
+
+    const handleCreateProduct = (name: string, price: string, categoryId: string) => withSaving('Tạo món mới', async () => {
         const parsedPrice = parseVNDInput(price)
         const newProd = await insertProduct(name, parsedPrice, addressId)
         if (newProd && addressId) {
             await upsertProductPrice(newProd.id, parsedPrice)
         }
-        const srcRows = copyFromId ? recipesByProduct.get(copyFromId) : undefined
-        if (newProd && srcRows?.length) await upsertRecipes(srcRows.map(r => ({ productId: newProd.id, ingredient: r.ingredient, amount: r.amount, addressId, unit: r.unit })))
+        // Món mới luôn vào đầu danh sách (sort_order nhỏ nhất) → chọn danh mục thì dời xuống cuối mục đó.
+        if (newProd && categoryId) await placeInCategory(newProd.id, categoryId)
         refreshProducts?.()
         setCreateOpen(false)
-        showToast(srcRows?.length ? `Đã tạo món mới, chép ${srcRows.length} nguyên liệu` : 'Đã tạo món mới', 'success')
+        showToast('Đã tạo món mới', 'success')
     })
 
     // Thành phẩm = 1 dòng products (is_batch) + 1 nguyên liệu cùng tên trong ingredient_costs: nhờ vậy nó tự hiện ở bộ chọn
@@ -336,6 +373,10 @@ export default function RecipeMenuPage() {
     const searchedBatches = useMemo(() => searchByName(batchProducts), [batchProducts, search]) // eslint-disable-line react-hooks/exhaustive-deps
     const searchedToppings = useMemo(() => searchByName(toppings), [toppings, search]) // eslint-disable-line react-hooks/exhaustive-deps
 
+    // Tab Menu chỉ tạo món chính; tab Công thức tạo theo loại đang lọc.
+    const createKind: Kind = view === 'recipes' ? kind : 'main'
+    const kindCounts = { main: realProducts.length, batch: batchProducts.length, topping: toppings.length }
+
     return (
         <div className="flex flex-col h-full max-w-lg lg:max-w-none mx-auto bg-bg relative">
             <Toast toast={toast} />
@@ -344,7 +385,19 @@ export default function RecipeMenuPage() {
                 title="Danh mục"
                 count={realProducts.length}
                 unitLabel="món"
-                subtitle={(view === 'overall' && (categoryChips.length > 0 || canEdit)) ? (
+                subtitle={view === 'recipes' ? (
+                    <Dropdown
+                        ariaLabel="Lọc loại công thức"
+                        value={kind}
+                        triggerLabel={`${kindCounts[kind]} ${KINDS.find(k => k.key === kind)!.label}`}
+                        onChange={setKind}
+                        items={KINDS.filter(k => k.key !== 'batch' || !isGuest).map(k => ({ value: k.key, label: k.label, count: kindCounts[k.key] }))}
+                        align="center"
+                        className="max-w-full"
+                        panelClassName="min-w-[13rem]!"
+                        triggerClassName="mt-1 gap-1 pl-5 text-[11px] leading-4 text-text/80 uppercase tabular-nums"
+                    />
+                ) : (categoryChips.length > 0 || canEdit) ? (
                     <Dropdown
                         ariaLabel="Lọc theo danh mục"
                         value={effectiveFilter}
@@ -368,20 +421,9 @@ export default function RecipeMenuPage() {
                 onTabSelect={setView}
             />
 
-            <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-4 pb-8 bg-bg lg:px-8"><div className="space-y-3 lg:space-y-4 lg:max-w-[1280px] lg:mx-auto">
+            <main ref={mainRef} className={`flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 ${view === 'overall' ? 'pb-24' : 'pb-8'} bg-bg lg:px-8`}><div className="space-y-3 lg:space-y-4 lg:max-w-[1280px] lg:mx-auto">
                 {view === 'recipes' && (
                     <div className="flex items-stretch gap-2 h-11">
-                        <Dropdown
-                            ariaLabel="Lọc loại công thức"
-                            value={kind}
-                            triggerLabel={KINDS.find(k => k.key === kind)!.label}
-                            onChange={setKind}
-                            items={KINDS.filter(k => k.key !== 'batch' || !isGuest).map(k => ({ value: k.key, label: k.label, count: { main: realProducts.length, batch: batchProducts.length, topping: toppings.length }[k.key] }))}
-                            align="left"
-                            className="shrink-0"
-                            panelClassName="min-w-[13rem]"
-                            triggerClassName="h-11 px-3 rounded-[12px] bg-surface border border-border/60 text-text-secondary text-[12px] font-black uppercase tracking-widest hover:bg-surface-light"
-                        />
                         <div className="relative flex-1 min-w-0">
                             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-dim pointer-events-none" />
                             <input
@@ -410,6 +452,12 @@ export default function RecipeMenuPage() {
                             </>)}
                         </div>
                     </div>
+                )}
+
+                {view === 'overall' && canEdit && realProducts.length === 0 && (
+                    <p className="text-text-secondary text-[13px] text-center py-6 px-4">
+                        Menu đang trống. Bấm nút + để thêm món đầu tiên, rồi giữ và kéo để sắp xếp; dùng “Tạo danh mục” ở trên để chia nhóm menu.
+                    </p>
                 )}
 
                 {view === 'recipes' ? (
@@ -463,12 +511,26 @@ export default function RecipeMenuPage() {
                                         </DragRow>
                                     )}
                                     {section.items.length > 0 && !(section.divider && collapsedIds.has(section.divider.id)) && (
-                                        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
-                                            {section.items.map(product => (
-                                                <DragRow key={product.id} id={product.id} enabled={canSort} lit={litIds.has(product.id)}>
-                                                    <ProductCard {...cardProps(product)} dragHandle={canSort ? <GripVertical size={18} className="shrink-0 text-text-secondary/70" aria-hidden /> : undefined} sortMode />
-                                                </DragRow>
-                                            ))}
+                                        <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
+                                            {section.items.map((product, idx) => {
+                                                // Thanh Chỉnh sửa / Xóa nằm ngay dưới hàng chứa món đang chọn (lưới 2 cột → cuối hàng).
+                                                const selIdx = section.items.findIndex(p => p.id === selectedId)
+                                                const showActions = selIdx >= 0 && idx === Math.min(selIdx | 1, section.items.length - 1)
+                                                return (
+                                                    <Fragment key={product.id}>
+                                                        <DragRow id={product.id} enabled={canSort} lit={litIds.has(product.id)}>
+                                                            <ProductCard {...cardProps(product)} selected={selectedId === product.id} onClick={canSort ? () => setSelectedId(id => id === product.id ? null : product.id) : undefined} dragHandle={canSort ? <GripVertical size={18} className="shrink-0 text-text-secondary/70" aria-hidden /> : undefined} sortMode />
+                                                        </DragRow>
+                                                        {showActions && selected && (
+                                                            // Hai nút chia đôi hàng, thấp hơn nút thường (32px) để không lấn át lưới món.
+                                                            <div className="col-span-full flex gap-2">
+                                                                <button onClick={() => setEditProduct(selected)} className="flex-1 h-8 rounded-[10px] bg-primary text-bg text-[12px] font-black uppercase active:scale-95 transition-all">Chỉnh sửa</button>
+                                                                <button onClick={() => { rememberList(); navigate(`/category/recipes/${selected.id}`, { state: { ...location.state, recipeFrom: '/category/overall' } }) }} className="flex-1 h-8 rounded-[10px] bg-surface-light border border-border/60 text-text text-[12px] font-black uppercase active:scale-95 transition-all">Công thức</button>
+                                                            </div>
+                                                        )}
+                                                    </Fragment>
+                                                )
+                                            })}
                                         </div>
                                     )}
                                 </Fragment>
@@ -488,23 +550,39 @@ export default function RecipeMenuPage() {
             </div>
             </main>
 
+            {/* FAB thêm món — cùng kiểu với /history (chi phí) & /discounts. */}
+            {view === 'overall' && canEdit && (
+                <div className="fixed bottom-0 left-0 right-0 max-w-lg lg:max-w-[1280px] mx-auto pointer-events-none z-50">
+                    <div className="flex justify-end px-4 lg:px-8 pb-[max(env(safe-area-inset-bottom),16px)] [@media(display-mode:standalone)]:pb-[max(env(safe-area-inset-bottom),28px)] pointer-events-auto">
+                        <button
+                            onClick={() => setCreateOpen(true)}
+                            aria-label="Công thức mới"
+                            className="bg-primary rounded-[12px] px-4 py-2.5 flex items-center justify-center text-bg hover:bg-primary/90 active:scale-95 transition-all shadow-sm"
+                        >
+                            <Plus size={18} />
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {createOpen && (
                 <BottomSheet onClose={() => !saving && setCreateOpen(false)} panelClassName={SHEET_PANEL}>
                     <SheetHeader
-                        title={{ main: 'Tạo món chính', batch: 'Tạo bán thành phẩm', topping: 'Tạo topping' }[kind]}
+                        title={{ main: 'Tạo món chính', batch: 'Tạo bán thành phẩm', topping: 'Tạo topping' }[createKind]}
                         onClose={() => setCreateOpen(false)}
                         closeDisabled={saving}
                     />
-                    {kind === 'main' && <CreateProductForm saving={saving} copyable={copyable} onSubmit={handleCreateProduct} />}
-                    {kind === 'batch' && (
+                    <hr className="-mx-5 border-border/60" />
+                    {createKind === 'main' && <CreateProductForm saving={saving} categories={categoryChips.filter(c => c.id !== 'none')} defaultCategory={effectiveFilter === 'all' || effectiveFilter === 'none' ? '' : effectiveFilter} onSubmit={handleCreateProduct} />}
+                    {createKind === 'batch' && (
                         <>
-                            <p className="text-[13px] text-text-secondary -mt-2">Làm từ nguyên liệu theo mẻ (nước cốt, trân châu nấu…), có tồn riêng và dùng được trong công thức món.</p>
+                            <p className="text-[13px] text-text-secondary">Làm từ nguyên liệu theo mẻ (nước cốt, trân châu nấu…), có tồn riêng và dùng được trong công thức món.</p>
                             <CreateBatchForm saving={saving} onSubmit={handleCreateBatch} />
                         </>
                     )}
-                    {kind === 'topping' && (
+                    {createKind === 'topping' && (
                         <>
-                            <p className="text-[13px] text-text-secondary -mt-2">Thêm vào món khi bán, tính thêm tiền; tồn lấy từ nguồn bạn chọn hoặc đếm tay ở Kiểm kê.</p>
+                            <p className="text-[13px] text-text-secondary">Thêm vào món khi bán, tính thêm tiền; tồn lấy từ nguồn bạn chọn hoặc đếm tay ở Kiểm kê.</p>
                             <CreateToppingForm
                                 saving={saving}
                                 sourceOptions={isGuest ? [] : Object.keys(ingredientCosts).sort((a, b) => sortIngredients(a, b, selectedAddress?.ingredient_sort_order))}
@@ -514,6 +592,19 @@ export default function RecipeMenuPage() {
                         </>
                     )}
                 </BottomSheet>
+            )}
+
+            {editProduct && (
+                <EditProductSheet
+                    key={editProduct.id}
+                    product={editProduct}
+                    saving={saving}
+                    categories={categoryChips.filter(c => c.id !== 'none')}
+                    category={categoryOf(editProduct.id)}
+                    onSave={c => handleEditSave(editProduct, c)}
+                    onDelete={() => handleEditDelete(editProduct)}
+                    onClose={() => setEditProduct(null)}
+                />
             )}
 
             {showImportModal && <Suspense fallback={null}><ExcelImportModal onClose={() => setShowImportModal(false)} /></Suspense>}

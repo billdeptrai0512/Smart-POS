@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import FormField, { FIELD_INPUT as FIELD } from './FormField'
 import { capitalizeWords } from '../../utils'
 
 interface Props {
@@ -18,37 +19,43 @@ export default function CreateBatchForm({ saving, onSubmit }: Props) {
 
     return (
         <div className="flex flex-col gap-3">
-            <input
-                type="text"
-                autoCapitalize="words"
-                placeholder="Tên thành phẩm (vd: Trân châu nấu)"
-                value={name}
-                onChange={e => setName(capitalizeWords(e.target.value))}
-                className="w-full bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
-            />
-            <div className="flex gap-2 items-center">
+            <FormField label="Tên thành phẩm">
                 <input
-                    type="number"
-                    inputMode="decimal"
-                    placeholder="Sản lượng 1 mẻ"
-                    value={batchYield}
-                    onChange={e => setBatchYield(e.target.value)}
-                    className="flex-1 min-w-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
+                    type="text"
+                    autoFocus
+                    autoCapitalize="words"
+                    placeholder="VD: Trân châu nấu"
+                    value={name}
+                    onChange={e => setName(capitalizeWords(e.target.value))}
+                    className={`w-full ${FIELD}`}
                 />
-                <div className="flex gap-1 shrink-0">
-                    {UNITS.map(u => (
-                        <button
-                            key={u}
-                            type="button"
-                            onClick={() => setUnit(u)}
-                            aria-pressed={unit === u}
-                            className={`px-3 py-2.5 rounded-[12px] border text-[13px] font-bold transition-colors ${unit === u ? 'bg-primary/15 border-primary/40 text-primary' : 'bg-surface-light border-border/60 text-text-secondary'}`}
-                        >
-                            {u}
-                        </button>
-                    ))}
+            </FormField>
+            <FormField label="Sản lượng 1 mẻ">
+                <div className="flex gap-2 items-center">
+                    <input
+                        type="number"
+                        inputMode="decimal"
+                        placeholder="0"
+                        value={batchYield}
+                        onChange={e => setBatchYield(e.target.value)}
+                        className={`flex-1 min-w-0 ${FIELD}`}
+                    />
+                    <div className="flex gap-1 shrink-0">
+                        {UNITS.map(u => (
+                            <button
+                                key={u}
+                                type="button"
+                                onClick={() => setUnit(u)}
+                                aria-pressed={unit === u}
+                                className={`px-3 py-2.5 rounded-[12px] border text-[13px] font-bold transition-colors ${unit === u ? 'bg-primary/15 border-primary/40 text-primary' : 'bg-surface-light border-border/60 text-text-secondary'}`}
+                            >
+                                {u}
+                            </button>
+                        ))}
+                    </div>
                 </div>
-            </div>
+            </FormField>
+            <hr className="-mx-5 border-border/60" />
             <button
                 onClick={() => canSubmit && onSubmit(name.trim(), unit, yieldNum)}
                 disabled={!canSubmit}

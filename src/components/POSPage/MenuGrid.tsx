@@ -118,10 +118,10 @@ const ProductCard = memo(function ProductCard({ product, qty, onAdd, onRemove, d
                 {discountedPrice != null ? (
                     <span className="flex items-baseline gap-1.5">
                         <span className="text-[10px] text-text-secondary/60 line-through">{formatVND(product.price)}</span>
-                        <span className="font-extrabold text-[13px] pb-1 text-success">{formatVND(discountedPrice)}</span>
+                        <span className="font-extrabold text-[13px] text-success">{formatVND(discountedPrice)}</span>
                     </span>
                 ) : (
-                    <span className={`font-extrabold text-[13px] pb-1 ${held ? 'text-primary' : 'text-text-secondary'}`}>
+                    <span className={`font-extrabold text-[13px] ${held ? 'text-primary' : 'text-text-secondary'}`}>
                         {formatVND(product.price)}
                     </span>
                 )}

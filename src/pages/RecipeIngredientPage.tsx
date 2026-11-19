@@ -75,7 +75,9 @@ export default function RecipeIngredientPage() {
     const isBatch = !!product?.is_batch
     const isTopping = !product && toppings.some(t => t.id === productId)
     // Back / sau khi xoá: về đúng loại đang xem của danh sách.
-    const backUrl = recipeBackUrl(productId, products, batchProducts, toppings)
+    const backUrl = recipeBackUrl(productId, products, batchProducts, toppings, location.state?.recipeFrom)
+    // Bỏ recipeFrom khi quay lại, kẻo lần sau vào chi tiết từ tab Công thức lại bị về Menu.
+    const backState = location.state && { ...location.state, recipeFrom: undefined }
     const td = useToppingDetail(isTopping ? productId : null, withSaving, backUrl, () => showToast('Đã lưu', 'success'))
 
     // Index recipes by product — used by the "copy from" picker and to count rows.
@@ -242,7 +244,7 @@ export default function RecipeIngredientPage() {
         await withSaving('Xóa món khỏi menu', async () => {
             await removeProductFromAddress(productId, addrId)
             refreshProducts?.()
-            navigate(backUrl, { state: location.state })
+            navigate(backUrl, { state: backState })
         })
     }
 
@@ -394,7 +396,7 @@ export default function RecipeIngredientPage() {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen bg-bg px-6 gap-4">
                 <span className="text-text-secondary text-[14px]">Không tìm thấy món này.</span>
-                <button onClick={() => navigate(backUrl, { state: location.state })} className="text-primary font-bold text-[14px] underline">
+                <button onClick={() => navigate(backUrl, { state: backState })} className="text-primary font-bold text-[14px] underline">
                     ← Quay lại
                 </button>
             </div>
