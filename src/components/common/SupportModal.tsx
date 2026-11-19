@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { X, Star, Check, Loader2 } from 'lucide-react'
+import { X, Check, Loader2 } from 'lucide-react'
 import zaloImg from '../../assets/zalo.webp'
 import facebookImg from '../../assets/facebook.webp'
 import { useAuth } from '../../contexts/AuthContext'
@@ -30,22 +30,20 @@ export function SupportLinks() {
 export default function SupportModal({ open, onClose }: { open: boolean; onClose: () => void }) {
     const { profile } = useAuth()
     const { toast, showError } = useToast()
-    const [rating, setRating] = useState(0)
-    const [hoverRating, setHoverRating] = useState(0)
     const [comment, setComment] = useState('')
     const [submitting, setSubmitting] = useState(false)
     const [submitted, setSubmitted] = useState(false)
 
     if (!open) return null
 
-    async function handleSubmitRating() {
-        if (!rating || submitting) return
+    async function handleSubmit() {
+        if (!comment.trim() || submitting) return
         setSubmitting(true)
         try {
-            await insertRating(profile?.id, rating, comment)
+            await insertRating(profile?.id, comment)
             setSubmitted(true)
         } catch (err) {
-            showError(err, 'Gửi đánh giá')
+            showError(err, 'Gửi góp ý')
         } finally {
             setSubmitting(false)
         }
@@ -76,47 +74,28 @@ export default function SupportModal({ open, onClose }: { open: boolean; onClose
 
                 {/* Đánh giá ứng dụng */}
                 <div className="flex flex-col gap-3">
-                    <p className="text-[10px] font-black uppercase tracking-wider text-text-secondary text-center">Bạn thấy app thế nào?</p>
+                    <p className="text-[10px] font-black uppercase tracking-wider text-text-secondary text-center">Góp ý cho chúng tôi</p>
                     {submitted ? (
                         <div className="flex items-center gap-2.5 px-4 py-3 rounded-[14px] bg-success/10 border border-success/20 text-success text-[13px] font-bold">
                             <Check size={16} />
-                            Cảm ơn bạn đã đánh giá!
+                            Cảm ơn bạn đã góp ý!
                         </div>
                     ) : (
                         <>
-                            <div className="flex items-center justify-center gap-1.5">
-                                {[1, 2, 3, 4, 5].map(n => (
-                                    <button
-                                        key={n}
-                                        type="button"
-                                        onClick={() => setRating(n)}
-                                        onMouseEnter={() => setHoverRating(n)}
-                                        onMouseLeave={() => setHoverRating(0)}
-                                        className="p-1 active:scale-90 transition-transform"
-                                        aria-label={`${n} sao`}
-                                    >
-                                        <Star
-                                            size={28}
-                                            fill={(hoverRating || rating) >= n ? 'currentColor' : 'none'}
-                                            className={(hoverRating || rating) >= n ? 'text-warning' : 'text-text-secondary/50'}
-                                        />
-                                    </button>
-                                ))}
-                            </div>
                             <textarea
                                 value={comment}
                                 onChange={e => setComment(e.target.value)}
-                                placeholder="Góp ý thêm (không bắt buộc)"
+                                placeholder="Bạn thấy app thế nào? Cần cải thiện gì?"
                                 rows={3}
                                 className="w-full px-3.5 py-2.5 rounded-[14px] bg-bg border border-border/60 text-text text-[13px] placeholder:text-text-secondary/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary resize-none"
                             />
                             <button
                                 type="button"
-                                onClick={handleSubmitRating}
-                                disabled={!rating || submitting}
+                                onClick={handleSubmit}
+                                disabled={!comment.trim() || submitting}
                                 className="w-full py-2.5 rounded-[14px] bg-primary text-black font-black text-[13px] hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                             >
-                                {submitting ? <Loader2 size={15} className="animate-spin" /> : 'Gửi đánh giá'}
+                                {submitting ? <Loader2 size={15} className="animate-spin" /> : 'Gửi góp ý'}
                             </button>
                         </>
                     )}
