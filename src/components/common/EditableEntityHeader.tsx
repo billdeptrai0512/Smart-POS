@@ -16,6 +16,8 @@ interface Props {
     price?: number
     priceLabel?: ReactNode
     onSavePrice?: (price: number) => void
+    /** Chữ thay cho dòng giá (vd. "2 tùy chọn thêm" khi đang ở tab Tùy chọn thêm). */
+    subtitle?: string
     action?: ReactNode
     backClassName?: string
     children?: ReactNode
@@ -23,7 +25,7 @@ interface Props {
 
 export default function EditableEntityHeader({
     name, nameTransform, canEdit, onBack, onSaveName,
-    price, priceLabel, onSavePrice,
+    price, priceLabel, onSavePrice, subtitle,
     action, backClassName = '', children,
 }: Props) {
     return (
@@ -52,7 +54,9 @@ export default function EditableEntityHeader({
                             inputClassName="!text-center uppercase"
                             renderDisplay={(v: string) => <span title={v}>{v}</span>}
                         />
-                        {onSavePrice && (
+                        {subtitle ? (
+                            <div className="text-[12px] font-bold text-text-secondary leading-none mt-1 w-full">{subtitle}</div>
+                        ) : onSavePrice && (
                             <div className="flex items-center justify-center gap-1.5 text-[12px] font-bold text-text-secondary leading-none mt-1 w-full">
                                 <span>{priceLabel}</span>
                                 <InlineEditor

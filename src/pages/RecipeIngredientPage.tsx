@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Trash2 } from 'lucide-react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useProducts } from '../contexts/ProductContext'
@@ -14,7 +14,6 @@ import {
     updateProductExtraName,
     updateProductExtraPrice,
     updateProductExtraSticky,
-    duplicateProductExtra,
     updateExtrasSortOrder,
     deleteProductExtra,
     removeProductFromAddress,
@@ -35,14 +34,12 @@ import { ICON_BTN_DANGER } from '../components/common/ModalShell'
 import { capitalizeWords } from '../utils'
 import { useConfirm } from '../contexts/ConfirmContext'
 import Toast from '../components/POSPage/Toast'
-import RecipeHeader from '../components/RecipeIngredientPage/RecipeHeader'
 import EditableEntityHeader from '../components/common/EditableEntityHeader'
 import InlineEditor from '../components/RecipeIngredientPage/InlineEditor'
 import FastIngredientFill, { type CustomIngredient } from '../components/RecipeIngredientPage/FastIngredientFill'
-import ExtrasSection, { type ExtraHandlers } from '../components/RecipeIngredientPage/ExtrasSection'
-import CopyRecipeModal from '../components/RecipeIngredientPage/CopyRecipeModal'
+import ExtrasSection, { type ExtraHandlers, type BaseItem } from '../components/RecipeIngredientPage/ExtrasSection'
 import type { CartExtra } from '../types/domain'
-import { groupRecipesByProduct, type RecipeRow } from '../utils/inventory'
+import type { RecipeRow } from '../utils/inventory'
 import { recipeBackUrl } from '../utils/recipeBackUrl'
 
 export default function RecipeIngredientPage() {
@@ -67,8 +64,12 @@ export default function RecipeIngredientPage() {
     const [extras, setExtras] = useState<CartExtra[]>([])
     const [extraIngs, setExtraIngs] = useState(contextExtraIngs || {})
     const { saving, withSaving } = useSavingAction(showError)
-    const [showCopyFrom, setShowCopyFrom] = useState(false)
     const [toppingTab, setToppingTab] = useState('detail')
+    const [productTab, setProductTab] = useState('detail')
+    // Công tắc "tính ly" gạt ngay khi bấm (lạc quan), không đợi mạng; về null khi dữ liệu thật về / đổi món.
+    const [cupOptimistic, setCupOptimistic] = useState<boolean | null>(null)
+    const cupQueue = useRef<Promise<unknown>>(Promise.resolve())
+    const cupPending = useRef(0)
 
     const product = useMemo(() => products.find(p => p.id === productId) ?? batchProducts.find(p => p.id === productId), [products, batchProducts, productId])
     // Thành phẩm: công thức này là CÔNG THỨC MẺ (sản lượng = batch_yield), không có giá bán/tùy chọn.
@@ -80,8 +81,6 @@ export default function RecipeIngredientPage() {
     const backState = location.state && { ...location.state, recipeFrom: undefined }
     const td = useToppingDetail(isTopping ? productId : null, withSaving, backUrl, () => showToast('Đã lưu', 'success'))
 
-    // Index recipes by product — used by the "copy from" picker and to count rows.
-    const recipesByProduct = useMemo(() => groupRecipesByProduct(recipes || []), [recipes])
 
     // Category lookup for the add-ingredient combobox (groups chips into Chính / Bao bì).
     const categoryOf = useMemo(() => makeCategoryOf(ingredientConfigs), [ingredientConfigs])
@@ -95,6 +94,7 @@ export default function RecipeIngredientPage() {
 
     // Sync from context when it updates
     useEffect(() => { setRecipes(allRecipes) }, [allRecipes])
+    useEffect(() => { if (!cupPending.current) setCupOptimistic(null) }, [productId, product?.count_as_cup])
     useEffect(() => { setExtras(contextExtras?.[productId] || []) }, [contextExtras, productId])
     useEffect(() => { setExtraIngs(contextExtraIngs || {}) }, [contextExtraIngs])
 
@@ -161,37 +161,6 @@ export default function RecipeIngredientPage() {
         })
     }
 
-    async function handleCopyFrom(sourceProductId: string, sourceName: string) {
-        const srcRows = recipesByProduct.get(sourceProductId) || []
-        const srcExtras = contextExtras?.[sourceProductId] || []
-        if (srcRows.length === 0 && srcExtras.length === 0) return
-        setShowCopyFrom(false)
-        const parts: string[] = []
-        if (srcRows.length) parts.push(`${srcRows.length} nguyên liệu`)
-        if (srcExtras.length) parts.push(`${srcExtras.length} tùy chọn`)
-        if (!await confirm({ title: `Chép ${parts.join(' + ')} từ "${sourceName}"?`, detail: 'Nguyên liệu trùng tên sẽ bị ghi đè lượng; tùy chọn được thêm mới.', confirmLabel: 'Chép' })) return
-        await withSaving('Chép công thức', async () => {
-            await upsertRecipes(srcRows.map(r => ({ productId, ingredient: r.ingredient, amount: r.amount, addressId, unit: r.unit })))
-            // Extras are copied as new rows (each with its own ingredient impacts).
-            // Skip any whose name already exists here so copying twice / into a product that
-            // already has "Lớn" doesn't create duplicate options.
-            const existingExtraNames = new Set(extras.map(e => e.name.trim().toLowerCase()))
-            for (const se of srcExtras) {
-                if (existingExtraNames.has(se.name.trim().toLowerCase())) continue
-                const newExtra = await insertProductExtra(productId, se.name, se.price, addressId)
-                if (se.is_sticky) await updateProductExtraSticky(newExtra.id, true)
-                for (const ei of (contextExtraIngs?.[se.id] || [])) {
-                    await upsertExtraIngredient(newExtra.id, ei.ingredient, ei.amount, ei.unit)
-                }
-            }
-            setRecipes(prev => {
-                const next = prev.filter(r => r.product_id !== productId || !srcRows.some(s => s.ingredient === r.ingredient))
-                return [...next, ...srcRows.map(r => ({ product_id: productId, ingredient: r.ingredient, amount: r.amount, unit: r.unit }))]
-            })
-            refreshProducts?.()
-        })
-    }
-
     async function saveProductPrice(newPrice: number) {
         if (!selectedAddress) return
         await withSaving('Lưu giá bán sản phẩm', async () => {
@@ -209,12 +178,15 @@ export default function RecipeIngredientPage() {
         })
     }
 
-    async function toggleCountAsCup() {
-        const next = product?.count_as_cup === false
-        await withSaving('Cập nhật cờ đếm ly', async () => {
-            await updateProductCountAsCup(productId, next)
-            refreshProducts?.()
-            showToast(next ? 'Cộng vào tổng số ly bán mỗi ngày' : 'Không cộng vào tổng số ly bán mỗi ngày', 'success')
+    function toggleCountAsCup() {
+        const next = !(cupOptimistic ?? product?.count_as_cup !== false)
+        setCupOptimistic(next)
+        cupPending.current++
+        // Ghi tuần tự: bấm liên tục thì server dừng đúng ở lần bấm cuối, và UI chỉ về dữ liệu thật khi hết hàng đợi.
+        cupQueue.current = cupQueue.current.then(async () => {
+            try { await updateProductCountAsCup(productId, next) }
+            catch (err) { setCupOptimistic(null); showError(err, 'Cập nhật cờ đếm ly') }
+            if (--cupPending.current === 0) refreshProducts?.()
         })
     }
 
@@ -249,14 +221,16 @@ export default function RecipeIngredientPage() {
     }
 
     // ─── Extras handlers ──────────────────────────────────────────────
-    async function handleAddExtra(name: string, price: number) {
+    async function handleAddExtra(name: string, price: number, items: BaseItem[]) {
         if (extras.some(e => e.name.trim().toLowerCase() === name.trim().toLowerCase())) {
             showToast(`Đã có tùy chọn "${name.trim()}"`, 'warning')
             return
         }
         await withSaving('Thêm tùy chọn', async () => {
             const newExtra = await insertProductExtra(productId, name, price, addressId)
+            for (const it of items) await upsertExtraIngredient(newExtra.id, it.ingredient, it.amount, it.unit)
             setExtras(prev => [...prev, { id: newExtra.id, name: newExtra.name, price: newExtra.price }])
+            if (items.length) setExtraIngs(prev => ({ ...prev, [newExtra.id]: items.map(it => ({ extra_id: newExtra.id, ...it })) }))
             refreshProducts?.()
         })
     }
@@ -292,13 +266,6 @@ export default function RecipeIngredientPage() {
         await withSaving('Xóa tùy chọn', async () => {
             await deleteProductExtra(extraId)
             setExtras(prev => prev.filter(e => e.id !== extraId))
-            refreshProducts?.()
-        })
-    }
-
-    async function duplicateExtra(extraId: string, newName: string) {
-        await withSaving('Nhân bản tùy chọn', async () => {
-            await duplicateProductExtra(extraId, newName, addressId)
             refreshProducts?.()
         })
     }
@@ -403,6 +370,9 @@ export default function RecipeIngredientPage() {
         )
     }
 
+    const countAsCup = cupOptimistic ?? product.count_as_cup !== false
+    const onDetail = isBatch || productTab === 'detail'
+
     const extraHandlers: ExtraHandlers = {
         saveName: saveExtraName,
         savePrice: saveExtraPrice,
@@ -411,7 +381,6 @@ export default function RecipeIngredientPage() {
         saveExtraAmount,
         deleteExtraIngredient: deleteExtraIng,
         addExtraIngredients: handleAddExtraIngredients,
-        duplicate: duplicateExtra,
     }
 
     return (
@@ -433,18 +402,21 @@ export default function RecipeIngredientPage() {
                         />
                     </div>
                 </EditableEntityHeader>
-            ) : <RecipeHeader
-                product={product}
+            ) : <EditableEntityHeader
+                name={product.name}
+                nameTransform={capitalizeWords}
                 canEdit={canEdit}
-                onSavePrice={saveProductPrice}
                 onSaveName={saveProductName}
-                countAsCup={product.count_as_cup !== false}
-                onToggleCountAsCup={toggleCountAsCup}
-                toggleDisabled={saving}
-            />}
+                price={product.price}
+                priceLabel="Giá bán:"
+                onSavePrice={saveProductPrice}
+                subtitle={productTab === 'extras' ? `${extras.length} tùy chọn thêm` : undefined}
+            >
+                <MenuTabsBar tabs={[{ key: 'detail', label: 'Định lượng' }, { key: 'extras', label: 'Tùy chọn thêm' }]} activeTab={productTab} onSelect={setProductTab} />
+            </EditableEntityHeader>}
 
             <main className="flex-1 overflow-y-auto px-4 max-[329px]:px-2 py-4 space-y-3 bg-bg">
-                <FastIngredientFill
+                {onDetail && <FastIngredientFill
                     entries={prodRecipes}
                     dbIngredients={dbIngredients}
                     getUnit={(k) => getIngredientUnit(k, ingredientUnits?.[k], ingredientUnits)}
@@ -457,10 +429,9 @@ export default function RecipeIngredientPage() {
                     onSetAmount={setBaseAmount}
                     onRemove={removeBaseIngredient}
                     onAddCustom={handleAddBaseIngredients}
-                />
+                />}
 
-
-                {!isBatch && <ExtrasSection
+                {!isBatch && productTab === 'extras' && <ExtrasSection
                     extras={extras}
                     extraIngs={extraIngs}
                     ingredientUnits={ingredientUnits}
@@ -474,32 +445,35 @@ export default function RecipeIngredientPage() {
                     baseAmounts={baseAmounts}
                 />}
 
-                {canEdit && (
-                    <div className="mt-4 pt-4 border-t border-border/40 flex justify-between">
+                {!isBatch && canEdit && onDetail && (<>
+                    <hr className="border-border/40" />
+                    <div className="bg-surface border border-border/60 rounded-[14px] p-3 flex items-center gap-3">
+                        <p className="flex-1 min-w-0 text-[13px] font-black text-text">{countAsCup ? 'Món này cộng vào số ly bán' : 'Món này không cộng vào số ly bán'}</p>
+                        <button
+                            onClick={toggleCountAsCup}
+                            role="switch"
+                            aria-checked={countAsCup}
+                            aria-label="Cộng vào số ly bán"
+                            className={`relative w-12 h-7 rounded-full shrink-0 transition-colors duration-200 ease-out ${countAsCup ? 'bg-primary' : 'bg-border'}`}
+                        >
+                            <span className={`absolute top-1 left-1 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ease-out ${countAsCup ? 'translate-x-5' : ''}`} />
+                        </button>
+                    </div>
+                </>)}
+
+                {/* Bán thành phẩm không có thẻ ở tab Menu nên đây là chỗ xóa duy nhất; món chính xóa ở "Sửa món". */}
+                {canEdit && isBatch && (
+                    <div className="mt-4 pt-4 border-t border-border/40">
                         <button
                             onClick={handleDeleteFromMenu}
                             className="text-danger hover:bg-danger/10 rounded-full px-3 py-1 text-[11px] font-medium transition-colors"
                         >
-                            Xóa công thức
-                        </button>
-                        <button
-                            onClick={() => setShowCopyFrom(true)}
-                            className="text-primary hover:bg-primary/10 rounded-full px-3 py-1 text-[11px] font-medium transition-colors"
-                        >
-                            Sao chép công thức
+                            Xóa thành phẩm
                         </button>
                     </div>
                 )}
             </main>
 
-            {showCopyFrom && (
-                <CopyRecipeModal
-                    products={products.filter(p => p.id !== productId)}
-                    recipesByProduct={recipesByProduct}
-                    onPick={handleCopyFrom}
-                    onClose={() => setShowCopyFrom(false)}
-                />
-            )}
 
             {saving && (
                 <div className="fixed bottom-4 right-4 z-50 pointer-events-none">

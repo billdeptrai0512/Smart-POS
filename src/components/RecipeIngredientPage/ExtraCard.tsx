@@ -19,7 +19,6 @@ interface Props {
     onSaveExtraAmount: (ingredient: string, amount: number) => void
     onDeleteExtraIngredient: (ingredient: string) => void
     onAddExtraIngredients: (ingredient: CustomIngredient) => void
-    onDuplicate: (name: string) => void
     categoryOf: (ingredient: string) => string | null | undefined
     baseAmounts?: Record<string, number>
 }
@@ -27,25 +26,16 @@ interface Props {
 export default function ExtraCard({
     extra, extraIngs, ingredientUnits, dbIngredients, canEdit,
     onSaveName, onSavePrice, onToggleSticky, onDelete,
-    onSaveExtraAmount, onDeleteExtraIngredient, onAddExtraIngredients, onDuplicate,
+    onSaveExtraAmount, onDeleteExtraIngredient, onAddExtraIngredients,
     categoryOf, baseAmounts,
 }: Props) {
-    const [duplicating, setDuplicating] = useState(false)
     const [addingIngredient, setAddingIngredient] = useState(false)
-    const [duplicateName, setDuplicateName] = useState('')
 
     const unitByKey = useMemo(() => {
         const m: Record<string, string | null | undefined> = {}
         for (const ei of extraIngs) m[ei.ingredient] = ei.unit
         return m
     }, [extraIngs])
-
-    const submitDuplicate = () => {
-        if (!duplicateName.trim()) return
-        onDuplicate(duplicateName.trim())
-        setDuplicating(false)
-        setDuplicateName('')
-    }
 
     return (
         <div className="bg-surface border border-border/60 rounded-[14px] px-4 max-[329px]:px-2 py-3 flex flex-col gap-2 group">
@@ -105,7 +95,7 @@ export default function ExtraCard({
                 />
             </div>
 
-            {/* Phần 3: xóa (trái) / nhân bản (phải) — tách riêng bằng 1 đường kẻ dưới danh sách nguyên liệu. */}
+            {/* Phần 3: xóa tùy chọn / thu gọn bảng thêm nguyên liệu — tách riêng bằng 1 đường kẻ dưới danh sách nguyên liệu. */}
             {canEdit && (
                 <div className="border-t border-border/40 pt-2 flex flex-col">
                     {addingIngredient ? (
@@ -115,40 +105,14 @@ export default function ExtraCard({
                         >
                             Thu gọn
                         </button>
-                    ) : duplicating ? (
-                        <div className="flex gap-1.5">
-                            <input
-                                type="text"
-                                autoFocus
-                                placeholder="Tên tùy chọn mới…"
-                                value={duplicateName}
-                                onChange={e => setDuplicateName(e.target.value)}
-                                onKeyDown={e => {
-                                    if (e.key === 'Enter') submitDuplicate()
-                                    if (e.key === 'Escape') setDuplicating(false)
-                                }}
-                                className="flex-1 min-w-0 bg-bg border border-primary/60 rounded-lg px-2 py-1 text-[12px] text-text focus:outline-none focus:border-primary"
-                            />
-                            <button onClick={submitDuplicate} className="bg-primary text-bg px-3 py-1.5 rounded-lg text-[12px] font-bold">Tạo</button>
-                            <button onClick={() => { setDuplicating(false); setDuplicateName('') }} className="shrink-0 bg-surface-light border border-border/60 text-text px-2 py-1.5 rounded-lg text-[12px] font-bold">Hủy</button>
-                        </div>
                     ) : (
-                        <div className="flex justify-between">
-                            <button
-                                onClick={onDelete}
-                                className="text-danger hover:bg-danger/10 rounded-full px-3 py-1 text-[11px] font-medium transition-colors"
-                                title="Xóa tùy chọn"
-                            >
-                                Xóa tùy chọn
-                            </button>
-                            <button
-                                onClick={() => setDuplicating(true)}
-                                className="text-primary hover:bg-primary/10 rounded-full px-3 py-1 text-[11px] font-medium transition-colors"
-                                title="Tạo một tùy chọn giống hệt cái này để chỉnh"
-                            >
-                                Nhân bản tùy chọn
-                            </button>
-                        </div>
+                        <button
+                            onClick={onDelete}
+                            className="self-start text-danger hover:bg-danger/10 rounded-full px-3 py-1 text-[11px] font-medium transition-colors"
+                            title="Xóa tùy chọn"
+                        >
+                            Xóa tùy chọn
+                        </button>
                     )}
                 </div>
             )}

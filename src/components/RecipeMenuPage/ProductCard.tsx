@@ -70,7 +70,7 @@ export default function ProductCard({ product, prodRecipes, cost, ingredientUnit
                             )
                         })}
                         {notCup && (
-                            <span title="Không tính vào tổng số ly bán/ngày" className="text-[12px] font-medium text-text-secondary">
+                            <span title="Không cộng vào số ly bán" className="text-[12px] font-medium text-text-secondary">
                                 • Không tính ly
                             </span>
                         )}

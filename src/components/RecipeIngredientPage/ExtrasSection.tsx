@@ -5,6 +5,9 @@ import ExtraCard from './ExtraCard'
 import { parseSignedVNDInput } from '../../utils'
 import SignedMoneyInput from './SignedMoneyInput'
 import type { CustomIngredient } from './FastIngredientFill'
+import { getIngredientUnit, ingredientLabel } from '../../utils/ingredients'
+
+export interface BaseItem { ingredient: string; amount: number; unit: string }
 
 export interface ExtraHandlers {
     saveName: (extraId: string, name: string) => void
@@ -14,7 +17,6 @@ export interface ExtraHandlers {
     saveExtraAmount: (extraId: string, ingredient: string, amount: number) => void
     deleteExtraIngredient: (extraId: string, ingredient: string) => void
     addExtraIngredients: (extraId: string, ingredient: CustomIngredient) => void
-    duplicate: (extraId: string, name: string) => void
 }
 
 interface Props {
@@ -24,7 +26,8 @@ interface Props {
     dbIngredients: string[]
     canEdit?: boolean
     saving?: boolean
-    onAddExtra: (name: string, price: number) => void
+    /** items = nguyên liệu chép từ định lượng chính (đúng lượng gốc) vào tùy chọn mới. */
+    onAddExtra: (name: string, price: number, items: BaseItem[]) => void
     onSaveSortOrder: (ids: string[]) => Promise<unknown>
     extraHandlers: ExtraHandlers
     categoryOf: (ingredient: string) => string | null | undefined
@@ -39,6 +42,12 @@ export default function ExtrasSection({
     const [addingExtra, setAddingExtra] = useState(false)
     const [newExtraName, setNewExtraName] = useState('')
     const [newExtraPrice, setNewExtraPrice] = useState('')
+    const [picked, setPicked] = useState<Set<string>>(new Set())
+    // Nguyên liệu của định lượng chính: chọn để chép đúng lượng gốc vào tùy chọn mới (rồi sửa lại).
+    const baseItems = Object.entries(baseAmounts ?? {})
+        .filter(([, a]) => a > 0)
+        .map(([ingredient, amount]) => ({ ingredient, amount, unit: getIngredientUnit(ingredient, undefined, ingredientUnits) }))
+    const togglePicked = (k: string) => setPicked(prev => { const n = new Set(prev); if (!n.delete(k)) n.add(k); return n })
 
     const [sorting, setSorting] = useState(false)
     const [sortedExtras, setSortedExtras] = useState<CartExtra[]>([])
@@ -59,25 +68,24 @@ export default function ExtrasSection({
 
     const submitAddExtra = () => {
         if (!newExtraName.trim()) return
-        onAddExtra(newExtraName.trim(), parseSignedVNDInput(newExtraPrice))
-        setAddingExtra(false)
-        setNewExtraName('')
-        setNewExtraPrice('')
+        onAddExtra(newExtraName.trim(), parseSignedVNDInput(newExtraPrice), baseItems.filter(b => picked.has(b.ingredient)))
+        closeAddExtra()
     }
+    const closeAddExtra = () => { setAddingExtra(false); setNewExtraName(''); setNewExtraPrice(''); setPicked(new Set()) }
 
     return (
-        <div className="mt-4 pt-4 border-t border-border/40">
-            <div className="flex items-center justify-between mb-3">
-                <span className="text-[13px] font-black text-text uppercase tracking-wide">Tùy chọn thêm</span>
-                {canEdit && extras.length > 1 && !sorting && (
+        // Tiêu đề "Tùy chọn thêm" đã là tên tab của trang, nên chỉ còn nút Sắp xếp.
+        <div>
+            {canEdit && extras.length > 1 && !sorting && (
+                <div className="flex justify-end mb-3">
                     <button
                         onClick={beginSort}
                         className="text-[11px] text-text-dim hover:text-primary font-bold transition-colors"
                     >
                         Sắp xếp
                     </button>
-                )}
-            </div>
+                </div>
+            )}
 
             {sorting && (
                 <SortMode
@@ -111,7 +119,6 @@ export default function ExtrasSection({
                         onSaveExtraAmount={(ing, v) => extraHandlers.saveExtraAmount(extra.id, ing, v)}
                         onDeleteExtraIngredient={(ing) => extraHandlers.deleteExtraIngredient(extra.id, ing)}
                         onAddExtraIngredients={(ingredient) => extraHandlers.addExtraIngredients(extra.id, ingredient)}
-                        onDuplicate={(name) => extraHandlers.duplicate(extra.id, name)}
                         categoryOf={categoryOf}
                         baseAmounts={baseAmounts}
                     />
@@ -138,9 +145,26 @@ export default function ExtrasSection({
                             onKeyDown={e => { if (e.key === 'Enter') submitAddExtra() }}
                         />
                     </div>
+                    {baseItems.length > 0 && (
+                        <div className="border-t border-border/40 pt-2 flex flex-col gap-2">
+                            <p className="text-[12px] text-text-secondary">Chép từ định lượng (đúng lượng gốc, sửa lại sau):</p>
+                            <div className="flex flex-wrap gap-1.5">
+                                {baseItems.map(b => (
+                                    <button
+                                        key={b.ingredient}
+                                        onClick={() => togglePicked(b.ingredient)}
+                                        aria-pressed={picked.has(b.ingredient)}
+                                        className={`h-[28px] px-2.5 rounded-[8px] border font-bold text-[11px] whitespace-nowrap transition-all ${picked.has(b.ingredient) ? 'bg-primary/10 border-primary/50 text-primary' : 'bg-surface-light border-border/80 text-text-secondary hover:text-text'}`}
+                                    >
+                                        {ingredientLabel(b.ingredient)} {b.amount} {b.unit}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                     <div className="flex justify-between gap-2 border-t border-border/40 pt-2">
                         <button
-                            onClick={() => { setAddingExtra(false); setNewExtraName(''); setNewExtraPrice('') }}
+                            onClick={closeAddExtra}
                             className="bg-surface-light text-text px-3 py-1.5 rounded-lg text-[12px] font-bold"
                         >
                             Hủy

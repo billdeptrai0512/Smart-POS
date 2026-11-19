@@ -24,7 +24,7 @@ interface Props {
     onSetAmount: (ingredient: string, amount: number, unit: string) => void
     onRemove: (ingredient: string) => void
     onAddCustom: (ingredient: CustomIngredient) => void
-    /** Có cặp này = cha điều khiển bảng thêm nguyên liệu và tự đặt nút "Thu gọn" (ExtraCard thay vào chỗ Xóa/Nhân bản). */
+    /** Có cặp này = cha điều khiển bảng thêm nguyên liệu và tự đặt nút "Thu gọn" (ExtraCard thay vào chỗ nút Xóa tùy chọn). */
     addOpen?: boolean
     onAddOpenChange?: (open: boolean) => void
 }
@@ -102,7 +102,7 @@ export default function FastIngredientFill({
 
             {canEdit && !addOpen && (
                 <button onClick={() => setAddOpen(true)}
-                    className="text-[12px] border border-dashed border-border/70 text-text-secondary px-2.5 py-1.5 rounded-lg font-medium hover:text-primary hover:border-primary/50 transition-colors">
+                    className="w-full text-[12px] border border-dashed border-border/70 text-text-secondary px-2.5 py-1.5 rounded-lg font-medium hover:text-primary hover:border-primary/50 transition-colors">
                     + Thêm nguyên liệu / bao bì
                 </button>
             )}

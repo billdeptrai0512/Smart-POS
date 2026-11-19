@@ -831,26 +831,6 @@ export const updateLocalExtrasSortOrder = (orderedExtraIds: string[]) => {
     set(KEYS.PRODUCT_EXTRAS, extras);
 };
 
-export const duplicateLocalProductExtra = (extraId: string, newName: string, addressId: string | null) => {
-    const extras = get(KEYS.PRODUCT_EXTRAS);
-    const src = extras.find(e => e.id === extraId);
-    if (!src) return null;
-    
-    const maxSort = extras.filter(e => e.product_id === src.product_id).reduce((max: number, e) => Math.max(max, e.sort_order || -1), -1);
-    const newExtra = { id: generateId(), product_id: src.product_id, name: newName, price: src.price, address_id: addressId, sort_order: maxSort + 1, is_sticky: false };
-    extras.push(newExtra);
-    set(KEYS.PRODUCT_EXTRAS, extras);
-
-    const extraIngs = get(KEYS.EXTRA_INGREDIENTS);
-    const srcIngs = extraIngs.filter(i => i.extra_id === extraId);
-    srcIngs.forEach(i => {
-        extraIngs.push({ ...i, id: generateId(), extra_id: newExtra.id });
-    });
-    set(KEYS.EXTRA_INGREDIENTS, extraIngs);
-
-    return newExtra;
-};
-
 export const deleteLocalProductExtra = (extraId: string) => {
     let extras = get(KEYS.PRODUCT_EXTRAS);
     extras = extras.filter(e => e.id !== extraId);

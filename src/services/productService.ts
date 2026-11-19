@@ -214,41 +214,6 @@ export async function updateProductExtraPrice(extraId: UUID, price: number) {
     if (error) throw error
 }
 
-// Duplicate a product extra (copy extra + all its extra_ingredients) with a new name
-export async function duplicateProductExtra(extraId: UUID, newName: string, addressId: UUID | null = null) {
-    if (localRepo.isGuest()) return localRepo.duplicateLocalProductExtra(extraId, newName, addressId)
-
-    const { data: src, error: e1 } = await supabase
-        .from('product_extras').select('product_id, price').eq('id', extraId).single()
-    if (e1) throw e1
-
-    const payload: Row = { product_id: src.product_id, name: newName, price: src.price }
-    if (addressId) payload.address_id = addressId
-
-    // Assign sort_order = max + 1 so the duplicate lands at the bottom
-    let maxQuery = supabase.from('product_extras').select('sort_order').eq('product_id', src.product_id)
-    if (addressId) maxQuery = maxQuery.eq('address_id', addressId)
-    else maxQuery = maxQuery.is('address_id', null)
-    const { data: maxRow } = await maxQuery
-        .order('sort_order', { ascending: false, nullsFirst: false })
-        .limit(1)
-        .maybeSingle()
-    payload.sort_order = (maxRow?.sort_order ?? -1) + 1
-
-    const { data: newExtra, error: e2 } = await supabase
-        .from('product_extras').insert(payload).select().single()
-    if (e2) throw e2
-
-    const { data: ings } = await supabase
-        .from('extra_ingredients').select('ingredient, amount, unit').eq('extra_id', extraId)
-    if (ings?.length) {
-        await supabase.from('extra_ingredients').insert(
-            ings.map(i => ({ extra_id: newExtra.id, ingredient: i.ingredient, amount: i.amount, unit: i.unit }))
-        )
-    }
-    return newExtra
-}
-
 // Update sort_order for a list of extras — see updateProductSortOrder for the
 // reasoning behind the single-RPC pattern.
 export async function updateExtrasSortOrder(orderedExtraIds: UUID[]) {
