@@ -41,6 +41,7 @@ import ExtrasSection, { type ExtraHandlers, type BaseItem } from '../components/
 import type { CartExtra } from '../types/domain'
 import type { RecipeRow } from '../utils/inventory'
 import { recipeBackUrl } from '../utils/recipeBackUrl'
+import { suggestExtras } from '../utils/suggestExtras'
 
 export default function RecipeIngredientPage() {
     const navigate = useNavigate()
@@ -108,6 +109,12 @@ export default function RecipeIngredientPage() {
     const baseAmounts = useMemo(
         () => Object.fromEntries(prodRecipes.map(r => [r.ingredient, r.amount])),
         [prodRecipes]
+    )
+
+    // Gợi ý tùy chọn học từ các món khác của quán.
+    const suggestions = useMemo(
+        () => suggestExtras({ productId, products, extrasByProduct: { ...contextExtras, [productId]: extras }, extraIngs, recipes: allRecipes || [] }),
+        [productId, products, contextExtras, extras, extraIngs, allRecipes]
     )
 
     const dbIngredients = useMemo(
@@ -443,6 +450,7 @@ export default function RecipeIngredientPage() {
                     extraHandlers={extraHandlers}
                     categoryOf={categoryOf}
                     baseAmounts={baseAmounts}
+                    suggestions={suggestions}
                 />}
 
                 {!isBatch && canEdit && onDetail && (<>
