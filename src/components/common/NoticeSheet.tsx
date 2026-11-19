@@ -66,7 +66,7 @@ export default function NoticeSheet({ icon, title, count, onClose, children, hin
                     <Check size={19} strokeWidth={3} />
                 </button>
             </div>
-            <div className="min-h-0 overflow-y-auto px-5 pt-1 pb-[max(env(safe-area-inset-bottom),8px)]">{children}</div>
+            <div className="min-h-0 overflow-y-auto px-5 pt-1 pb-[max(env(safe-area-inset-bottom),16px)]">{children}</div>
         </BottomSheet>,
         document.body,
     )

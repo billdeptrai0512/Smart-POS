@@ -9,6 +9,8 @@ import { fetchRangeTotals, type RangeTotals } from '../services/branchCashServic
 import { cloneFromShareCode, getSharedConfig } from '../services/backupService'
 import { Loader } from 'lucide-react'
 import Skeleton from '../components/common/Skeleton'
+import Toast from '../components/POSPage/Toast'
+import { useToast } from '../hooks/useToast'
 import AddressHeader from '../components/AddressSelectPage/AddressHeader'
 import BranchGrid from '../components/AddressSelectPage/BranchGrid'
 import StaffTab from '../components/AddressSelectPage/StaffTab'
@@ -83,13 +85,14 @@ export default function AddressSelectPage() {
 
     // Lọc thẻ tổng: 1 = hôm nay (số có sẵn, poll 30s); 7/30 = tải riêng, lưu theo (danh sách địa chỉ, khoảng) —
     // đổi qua lại hiện ngay số đã có trong lúc tải lại ngầm, không nháy "—".
+    const { toast, showError } = useToast()
     const [rangeDays, setRangeDays] = useState(1)
     const [rangeCache, setRangeCache] = useState<Record<string, RangeTotals | null>>({})
     const rangeKey = `${addressIdsKey}|${rangeDays}`
     useEffect(() => {
         if (rangeDays === 1) return
         let stale = false
-        fetchRangeTotals(addresses.map(a => a.id), rangeDays).then(t => { if (!stale) setRangeCache(c => ({ ...c, [rangeKey]: t })) }).catch(e => console.error('rangeTotals:', e))
+        fetchRangeTotals(addresses.map(a => a.id), rangeDays).then(t => { if (!stale) setRangeCache(c => ({ ...c, [rangeKey]: t })) }).catch(e => { if (!stale) showError(e, 'Tải tổng theo khoảng') })
         return () => { stale = true }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [rangeKey])
@@ -253,6 +256,7 @@ export default function AddressSelectPage() {
 
     return (
         <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
+            <Toast toast={toast} />
             <AddressHeader
                 isStaff={isStaff}
                 isGuest={isGuest}
