@@ -116,6 +116,7 @@ export default function ShiftPrepCard({
                         if (!skipMode && it.done && !doneOpen && ordered[i - 1]?.done) return null
                         const isDone = !!it.locked || !!checked[it.ingredient]
                         const rowKey = `${it.kind ?? 'prep'}:${it.ingredient}` // món soạn sáng + dòng "Cần lấy thêm" cùng tên không được trùng key
+                        const tareTail = it.tare > 0 && <> + ({it.tare} {it.unit})</> // bì hiện sau lượng thật
                         const isSkipped = !isDone && !!skipped[it.ingredient]
                         const muted = isDone || isSkipped || !!it.done // đã xử lý (nhập, bỏ qua hoặc đã mua đủ) → mờ + gạch ngang
                         // Số lượng theo quy cách đóng gói ("2 hộp", "1 bịch + 350 g"), cùng kiểu với viên CTA; không có quy cách thì đơn vị gốc.
@@ -226,9 +227,9 @@ export default function ShiftPrepCard({
                                             {it.minCounter > 0 && !isDone && <span className="block">Tồn quầy tối thiểu: {fmt(it.minCounter)}</span>}
                                             {/* Đã lấy thêm → "đầu kỳ + phần vừa lấy" trên một dòng. */}
                                             {muted && it.restock > 0 ? (
-                                                <span className="block">Tồn quầy: {fmt(it.have)}{it.tare > 0 && <> + ({it.tare} {it.unit})</>} + <span className="text-success font-bold">{fmt(it.restock)}</span></span>
+                                                <span className="block">Tồn quầy: {fmt(it.have)}{tareTail} + <span className="text-success font-bold">{fmt(it.restock)}</span></span>
                                             ) : (
-                                                <span className="block">{it.haveLabel || haveLabel}: {fmt(it.have)}{it.tare > 0 && <> + ({it.tare} {it.unit})</>}</span>
+                                                <span className="block">{it.haveLabel || haveLabel}: {fmt(it.have)}{tareTail}</span>
                                             )}
                                             {isDone && it.kind !== 'depleted' && it.sent == null && it.fillQty != null && (it.taken ?? it.restock) !== it.fillQty && (
                                                 <span className="block text-warning font-bold">Nên chuẩn bị: {fmt(it.fillQty)}</span>
