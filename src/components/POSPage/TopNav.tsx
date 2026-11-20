@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Bell, Home, Menu, X } from 'lucide-react'
+import { Bell, Menu, X } from 'lucide-react'
 import { useAddress } from '../../contexts/AddressContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useHistory } from '../../contexts/HistoryContext'
@@ -8,14 +8,12 @@ import { useStats } from '../../contexts/StatsContext'
 import { STOCK_CACHE_KEY } from '../../hooks/useRestockOverview'
 import { readJSON } from '../../utils/storage'
 import AddressNotice from '../AddressSelectPage/AddressNotice'
-import ActionPill from '../common/ActionPill'
 import { ingredientDetailPath } from '../IngredientManagementPage/DebtSection'
 import WarehousePrepNotice from '../IngredientManagementPage/WarehousePrepNotice'
-import { Dialog } from '../common/ModalShell'
 import PrepPinBar from '../common/PrepPinBar'
 import AddressSwitcher from './AddressSwitcher'
 import { NAV_SECTIONS, type NavItem } from '../../constants/navSections'
-import { NAV_ICON_BTN } from '../../constants/navStyles'
+import { NAV_ICON_BTN, PILL_TONES } from '../../constants/navStyles'
 
 
 // Số kho còn việc theo bản đã tính gần nhất (cache của "Việc cần làm") — đọc rẻ, không tải gì thêm lúc đang bán.
@@ -61,6 +59,12 @@ export default function TopNav() {
         if (route.startsWith('/history')) handleLoadHistory()
     }
 
+    const isActive = (i: NavItem) => i.route !== '/addresses' && (pathname === i.route || pathname.startsWith(i.route + '/'))
+    // Nhóm hàng = từng section của NAV_SECTIONS (bỏ nhóm rỗng); giữa các nhóm là đường kẻ mảnh.
+    const groups = NAV_SECTIONS
+        .map(sec => sec.items.filter(i => (!i.manager || isManager || isAdmin) && !(i.noGuest && isGuest)))
+        .filter(g => g.length > 0)
+
     return (
         <>
             <AddressSwitcher />
@@ -73,9 +77,32 @@ export default function TopNav() {
                     )}
                 </button>
             )}
-            <button type="button" aria-label="Menu" onClick={() => setShowMenu(true)} className={NAV_ICON_BTN}>
-                <Menu size={20} />
-            </button>
+            <div className="relative shrink-0">
+                <button type="button" aria-label="Menu" aria-expanded={showMenu} onClick={() => setShowMenu(o => !o)} className={NAV_ICON_BTN}>
+                    {showMenu ? <X size={20} /> : <Menu size={20} />}
+                </button>
+                {showMenu && (<>
+                    {/* Nền trong suốt: bấm ra ngoài là đóng */}
+                    <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
+                    <nav className="absolute right-0 top-full mt-2 z-50 w-48 max-h-[calc(100dvh-5rem)] overflow-y-auto p-1.5 bg-surface border border-border/60 rounded-[16px] shadow-2xl flex flex-col">
+                        {groups.map((g, gi) => (
+                            <div key={gi} className={gi > 0 ? 'mt-1 pt-1 border-t border-border/40' : ''}>
+                            {g.map(i => (
+                            <button
+                                key={i.label}
+                                onClick={() => go(i)}
+                                className={`relative flex w-full items-center gap-3 px-2.5 py-2.5 rounded-[12px] text-left active:bg-border/30 hover:bg-border/20 transition-colors ${isActive(i) ? 'bg-border/20' : ''}`}
+                            >
+                                {isActive(i) && <span className="absolute left-0 inset-y-2.5 w-[3px] rounded-full bg-primary" />}
+                                <span className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${PILL_TONES[i.tone]}`}><i.icon size={16} /></span>
+                                <span className="text-[12px] font-bold uppercase tracking-wider leading-tight text-text">{i.label}</span>
+                            </button>
+                            ))}
+                            </div>
+                        ))}
+                    </nav>
+                </>)}
+            </div>
             {onPos && !isGuest && isOnline && <PrepPinBar bell={{ open: bellOpen, onClose: () => setBellOpen(false), onCount: setPrepCount }} />}
             {!onPos && bellOpen && kind === 'tasks' && <AddressNotice onClose={() => { setBellOpen(false); setPending(pendingCount()) }} />}
             {!onPos && bellOpen && kind === 'restock' && (
@@ -83,47 +110,6 @@ export default function TopNav() {
                     onClose={() => setBellOpen(false)}
                     onOpenIngredient={(ing, t, since) => { setBellOpen(false); navigate(ingredientDetailPath(ing, t, since)) }}
                 />
-            )}
-            {showMenu && (
-                <Dialog
-                    onClose={() => setShowMenu(false)}
-                    panelClassName="w-full max-w-sm mx-4 my-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden max-h-[calc(100dvh-2rem)] flex flex-col"
-                >
-                    <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/40 shrink-0">
-                        {isGuest ? <span className="w-10 h-10 shrink-0" /> : (
-                            <button type="button" aria-label="Về trang địa chỉ" onClick={() => { setShowMenu(false); navigate('/addresses') }} className="w-10 h-10 shrink-0 flex items-center justify-center rounded-[14px] bg-bg border border-border/60 active:bg-border/20 text-success">
-                                <Home size={19} />
-                            </button>
-                        )}
-                        <p className="flex-1 text-center text-text font-black text-sm leading-none uppercase tracking-wide">Điều hướng</p>
-                        <button onClick={() => setShowMenu(false)} aria-label="Đóng" className="w-10 h-10 shrink-0 flex items-center justify-center rounded-[14px] bg-bg border border-border/60 active:bg-border/20 text-text-secondary">
-                            <X size={19} />
-                        </button>
-                    </div>
-                    <div className="overflow-y-auto px-3 pt-3 pb-5 flex flex-col gap-4">
-                        {NAV_SECTIONS.map(sec => {
-                            const items = sec.items.filter(i => (!i.manager || isManager || isAdmin) && !(i.noGuest && isGuest))
-                            return items.length > 0 && (
-                                <div key={sec.title}>
-                                    {sec.title && <p className="px-1 pb-2 text-[10px] font-black uppercase tracking-wider text-text-secondary">{sec.title}</p>}
-                                    <div className="grid grid-cols-2 gap-2">
-                                        {items.map(i => (
-                                            <ActionPill
-                                                key={i.label}
-                                                icon={<i.icon size={16} />}
-                                                label={i.label}
-                                                tone={i.tone}
-                                                wide={i.wide}
-                                                active={i.route !== '/addresses' && (pathname === i.route || pathname.startsWith(i.route + '/'))}
-                                                onClick={() => go(i)}
-                                            />
-                                        ))}
-                                    </div>
-                                </div>
-                            )
-                        })}
-                    </div>
-                </Dialog>
             )}
         </>
     )

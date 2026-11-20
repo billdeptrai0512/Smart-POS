@@ -372,7 +372,7 @@ export default function IngredientManagementPage() {
             {activeView !== 'stocking' && <TomorrowPrepNotice />}
 
             <MenuPageHeader
-                title="Tồn kho"
+                title="Lưu trữ"
                 count={visibleIngredients.length}
                 unitLabel={stocksLoaded ? `loại · ${formatVND(Math.round(stockValue))}` : 'loại'}
                 subtitle={activeView === 'management' ? (

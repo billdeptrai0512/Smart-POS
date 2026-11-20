@@ -2,7 +2,7 @@
 // MenuTabsBar.tsx vì file component chỉ được export component (react-refresh/only-export-components).
 export const INGREDIENT_TABS = [
     { key: 'management', label: 'Kiểm kê' },
-    { key: 'stocking',   label: 'Lưu trữ' },
+    { key: 'stocking',   label: 'Tồn kho' },
 ]
 
 export const RECIPE_TABS = [
