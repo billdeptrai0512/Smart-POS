@@ -27,8 +27,6 @@ interface Props {
     /** Có cặp này = cha điều khiển bảng thêm nguyên liệu và tự đặt nút "Thu gọn" (ExtraCard thay vào chỗ nút Xóa tùy chọn). */
     addOpen?: boolean
     onAddOpenChange?: (open: boolean) => void
-    /** Đặt nút/bảng thêm nguyên liệu lên trên danh sách thay vì dưới. */
-    addOnTop?: boolean
 }
 
 const CATS = [
@@ -44,7 +42,7 @@ export default function FastIngredientFill({
     entries, dbIngredients, getUnit, categoryOf = () => 'main', groups, groupIdOf,
     ingredientCosts, canEdit, showCost = false, allowNegative = false,
     baseAmounts, onSetAmount, onRemove, onAddCustom,
-    addOpen: addOpenProp, onAddOpenChange, addOnTop,
+    addOpen: addOpenProp, onAddOpenChange,
 }: Props) {
     const [revealed, setRevealed] = useState<Set<string>>(() => new Set()) // chip-tapped, not yet saved
     const [creatingCat, setCreatingCat] = useState<string | null>(null) // 'main' | 'packaging' while typing a new name
@@ -174,7 +172,7 @@ export default function FastIngredientFill({
 
     return (
         <div className="space-y-2">
-            {addOnTop ? <>{addEl}{rowsEl}</> : <>{rowsEl}{addEl}</>}
+            {rowsEl}{addEl}
         </div>
     )
 }

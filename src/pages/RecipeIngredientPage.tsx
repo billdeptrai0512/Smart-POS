@@ -434,7 +434,6 @@ export default function RecipeIngredientPage() {
                     ingredientUnits={ingredientUnits}
                     dbIngredients={dbIngredients}
                     canEdit={canEdit}
-                    saving={saving}
                     onAddExtra={handleAddExtra}
                     onSaveSortOrder={saveExtrasSortOrder}
                     extraHandlers={extraHandlers}

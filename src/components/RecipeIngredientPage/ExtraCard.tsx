@@ -24,13 +24,15 @@ interface Props {
     baseAmounts?: Record<string, number>
     /** Giá bán gốc của món — để hiện tổng "= giá món + tùy chọn". */
     basePrice?: number
+    /** Tay nắm kéo-thả sắp xếp, đặt bên trái tiêu đề. */
+    handle?: ReactNode
 }
 
 export default function ExtraCard({
     extra, extraIngs, ingredientUnits, dbIngredients, canEdit,
     onSaveName, onSavePrice, onDelete,
     onSaveExtraAmount, onDeleteExtraIngredient, onAddExtraIngredients,
-    categoryOf, baseAmounts, basePrice,
+    categoryOf, baseAmounts, basePrice, handle,
 }: Props) {
     const [addingIngredient, setAddingIngredient] = useState(false)
     const [collapsed, setCollapsed] = useState(true) // vào tab Tùy chọn thêm: mặc định thu gọn hết
@@ -42,8 +44,9 @@ export default function ExtraCard({
     }, [extraIngs])
 
     return (
-        <div className="bg-surface border border-border/60 rounded-[14px] px-4 max-[329px]:px-2 py-3 flex flex-col group">
+        <div className="bg-surface border border-border/60 rounded-[14px] px-4 max-[329px]:px-2 py-2.5 flex flex-col group">
             <div className="flex items-center gap-2">
+                {handle}
                 <div className="flex-1 flex min-w-0">
                   <div className="min-w-0 max-w-full h-8 flex items-center rounded-[12px] bg-bg border border-border/60 px-3">
                     <InlineEditor
@@ -59,6 +62,10 @@ export default function ExtraCard({
                     />
                   </div>
                 </div>
+
+                {collapsed && basePrice != null && (
+                    <span className="shrink-0 text-[14px] font-black text-success tabular-nums">{formatVND(basePrice + extra.price)}</span>
+                )}
 
                 {canEdit && (
                     <button
@@ -98,9 +105,11 @@ export default function ExtraCard({
                 />
             </div></Collapse>
 
-            <div className="mt-2 border-t border-border/40 pt-2">
-                <PriceRow price={extra.price} basePrice={basePrice} canEdit={canEdit} onSave={onSavePrice} />
-            </div>
+            <Collapse open={!collapsed}>
+                <div className="mt-2 border-t border-border/40 pt-2">
+                    <PriceRow price={extra.price} basePrice={basePrice} canEdit={canEdit} onSave={onSavePrice} />
+                </div>
+            </Collapse>
 
             <Collapse open={!collapsed}>
             {canEdit && addingIngredient && (

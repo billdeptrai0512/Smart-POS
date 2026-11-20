@@ -1,5 +1,9 @@
-import { ArrowUpDown, Plus } from 'lucide-react'
-import { useState } from 'react'
+import { GripVertical, Plus } from 'lucide-react'
+import { useRef, useState, type ReactNode } from 'react'
+import { DndContext, MouseSensor, TouchSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
+import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
+import { CSS } from '@dnd-kit/utilities'
 import type { CartExtra } from '../../types/domain'
 import type { ExtraIngredients } from '../../utils/inventory'
 import ExtraCard from './ExtraCard'
@@ -26,7 +30,6 @@ interface Props {
     ingredientUnits: Record<string, string>
     dbIngredients: string[]
     canEdit?: boolean
-    saving?: boolean
     /** items = nguyên liệu chép từ định lượng chính (đúng lượng gốc) vào tùy chọn mới. */
     onAddExtra: (name: string, price: number, items: BaseItem[]) => void
     onSaveSortOrder: (ids: string[]) => Promise<unknown>
@@ -41,7 +44,7 @@ interface Props {
 const LABEL = 'text-[11px] font-black uppercase tracking-widest text-text-secondary'
 
 export default function ExtrasSection({
-    extras, extraIngs, ingredientUnits, dbIngredients, canEdit, saving,
+    extras, extraIngs, ingredientUnits, dbIngredients, canEdit,
     onAddExtra, onSaveSortOrder,
     extraHandlers, categoryOf, baseAmounts, basePrice, suggestions = [],
 }: Props) {
@@ -55,21 +58,29 @@ export default function ExtrasSection({
         .map(([ingredient, amount]) => ({ ingredient, amount, unit: getIngredientUnit(ingredient, undefined, ingredientUnits) }))
     const togglePicked = (k: string) => setPicked(prev => { const n = new Set(prev); if (!n.delete(k)) n.add(k); return n })
 
-    const [sorting, setSorting] = useState(false)
-    const [sortedExtras, setSortedExtras] = useState<CartExtra[]>([])
-
-    const moveExtra = (from: number, to: number) => {
-        if (to < 0 || to >= sortedExtras.length) return
-        const next = [...sortedExtras]
-        const [moved] = next.splice(from, 1)
-        next.splice(to, 0, moved)
-        setSortedExtras(next)
-    }
-
-    const beginSort = () => { setSortedExtras([...extras]); setSorting(true) }
-    const commitSort = async () => {
-        await onSaveSortOrder(sortedExtras.map(e => e.id))
-        setSorting(false)
+    // Kéo-thả bằng tay nắm ở đầu mỗi card; thả tay là lưu ngay (hiện thứ tự mới trong lúc chờ lưu).
+    const [localIds, setLocalIds] = useState<string[] | null>(null)
+    const sensors = useSensors(
+        useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+        useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
+    )
+    // Thứ tự tạm + các tùy chọn mới thêm / đã xóa trong lúc chờ lưu (đuôi = chưa có trong thứ tự tạm).
+    const shown = localIds
+        ? [...localIds.map(id => extras.find(e => e.id === id)).filter((e): e is CartExtra => !!e), ...extras.filter(e => !localIds.includes(e.id))]
+        : extras
+    // Kéo nhanh nhiều lần: lưu tuần tự (lần cuối thắng) và chỉ lần cuối mới bỏ thứ tự tạm — khỏi nhảy lại thứ tự cũ.
+    const saveChain = useRef<Promise<unknown>>(Promise.resolve())
+    const dragSeq = useRef(0)
+    const handleDragEnd = ({ active, over }: DragEndEvent) => {
+        if (!over || active.id === over.id) return
+        const ids = shown.map(e => e.id)
+        const next = arrayMove(ids, ids.indexOf(String(active.id)), ids.indexOf(String(over.id)))
+        const seq = ++dragSeq.current
+        setLocalIds(next)
+        saveChain.current = saveChain.current
+            .then(() => onSaveSortOrder(next))
+            .catch(() => {})
+            .finally(() => { if (dragSeq.current === seq) setLocalIds(null) })
     }
 
     const submitAddExtra = () => {
@@ -80,46 +91,44 @@ export default function ExtrasSection({
     const closeAddExtra = () => { setAddingExtra(false); setNewExtraName(''); setNewExtraPrice(''); setPicked(new Set()) }
 
     return (
-        // Tiêu đề "Tùy chọn thêm" đã là tên tab của trang; Sắp xếp (trái) + FAB thêm (phải) nổi ở đáy màn hình.
+        // Tiêu đề "Tùy chọn thêm" đã là tên tab của trang; FAB thêm nổi ở đáy màn hình; kéo-thả sắp xếp bằng tay nắm ở mỗi card.
         <div className="pb-20">
-            {sorting && (
-                <SortMode
-                    sortedExtras={sortedExtras}
-                    onMove={moveExtra}
-                    onCancel={() => setSorting(false)}
-                    onSave={commitSort}
-                    saving={saving}
-                />
-            )}
-
             {extras.length === 0 && !addingExtra && (
                 <p className="text-text-secondary text-[12px] text-center py-3 bg-surface-light/50 rounded-[12px] border border-border/40">
                     Chưa có tùy chọn nào (ví dụ: Lớn, Trà đá...)
                 </p>
             )}
 
-            <div className={`space-y-2 ${sorting ? 'hidden' : ''}`}>
-                {extras.map(extra => (
-                    <ExtraCard
-                        key={extra.id}
-                        extra={extra}
-                        extraIngs={extraIngs[extra.id] || []}
-                        ingredientUnits={ingredientUnits}
-                        dbIngredients={dbIngredients}
-                        canEdit={canEdit}
-                        onSaveName={(v) => extraHandlers.saveName(extra.id, v)}
-                        onSavePrice={(v) => extraHandlers.savePrice(extra.id, v)}
-                        onDelete={() => extraHandlers.deleteExtra(extra.id, extra.name)}
-                        onSaveExtraAmount={(ing, v) => extraHandlers.saveExtraAmount(extra.id, ing, v)}
-                        onDeleteExtraIngredient={(ing) => extraHandlers.deleteExtraIngredient(extra.id, ing)}
-                        onAddExtraIngredients={(ingredient) => extraHandlers.addExtraIngredients(extra.id, ingredient)}
-                        categoryOf={categoryOf}
-                        baseAmounts={baseAmounts}
-                        basePrice={basePrice}
-                    />
-                ))}
-            </div>
-            {canEdit && !sorting && addingExtra && (
+            <DndContext sensors={sensors} collisionDetection={closestCenter} modifiers={[restrictToVerticalAxis]} onDragEnd={handleDragEnd}>
+                <SortableContext items={shown.map(e => e.id)} strategy={verticalListSortingStrategy}>
+                    <div className="space-y-2">
+                        {shown.map(extra => (
+                            <SortableRow key={extra.id} id={extra.id} enabled={!!canEdit && extras.length > 1}>
+                                {(handle) => (
+                                    <ExtraCard
+                                        extra={extra}
+                                        handle={handle}
+                                        extraIngs={extraIngs[extra.id] || []}
+                                        ingredientUnits={ingredientUnits}
+                                        dbIngredients={dbIngredients}
+                                        canEdit={canEdit}
+                                        onSaveName={(v) => extraHandlers.saveName(extra.id, v)}
+                                        onSavePrice={(v) => extraHandlers.savePrice(extra.id, v)}
+                                        onDelete={() => extraHandlers.deleteExtra(extra.id, extra.name)}
+                                        onSaveExtraAmount={(ing, v) => extraHandlers.saveExtraAmount(extra.id, ing, v)}
+                                        onDeleteExtraIngredient={(ing) => extraHandlers.deleteExtraIngredient(extra.id, ing)}
+                                        onAddExtraIngredients={(ingredient) => extraHandlers.addExtraIngredients(extra.id, ingredient)}
+                                        categoryOf={categoryOf}
+                                        baseAmounts={baseAmounts}
+                                        basePrice={basePrice}
+                                    />
+                                )}
+                            </SortableRow>
+                        ))}
+                    </div>
+                </SortableContext>
+            </DndContext>
+            {canEdit && addingExtra && (
                 <div className="mt-2 bg-surface border border-border/60 rounded-[14px] p-4 flex flex-col gap-4">
                     <span className="text-[13px] font-black text-text uppercase tracking-wide">Thêm tùy chọn</span>
                     <hr className="-mx-4 border-border/40" />
@@ -205,20 +214,10 @@ export default function ExtrasSection({
                 </div>
             )}
 
-            {/* Sắp xếp (trái) + FAB thêm (phải) — cùng kiểu với /history (chi phí) & /discounts. */}
-            {canEdit && !sorting && !addingExtra && (
+            {/* FAB thêm (phải) — cùng kiểu với /history (chi phí) & /discounts. */}
+            {canEdit && !addingExtra && (
                 <div className="fixed bottom-0 left-0 right-0 max-w-lg lg:max-w-[1280px] mx-auto pointer-events-none z-50">
-                    <div className="flex items-center justify-between px-4 lg:px-8 pb-[max(env(safe-area-inset-bottom),16px)] [@media(display-mode:standalone)]:pb-[max(env(safe-area-inset-bottom),28px)]">
-                        {extras.length > 1 ? (
-                            <button
-                                onClick={beginSort}
-                                aria-label="Sắp xếp"
-                                title="Sắp xếp"
-                                className="pointer-events-auto bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center justify-center text-text-secondary hover:text-primary active:scale-95 transition-all shadow-sm"
-                            >
-                                <ArrowUpDown size={18} />
-                            </button>
-                        ) : <span />}
+                    <div className="flex items-center justify-end px-4 lg:px-8 pb-[max(env(safe-area-inset-bottom),16px)] [@media(display-mode:standalone)]:pb-[max(env(safe-area-inset-bottom),28px)]">
                         <button
                             onClick={() => setAddingExtra(true)}
                             aria-label="Thêm tùy chọn"
@@ -233,41 +232,24 @@ export default function ExtrasSection({
     )
 }
 
-interface SortModeProps {
-    sortedExtras: CartExtra[]
-    onMove: (from: number, to: number) => void
-    onCancel: () => void
-    onSave: () => void
-    saving?: boolean
-}
-
-function SortMode({ sortedExtras, onMove, onCancel, onSave, saving }: SortModeProps) {
+function SortableRow({ id, enabled, children }: { id: string; enabled: boolean; children: (handle: ReactNode) => ReactNode }) {
+    const { setNodeRef, setActivatorNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id, disabled: !enabled, transition: { duration: 220, easing: 'cubic-bezier(0.2, 0, 0, 1)' } })
+    // Scale phải nằm trong transform inline của dnd-kit (class Tailwind sẽ bị style đè).
+    const lifted = isDragging && transform ? { ...transform, scaleX: 1.02, scaleY: 1.02 } : transform
+    const handle = enabled ? (
+        <button
+            ref={setActivatorNodeRef}
+            {...attributes}
+            {...listeners}
+            aria-label="Kéo để sắp xếp"
+            className="shrink-0 w-6 h-8 -ml-2 flex items-center justify-center text-text-secondary/80 hover:text-text touch-none cursor-grab active:cursor-grabbing focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-[8px]"
+        >
+            <GripVertical size={16} />
+        </button>
+    ) : null
     return (
-        <div className="space-y-1.5 mb-3">
-            {sortedExtras.map((extra, index) => (
-                <div key={extra.id} className="flex items-center gap-2 bg-surface border border-border/60 rounded-[12px] px-3 py-2">
-                    <span className="text-[11px] text-text-dim font-bold w-4 text-right shrink-0">{index + 1}</span>
-                    <span className="flex-1 text-[13px] font-bold text-text truncate uppercase">{extra.name}</span>
-                    <div className="flex border border-border/80 rounded-[8px] overflow-hidden shrink-0">
-                        <button
-                            onClick={() => onMove(index, index - 1)} disabled={index === 0}
-                            className="px-2.5 py-1 bg-surface-light text-text hover:bg-border/30 disabled:opacity-30 border-r border-border/80 text-[10px] font-bold"
-                        >▲</button>
-                        <button
-                            onClick={() => onMove(index, index + 1)} disabled={index === sortedExtras.length - 1}
-                            className="px-2.5 py-1 bg-surface-light text-text hover:bg-border/30 disabled:opacity-30 text-[10px] font-bold"
-                        >▼</button>
-                    </div>
-                </div>
-            ))}
-            <div className="flex gap-2 mt-2">
-                <button onClick={onCancel}
-                    className="flex-1 py-2 rounded-[10px] bg-surface-light border border-border/60 text-text-secondary text-[12px] font-bold">Hủy</button>
-                <button onClick={onSave} disabled={saving}
-                    className="flex-1 py-2 rounded-[10px] bg-primary text-bg text-[12px] font-bold disabled:opacity-50">
-                    {saving ? 'Đang lưu...' : 'Lưu thứ tự'}
-                </button>
-            </div>
+        <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(lifted), transition }} className={isDragging ? 'relative z-10 rounded-[14px] shadow-xl shadow-black/40 select-none' : ''}>
+            {children(handle)}
         </div>
     )
 }
