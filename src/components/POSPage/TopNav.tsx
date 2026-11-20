@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Bell, Menu, X } from 'lucide-react'
 import { useAddress } from '../../contexts/AddressContext'
@@ -44,11 +44,20 @@ export default function TopNav() {
     const isOwner = isManager || isAdmin
     const kind = isOwner && addresses.length > 1 ? 'tasks' : isOwner && warehouseRole !== 'member' && warehouseRole !== 'pending' ? 'restock' : null
     const [bellOpen, setBellOpen] = useState(false)
-    const [showMenu, setShowMenu] = useState(false)
     const [pending, setPending] = useState(pendingCount)
     // Chuông theo trang: ở /pos chỉ "Bạn cần chuẩn bị" (hook soạn hàng chỉ được mount 1 chỗ); các trang khác chỉ "Cần bổ sung" (chủ/quản lý).
     const [prepCount, setPrepCount] = useState(0)
     const onPos = pathname === '/pos'
+    // Menu gắn với trang nó được mở: đổi trang (kể cả nút Back của trình duyệt) là tự đóng, không cần effect.
+    const [menuPath, setMenuPath] = useState<string | null>(null)
+    const showMenu = menuPath === pathname
+    const setShowMenu = (open: boolean) => setMenuPath(open ? pathname : null)
+    useEffect(() => {
+        if (!showMenu) return
+        const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuPath(null) }
+        window.addEventListener('keydown', esc)
+        return () => window.removeEventListener('keydown', esc)
+    }, [showMenu])
     const { isOnline } = useStats() // offline: PrepPinBar không vẽ gì → đừng cho chuông mở sheet rỗng
     const hasBell = !isGuest && (onPos ? isOnline : !!kind)
     const n = onPos ? prepCount : kind === 'tasks' ? pending : 0
@@ -78,7 +87,7 @@ export default function TopNav() {
                 </button>
             )}
             <div className="relative shrink-0">
-                <button type="button" aria-label="Menu" aria-expanded={showMenu} onClick={() => setShowMenu(o => !o)} className={NAV_ICON_BTN}>
+                <button type="button" aria-label="Menu" aria-expanded={showMenu} onClick={() => setShowMenu(!showMenu)} className={NAV_ICON_BTN}>
                     {showMenu ? <X size={20} /> : <Menu size={20} />}
                 </button>
                 {showMenu && (<>

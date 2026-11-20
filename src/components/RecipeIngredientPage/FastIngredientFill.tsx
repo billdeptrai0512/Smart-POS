@@ -231,13 +231,31 @@ function FillRow({ ingredient, amount, unit, unitCost, canEdit, showCost, allowN
     // Giá trị đang gõ, không phải `amount` đã lưu (lưu chỉ xảy ra khi blur) — để tổng/chi phí đổi theo từng phím.
     const val = signed(parseDraft(), negative)
 
+    const inExtra = baseAmount != null // hàng của tùy chọn: ✕ đầu hàng (thẳng dưới ✕ xóa tùy chọn), kết quả "= N đv" dồn mép phải để quét dọc cùng cột với định lượng chính
+    const w = inExtra ? 'w-8' : 'w-5'
+    const removeEl = canEdit && (saved ? (
+        <span className={`text-success text-[13px] font-bold shrink-0 ${w} flex items-center justify-center`} aria-label="Đã lưu">✓</span>
+    ) : (
+        <button onClick={onRemove} className={`text-danger/60 hover:text-danger text-[13px] shrink-0 ${w} flex items-center justify-center`} title="Bỏ khỏi công thức">
+            ✕
+        </button>
+    ))
+
     return (
-        <div className="flex items-center gap-2 max-[329px]:gap-1.5 px-3 max-[329px]:px-2 py-2 rounded-[12px] bg-surface-light">
-            <span className="flex-1 min-w-0 text-[13px] text-text truncate">{ingredientLabel(ingredient)}</span>
+        // Hàng tùy chọn: 3 cột [tên + ✕ | ô nhập (giữa hàng) | kết quả (sát mép phải)] — cột kết quả cùng mép với định lượng chính phía trên.
+        <div className={`${inExtra ? 'grid grid-cols-[1fr_auto_minmax(4.25rem,auto)] pl-0 pr-3 max-[329px]:pr-2' : 'flex px-3 max-[329px]:px-2'} items-center gap-2 max-[329px]:gap-1.5 py-2 rounded-[12px] bg-surface-light`}>
+            {inExtra ? (
+                <div className="min-w-0 flex items-center gap-0">
+                    {removeEl}
+                    <span className="min-w-0 text-[13px] text-text truncate">{ingredientLabel(ingredient)}</span>
+                </div>
+            ) : (
+                <span className="flex-1 min-w-0 text-[13px] text-text truncate">{ingredientLabel(ingredient)}</span>
+            )}
             {allowNegative && canEdit ? (
                 // ± + ô số gom 1 khối (bàn phím decimal trên mobile không có phím "-"). Dùng cho extra
                 // "bớt nguyên liệu". Nút dấu chặn mousedown để không blur→commit khi bấm.
-                <SignedBox negative={negative} onToggle={toggleSign} saved={saved} className="w-[96px] max-[329px]:w-[84px]">
+                <SignedBox negative={negative} onToggle={toggleSign} saved={saved} suffix={unit} className="w-[88px] max-[329px]:w-[80px]">
                     <input
                                 type="text"
                                 inputMode="decimal"
@@ -268,8 +286,10 @@ function FillRow({ ingredient, amount, unit, unitCost, canEdit, showCost, allowN
             {baseAmount != null ? (
                 // Tổng thực pha = định mức gốc + mức lệch của tùy chọn. Chỉ hiện ở extra;
                 // ô này mang luôn đơn vị nên hàng không lặp đơn vị lần nữa.
-                <span className="shrink-0 text-[11px] text-text-secondary tabular-nums">
-                    = {baseAmount + val} {unit}
+                <span className="shrink-0 justify-self-end flex items-baseline gap-1 text-[11px] text-text-secondary tabular-nums">
+                    <span>=</span>
+                    <span className="text-[13px] text-text">{baseAmount + val}</span>
+                    <span>{unit}</span>
                 </span>
             ) : (
                 <span className="text-[11px] text-text-secondary w-6 shrink-0">{unit}</span>
@@ -279,13 +299,7 @@ function FillRow({ ingredient, amount, unit, unitCost, canEdit, showCost, allowN
                     {val ? formatVND(val * unitCost) : ''}
                 </span>
             )}
-            {canEdit && (saved ? (
-                <span className="text-success text-[13px] font-bold shrink-0 w-5 flex items-center justify-center" aria-label="Đã lưu">✓</span>
-            ) : (
-                <button onClick={onRemove} className="text-danger/60 hover:text-danger text-[13px] shrink-0 w-5 flex items-center justify-center" title="Bỏ khỏi công thức">
-                    ✕
-                </button>
-            ))}
+            {!inExtra && removeEl}
         </div>
     )
 }

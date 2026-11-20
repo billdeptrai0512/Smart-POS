@@ -36,7 +36,6 @@ interface Props {
     extraHandlers: ExtraHandlers
     categoryOf: (ingredient: string) => string | null | undefined
     baseAmounts?: Record<string, number>
-    basePrice?: number
     /** Tùy chọn quán đã dùng ở món khác, đã quy sẵn lượng cho món này — bấm chip là tạo luôn. */
     suggestions?: ExtraSuggestion[]
 }
@@ -46,7 +45,7 @@ const LABEL = 'text-[11px] font-black uppercase tracking-widest text-text-second
 export default function ExtrasSection({
     extras, extraIngs, ingredientUnits, dbIngredients, canEdit,
     onAddExtra, onSaveSortOrder,
-    extraHandlers, categoryOf, baseAmounts, basePrice, suggestions = [],
+    extraHandlers, categoryOf, baseAmounts, suggestions = [],
 }: Props) {
     const [addingExtra, setAddingExtra] = useState(false)
     const [newExtraName, setNewExtraName] = useState('')
@@ -93,6 +92,20 @@ export default function ExtrasSection({
     return (
         // Tiêu đề "Tùy chọn thêm" đã là tên tab của trang; FAB thêm nổi ở đáy màn hình; kéo-thả sắp xếp bằng tay nắm ở mỗi card.
         <div className="pb-20">
+            {/* Định lượng chính (chỉ đọc) ở đầu trang: để thấy mỗi tùy chọn cộng/trừ gì lên công thức gốc. */}
+            {baseItems.length > 0 && (<>
+                <div className="space-y-1.5">
+                    {baseItems.map(b => (
+                        <div key={b.ingredient} className="flex items-center gap-2 max-[329px]:gap-1.5 px-3 max-[329px]:px-2 py-2 rounded-[12px] bg-surface-light">
+                            <span className="flex-1 min-w-0 text-[13px] text-text truncate">{ingredientLabel(b.ingredient)}</span>
+                            <span className="text-[13px] text-text tabular-nums">{b.amount}</span>
+                            <span className="text-[11px] text-text-secondary shrink-0">{b.unit}</span>
+                        </div>
+                    ))}
+                </div>
+                <hr className="my-3 border-border/40" />
+            </>)}
+
             {extras.length === 0 && !addingExtra && (
                 <p className="text-text-secondary text-[12px] text-center py-3 bg-surface-light/50 rounded-[12px] border border-border/40">
                     Chưa có tùy chọn nào (ví dụ: Lớn, Trà đá...)
@@ -120,7 +133,6 @@ export default function ExtrasSection({
                                         onAddExtraIngredients={(ingredient) => extraHandlers.addExtraIngredients(extra.id, ingredient)}
                                         categoryOf={categoryOf}
                                         baseAmounts={baseAmounts}
-                                        basePrice={basePrice}
                                     />
                                 )}
                             </SortableRow>
@@ -243,7 +255,7 @@ function SortableRow({ id, enabled, children }: { id: string; enabled: boolean; 
             {...listeners}
             onClick={e => e.stopPropagation()}
             aria-label="Kéo để sắp xếp"
-            className="shrink-0 w-6 h-8 -ml-2 flex items-center justify-center text-text-secondary/80 hover:text-text touch-none cursor-grab active:cursor-grabbing focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-[8px]"
+            className="shrink-0 w-8 h-8 flex items-center justify-center rounded-[12px] bg-bg border border-border/60 text-text-secondary hover:text-text touch-none cursor-grab active:cursor-grabbing active:bg-border/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         >
             <GripVertical size={16} />
         </button>

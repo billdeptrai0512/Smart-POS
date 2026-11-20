@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, type ReactNode } from 'react'
+import { useState, useMemo, type ReactNode } from 'react'
 import { ChevronDown, X } from 'lucide-react'
 import type { CartExtra } from '../../types/domain'
 import type { ExtraIngRow } from '../../utils/inventory'
@@ -22,8 +22,6 @@ interface Props {
     onAddExtraIngredients: (ingredient: CustomIngredient) => void
     categoryOf: (ingredient: string) => string | null | undefined
     baseAmounts?: Record<string, number>
-    /** Giá bán gốc của món — để hiện tổng "= giá món + tùy chọn". */
-    basePrice?: number
     /** Tay nắm kéo-thả sắp xếp, đặt bên trái tiêu đề. */
     handle?: ReactNode
 }
@@ -32,7 +30,7 @@ export default function ExtraCard({
     extra, extraIngs, ingredientUnits, dbIngredients, canEdit,
     onSaveName, onSavePrice, onDelete,
     onSaveExtraAmount, onDeleteExtraIngredient, onAddExtraIngredients,
-    categoryOf, baseAmounts, basePrice, handle,
+    categoryOf, baseAmounts, handle,
 }: Props) {
     const [addingIngredient, setAddingIngredient] = useState(false)
     const [collapsed, setCollapsed] = useState(true) // vào tab Tùy chọn thêm: mặc định thu gọn hết
@@ -47,7 +45,17 @@ export default function ExtraCard({
         <div className="bg-surface border border-border/60 rounded-[14px] px-4 max-[329px]:px-2 py-2.5 flex flex-col group">
             {/* Bấm cả hàng tiêu đề để thu/mở; tên (sửa), nút xóa, tay nắm kéo chặn nổi bọt nên không kích hoạt thu/mở. */}
             <div className="group/hdr flex items-center gap-2 cursor-pointer" onClick={() => setCollapsed(c => !c)}>
-                {handle}
+                {/* Thu gọn: tay nắm kéo; mở rộng: nút xóa thế chỗ tay nắm (không kéo-thả khi đang sửa). */}
+                {collapsed ? handle : canEdit && (
+                    <button
+                        onClick={e => { e.stopPropagation(); onDelete() }}
+                        className="shrink-0 w-8 h-8 flex items-center justify-center rounded-[12px] bg-bg border border-border/60 text-danger group-has-[input:focus]/hdr:hidden active:bg-danger/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-danger/40"
+                        title="Xóa tùy chọn"
+                        aria-label="Xóa tùy chọn"
+                    >
+                        <X size={16} />
+                    </button>
+                )}
                 <div className="flex-1 flex min-w-0">
                   <div className="min-w-0 max-w-full h-8 flex items-center rounded-[12px] bg-bg border border-border/60 px-3 focus-within:border-primary/60" onClick={e => e.stopPropagation()}>
                     <InlineEditor
@@ -64,20 +72,14 @@ export default function ExtraCard({
                   </div>
                 </div>
 
-                {collapsed && basePrice != null && (
-                    <span className="shrink-0 text-[14px] font-black text-success tabular-nums group-has-[input:focus]/hdr:hidden">{formatVND(basePrice + extra.price)}</span>
+                {/* Số cộng/trừ vào giá món (chỉ xem; sửa ở hàng GIÁ BÁN khi mở rộng). Chỉ hiện khi thu gọn (mở rộng thì hàng GIÁ BÁN thế chỗ); giá 0 thì ẩn. */}
+                {collapsed && extra.price !== 0 && (
+                    <span className="shrink-0 h-8 flex items-center rounded-lg bg-bg border border-border/60 overflow-hidden text-[12px] tabular-nums group-has-[input:focus]/hdr:hidden">
+                        <span className={`w-7 h-full flex items-center justify-center border-r border-border/60 text-[14px] font-bold ${extra.price < 0 ? 'bg-danger/10 text-danger' : 'bg-success/10 text-success'}`}>{extra.price < 0 ? '−' : '+'}</span>
+                        <span className="px-2 text-text">{formatVND(Math.abs(extra.price))}</span>
+                    </span>
                 )}
 
-                {canEdit && !collapsed && (
-                    <button
-                        onClick={e => { e.stopPropagation(); onDelete() }}
-                        className="shrink-0 w-8 h-8 flex items-center justify-center rounded-[12px] bg-bg border border-border/60 text-danger active:bg-danger/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-danger/40"
-                        title="Xóa tùy chọn"
-                        aria-label="Xóa tùy chọn"
-                    >
-                        <X size={16} />
-                    </button>
-                )}
                 <button
                     className="shrink-0 w-8 h-8 flex items-center justify-center rounded-[12px] bg-bg border border-border/60 text-text-secondary active:bg-border/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                     title={collapsed ? 'Mở rộng' : 'Thu nhỏ'}
@@ -107,7 +109,7 @@ export default function ExtraCard({
 
             <Collapse open={!collapsed}>
                 <div className="mt-2 border-t border-border/40 pt-2">
-                    <PriceRow price={extra.price} basePrice={basePrice} canEdit={canEdit} onSave={onSavePrice} />
+                    <PriceRow key={extra.price} price={extra.price} canEdit={canEdit} onSave={onSavePrice} />
                 </div>
             </Collapse>
 
@@ -127,31 +129,27 @@ export default function ExtraCard({
     )
 }
 
-// Hàng giá bán: cùng khuôn với hàng nguyên liệu (nền, ô ± + số, "= tổng"); ghi khi blur / bấm dấu.
-function PriceRow({ price, basePrice, canEdit, onSave }: { price: number; basePrice?: number; canEdit?: boolean; onSave: (v: number) => void }) {
+// Hàng giá bán: số cộng/trừ vào giá món (như ô nguyên liệu: ± + số). Chọn nhiều tùy chọn thì các số này cộng dồn,
+// nên không nhập "giá cuối". Ghi khi blur / Enter / bấm dấu.
+function PriceRow({ price, canEdit, onSave }: { price: number; canEdit?: boolean; onSave: (v: number) => void }) {
     const [negative, setNegative] = useState(price < 0)
     const [draft, setDraft] = useState(price ? formatVNDInput(String(Math.abs(price))) : '')
-    // Đồng bộ prop→state khi giá đổi từ nơi khác (như FillRow); chỉ chạy khi `price` đổi.
-    useEffect(() => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setNegative(price < 0)
-        setDraft(price ? formatVNDInput(String(Math.abs(price))) : '')
-    }, [price])
-
+    // Đồng bộ prop→state bằng `key` ở chỗ gọi (giá đổi thì dựng lại), không cần effect.
     const n = parseVNDInput(draft)
     const val = negative ? -n : n
     const commit = (v: number) => { if (v !== price) onSave(v) }
 
     return (
-        <div className="flex items-center gap-2 max-[329px]:gap-1.5 px-3 max-[329px]:px-2 py-2 rounded-[12px] bg-surface-light">
-            <span className="flex-1 min-w-0 text-[13px] text-text truncate uppercase">Giá bán</span>
+        <div className="flex items-center justify-between gap-2 px-3 max-[329px]:px-2 py-2 rounded-[12px] bg-surface-light">
+            <span className="text-[11px] font-bold uppercase text-text-secondary">Giá bán</span>
             {canEdit ? (
-                <SignedBox negative={negative} onToggle={() => { setNegative(!negative); if (n) commit(negative ? n : -n) }} suffix="đ" className="w-[104px] max-[329px]:w-[92px]">
+                <SignedBox negative={negative} onToggle={() => { setNegative(!negative); if (n) commit(negative ? n : -n) }} suffix="đ" className="w-[120px] max-[329px]:w-[104px]">
                     <input
                         type="text"
                         inputMode="decimal"
                         value={draft}
                         placeholder="—"
+                        aria-label="Giá bán"
                         onChange={e => setDraft(formatVNDInput(e.target.value))}
                         onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
                         onBlur={() => commit(val)}
@@ -160,9 +158,6 @@ function PriceRow({ price, basePrice, canEdit, onSave }: { price: number; basePr
                 </SignedBox>
             ) : (
                 <span className="text-[13px] text-text tabular-nums">{val > 0 ? '+' : val < 0 ? '-' : ''}{formatVND(Math.abs(val))}</span>
-            )}
-            {basePrice != null && (
-                <span className="shrink-0 text-[11px] text-text-secondary tabular-nums">= <span className="text-[14px] font-black text-success">{formatVND(basePrice + val)}</span></span>
             )}
         </div>
     )

@@ -439,7 +439,6 @@ export default function RecipeIngredientPage() {
                     extraHandlers={extraHandlers}
                     categoryOf={categoryOf}
                     baseAmounts={baseAmounts}
-                    basePrice={product.price}
                     suggestions={suggestions}
                 />}
 
