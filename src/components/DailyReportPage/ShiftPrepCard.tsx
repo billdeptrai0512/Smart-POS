@@ -144,7 +144,7 @@ export default function ShiftPrepCard({
                         // stockGate: kho còn ít hơn nhu cầu → nhãn ghi đúng số lấy được (confirmPrep kẹp theo kho), không hứa quá.
                         const short = stockGate && it.warehouse != null && it.warehouse < it.need
                         const qty = it.done ? '' : it.sent ? fmt(it.sent) : short && it.warehouse! > 0 ? fmt(it.warehouse!) : it.needPacks > 0 ? formatPackCount(it.needPacks, it.packUnit, it.pack2) : `${it.need} ${it.unit}`
-                        const ctaLabel = `${packVerb} ${qty}`
+                        const ctaLabel = `${packVerb}${it.kind === 'depleted' ? ' thêm' : ''} ${qty}`
 
                         // Card Soạn (skipMode): nút bỏ qua (✕/↩) nằm ngay cạnh tên nguyên liệu; viên thuốc ở cuối dòng
                         // vừa là CTA "Lấy N …" vừa là trạng thái tick (cam → xanh "✓ Đã lấy N …" → xám "Bỏ qua"). Viên là span
@@ -221,17 +221,17 @@ export default function ShiftPrepCard({
                                                     Kho tổng chia: {fmt(it.sent)}{it.sentPacked && ` ✓ đã soạn${it.by ? ` bởi ${it.by}` : ''}`}{isDone && it.restock !== it.sent && ` · nhận ${fmt(it.restock)}`}
                                                 </span>
                                             )}
-                                            {isDone && it.kind !== 'depleted' && it.sent == null && it.fillQty != null && (it.taken ?? it.restock) !== it.fillQty && (
-                                                <span className="block text-warning font-bold">Gợi ý: {fmt(it.fillQty)}</span>
-                                            )}
                                             {it.reason && <span className="block text-warning font-bold">{it.reason}</span>}
                                             {meta?.over && <span className="block text-danger font-bold">Vượt kho — chỉ lấy tối đa {fmt(meta.out)}</span>}
                                             {it.minCounter > 0 && !isDone && <span className="block">Tồn quầy tối thiểu: {fmt(it.minCounter)}</span>}
                                             {/* Đã lấy thêm → "đầu kỳ + phần vừa lấy" trên một dòng. */}
                                             {muted && it.restock > 0 ? (
-                                                <span className="block">Tồn quầy: {it.tare > 0 && <>{it.tare} + </>}{fmt(it.have)} + <span className="text-success font-bold">{fmt(it.restock)}</span></span>
+                                                <span className="block">Tồn quầy: {fmt(it.have)}{it.tare > 0 && <> + ({it.tare} {it.unit})</>} + <span className="text-success font-bold">{fmt(it.restock)}</span></span>
                                             ) : (
-                                                <span className="block">{it.haveLabel || haveLabel}: {it.tare > 0 && <>{it.tare} + </>}{fmt(it.have)}</span>
+                                                <span className="block">{it.haveLabel || haveLabel}: {fmt(it.have)}{it.tare > 0 && <> + ({it.tare} {it.unit})</>}</span>
+                                            )}
+                                            {isDone && it.kind !== 'depleted' && it.sent == null && it.fillQty != null && (it.taken ?? it.restock) !== it.fillQty && (
+                                                <span className="block text-warning font-bold">Nên chuẩn bị: {fmt(it.fillQty)}</span>
                                             )}
                                             {/* Món đã xử lý → kể tiếp hành trình trong ca (mỗi số một dòng) để số cuối ca không đứng một mình.
                                                 Món còn chờ lấy chỉ có dòng đầu ca (đã đếm 0 mà nút vẫn "Lấy" thì "cuối ca" gây mâu thuẫn). */}
