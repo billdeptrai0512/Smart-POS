@@ -87,7 +87,7 @@ export default function ShiftPrepCard({
     // Card Mua: trong nhóm còn việc, hết hẳn (kho = 0) lên trước, rồi dưới tối thiểu, rồi còn lại — mắt đọc từ gấp nhất xuống.
     const low = (it: Item) => it.warehouse != null && it.warehouse < it.minStock
     const tier = (it: Item) => skipMode ? 0 : it.warehouse === 0 ? 0 : low(it) ? 1 : 2
-    const ordered = [...rows].sort((a, b) => Number(isUrgent(a)) - Number(isUrgent(b)) || Number(handledOnOpen.has(a.ingredient)) - Number(handledOnOpen.has(b.ingredient)) || tier(a) - tier(b))
+    const ordered = [...rows].sort((a, b) => Number(isUrgent(a)) - Number(isUrgent(b)) || Number(!!a.locked || handledOnOpen.has(a.ingredient)) - Number(!!b.locked || handledOnOpen.has(b.ingredient)) || tier(a) - tier(b))
     const [groupToggled, setGroupToggled] = useState<Record<string, boolean>>({}) // nhóm nào đã được người dùng bấm mở/thu (khoá = isUrgent)
     const [editing, setEditing] = useState<string | null>(null)
     const [draft, setDraft] = useState(0) // số đang sửa (đơn vị gốc) của dòng `editing`
@@ -114,7 +114,8 @@ export default function ShiftPrepCard({
                 <div className="flex flex-col">
                     {ordered.map((it, i) => {
                         if (!skipMode && it.done && !doneOpen && ordered[i - 1]?.done) return null
-                        const isDone = !!checked[it.ingredient]
+                        const isDone = !!it.locked || !!checked[it.ingredient]
+                        const rowKey = `${it.kind ?? 'prep'}:${it.ingredient}` // món soạn sáng + dòng "Cần lấy thêm" cùng tên không được trùng key
                         const isSkipped = !isDone && !!skipped[it.ingredient]
                         const muted = isDone || isSkipped || !!it.done // đã xử lý (nhập, bỏ qua hoặc đã mua đủ) → mờ + gạch ngang
                         // Số lượng theo quy cách đóng gói ("2 hộp", "1 bịch + 350 g"), cùng kiểu với viên CTA; không có quy cách thì đơn vị gốc.
@@ -157,7 +158,7 @@ export default function ShiftPrepCard({
                             // Nhóm thu gọn được (chỉ khi có tiêu đề): mặc định mở, trừ khi lúc mở card cả nhóm đã xử lý xong.
                             const urgent = isUrgent(it)
                             const group = ordered.filter(o => isUrgent(o) === urgent)
-                            const groupOpen = !split || (groupToggled[String(urgent)] ?? !group.every(o => handledOnOpen.has(o.ingredient)))
+                            const groupOpen = !split || (groupToggled[String(urgent)] ?? !group.every(o => o.locked || handledOnOpen.has(o.ingredient)))
                             const heading = groupStart && (
                                 <button
                                     type="button"
@@ -166,25 +167,26 @@ export default function ShiftPrepCard({
                                 >
                                     <span className="flex-1">{urgent ? 'Cần lấy thêm' : 'Soạn đầu ca'}</span>
                                     {/* Đã xử lý / tổng của nhóm — thu gọn rồi vẫn thấy còn bao nhiêu việc. */}
-                                    <span className="tabular-nums opacity-70">{group.filter(o => checked[o.ingredient] || skipped[o.ingredient] || o.done).length}/{group.length}</span>
+                                    <span className="tabular-nums opacity-70">{group.filter(o => o.locked || checked[o.ingredient] || skipped[o.ingredient] || o.done).length}/{group.length}</span>
                                     {groupOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                                 </button>
                             )
-                            if (!groupOpen) return heading && <Fragment key={it.ingredient}>{heading}</Fragment>
+                            if (!groupOpen) return heading && <Fragment key={rowKey}>{heading}</Fragment>
                             // Đang sửa số: dòng thành div (ô nhập không được nằm trong button) và ô nhập thay cho chip ✎ + viên CTA.
                             // Kho = 0: không có gì để lấy. Có thể hết thật, hoặc đã mua bù mà chưa nhập sổ → viên thành "Nhập kho", mở trang nguyên liệu để nhập/mua.
                             const pending = !isDone && !isSkipped
                             const noStock = pending && short && it.warehouse! <= 0
-                            const editable = pending && !noStock
+                            const editable = pending && !noStock && !it.locked
                             const ed = editing === it.ingredient && !isDone
+                            const inert = ed || !!it.locked
                             const meta = ed ? qtyMeta(it, draft, unitKey) : null   // chỉ dòng đang sửa mới cần
                             const shown = meta ? Math.round(draft / meta.step * 10) / 10 : 0
-                            const Row = (ed ? 'div' : 'button') as 'button'
+                            const Row = (inert ? 'div' : 'button') as 'button'
                             return (
-                                <Fragment key={it.ingredient}>
+                                <Fragment key={rowKey}>
                                 {heading}
                                 <Row
-                                    {...(ed ? {} : { type: 'button' as const, onClick: () => noStock ? onOpen?.(it.ingredient) : onToggle?.(it.ingredient) })}
+                                    {...(inert ? {} : { type: 'button' as const, onClick: () => noStock ? onOpen?.(it.ingredient) : onToggle?.(it.ingredient) })}
                                     className={`flex items-start gap-3 py-2.5 ${groupEnd ? '' : 'border-b border-border/20'} last:border-0 text-left active:scale-[0.99] transition ${isSkipped ? 'opacity-60' : ''}`}
                                 >
                                     <div className="flex-1 min-w-0">
@@ -193,7 +195,7 @@ export default function ShiftPrepCard({
                                                 {ingredientLabel(it.ingredient)}
                                             </span>
                                             {/* Đã tick xong thì không còn gì để "bỏ qua" — ẩn ✕; món đã bỏ qua vẫn giữ ↩ hoàn tác. */}
-                                            {!isDone && onSkip && (
+                                            {!isDone && onSkip && !it.locked && (
                                                 <span
                                                     onClick={(e) => { e.stopPropagation(); onSkip(it.ingredient) }}
                                                     title={isSkipped ? 'Hoàn tác bỏ qua' : 'Bỏ qua — không cần lấy'}
@@ -334,7 +336,7 @@ export default function ShiftPrepCard({
                         )
                         const firstDone = !!it.done && !ordered[i - 1]?.done
                         return (
-                            <Fragment key={it.ingredient}>
+                            <Fragment key={rowKey}>
                             {firstDone && !expandDone && (
                                 <button
                                     type="button"

@@ -164,7 +164,7 @@ export function usePrepNotice() {
     const checked = useMemo(
         () => Object.fromEntries(items.map(it => [it.ingredient, isPrepDone(it, restockInputs, skipped)])),
         [items, restockInputs, skipped])
-    const pendingCount = items.filter(it => !checked[it.ingredient]).length + batchItems.length
+    const pendingCount = items.filter(it => !it.locked && !checked[it.ingredient]).length + batchItems.length
     const view = useSnapshot('pos', { items, batchItems, checked, skipped, pendingCount }, ready)
 
     // Autosave debounce — cùng kiểu triggerAutoSave của /report: gom nhiều tick thành 1 lần đẩy,
@@ -198,7 +198,7 @@ export function usePrepNotice() {
     // bịch, kẹp theo kho). Món đã hết giữa ca: CỘNG THÊM 1 lần vào Nhập thêm (không bỏ tick — Lý thuyết
     // > 0 lại thì tự rớt khỏi danh sách).
     const confirmPrep = useCallback((ingredient: string, qty?: number) => {
-        const it = items.find(i => i.ingredient === ingredient)
+        const it = items.find(i => i.ingredient === ingredient && !i.locked)
         if (!it) return
         const filled = isPrepFilled(restockInputs[ingredient])
         const noStock = () => showToast(`${ingredientLabel(ingredient)}: kho dự trữ đã hết, nhập kho trước`, 'error')

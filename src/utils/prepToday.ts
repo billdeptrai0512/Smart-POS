@@ -34,6 +34,7 @@ export interface PrepItem {
     // buildPrepTodayList: kho tổng đã chốt chia cho chi nhánh này hôm nay (+ đã tick "soạn xong" chưa)
     sent?: number
     sentPacked?: boolean
+    locked?: boolean // dòng soạn đầu ca đã lấy nhưng món lại hết giữa ca: giữ làm lịch sử, không bấm được (dòng "Cần lấy thêm" cùng tên là dòng thao tác)
     by?: string // tên người đã xác nhận soạn (kho tổng → "Soạn cho ngày mai"), hiện cạnh dòng "đã soạn"
 }
 
@@ -201,7 +202,13 @@ export function buildDepletedList({ ingredientsList, openingInputs, openingStock
 export function mergePrepItems(prepList: PrepItem[], depletedList: PrepItem[], restockInputs: Inputs) {
     const dep = new Map(depletedList.map(d => [d.ingredient, d]))
     const inPrep = new Set(prepList.map(p => p.ingredient))
-    const items = prepList.map(p => (dep.has(p.ingredient) && isPrepFilled(restockInputs[p.ingredient]) ? dep.get(p.ingredient)! : p))
+    // Món soạn sáng đã lấy mà lại hết: GIỮ dòng sáng (khoá, đã lấy) ở "Soạn đầu ca" và thêm dòng "Cần lấy thêm" — không thay thế, kẻo mất dấu lần lấy buổi sáng.
+    const items: PrepItem[] = []
+    for (const p of prepList) {
+        const d = dep.get(p.ingredient)
+        if (d && isPrepFilled(restockInputs[p.ingredient])) items.push({ ...p, locked: true, restock: r1(Math.max(0, (p.restock ?? 0) - (d.taken ?? 0))) }, d)
+        else items.push(p)
+    }
     for (const d of depletedList) if (!inPrep.has(d.ingredient)) items.push(d)
     return items
 }
