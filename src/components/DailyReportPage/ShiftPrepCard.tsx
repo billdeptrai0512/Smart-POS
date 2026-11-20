@@ -226,7 +226,7 @@ export default function ShiftPrepCard({
                                             )}
                                             {it.reason && <span className="block text-warning font-bold">{it.reason}</span>}
                                             {meta?.over && <span className="block text-danger font-bold">Vượt kho — chỉ lấy tối đa {fmt(meta.out)}</span>}
-                                            {it.minCounter > 0 && <span className="block">Tồn quầy tối thiểu: {fmt(it.minCounter)}</span>}
+                                            {it.minCounter > 0 && !isDone && <span className="block">Tồn quầy tối thiểu: {fmt(it.minCounter)}</span>}
                                             {/* Đã lấy thêm → "đầu kỳ + phần vừa lấy" trên một dòng. */}
                                             {muted && it.restock > 0 ? (
                                                 <span className="block">Tồn quầy: {it.tare > 0 && <>{it.tare} + </>}{fmt(it.have)} + <span className="text-success font-bold">{fmt(it.restock)}</span></span>
