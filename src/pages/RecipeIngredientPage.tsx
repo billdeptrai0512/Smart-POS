@@ -13,7 +13,6 @@ import {
     insertProductExtra,
     updateProductExtraName,
     updateProductExtraPrice,
-    updateProductExtraSticky,
     updateExtrasSortOrder,
     deleteProductExtra,
     removeProductFromAddress,
@@ -260,14 +259,6 @@ export default function RecipeIngredientPage() {
         })
     }
 
-    async function toggleExtraSticky(extraId: string, nextValue: boolean) {
-        await withSaving('Cập nhật sticky', async () => {
-            await updateProductExtraSticky(extraId, nextValue)
-            setExtras(prev => prev.map(e => e.id === extraId ? { ...e, is_sticky: nextValue } : e))
-            refreshProducts?.()
-        })
-    }
-
     async function deleteExtra(extraId: string, extraName: string) {
         if (!await confirm({ title: `Xóa tùy chọn "${extraName}"?`, danger: true, confirmLabel: 'Xóa' })) return
         await withSaving('Xóa tùy chọn', async () => {
@@ -383,7 +374,6 @@ export default function RecipeIngredientPage() {
     const extraHandlers: ExtraHandlers = {
         saveName: saveExtraName,
         savePrice: saveExtraPrice,
-        toggleSticky: toggleExtraSticky,
         deleteExtra,
         saveExtraAmount,
         deleteExtraIngredient: deleteExtraIng,
@@ -450,6 +440,7 @@ export default function RecipeIngredientPage() {
                     extraHandlers={extraHandlers}
                     categoryOf={categoryOf}
                     baseAmounts={baseAmounts}
+                    basePrice={product.price}
                     suggestions={suggestions}
                 />}
 

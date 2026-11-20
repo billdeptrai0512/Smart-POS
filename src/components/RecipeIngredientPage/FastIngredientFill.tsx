@@ -27,6 +27,8 @@ interface Props {
     /** Có cặp này = cha điều khiển bảng thêm nguyên liệu và tự đặt nút "Thu gọn" (ExtraCard thay vào chỗ nút Xóa tùy chọn). */
     addOpen?: boolean
     onAddOpenChange?: (open: boolean) => void
+    /** Đặt nút/bảng thêm nguyên liệu lên trên danh sách thay vì dưới. */
+    addOnTop?: boolean
 }
 
 const CATS = [
@@ -42,7 +44,7 @@ export default function FastIngredientFill({
     entries, dbIngredients, getUnit, categoryOf = () => 'main', groups, groupIdOf,
     ingredientCosts, canEdit, showCost = false, allowNegative = false,
     baseAmounts, onSetAmount, onRemove, onAddCustom,
-    addOpen: addOpenProp, onAddOpenChange,
+    addOpen: addOpenProp, onAddOpenChange, addOnTop,
 }: Props) {
     const [revealed, setRevealed] = useState<Set<string>>(() => new Set()) // chip-tapped, not yet saved
     const [creatingCat, setCreatingCat] = useState<string | null>(null) // 'main' | 'packaging' while typing a new name
@@ -77,8 +79,8 @@ export default function FastIngredientFill({
         return [...byGroup, { id: 'none', name: 'Chưa phân nhóm', items: items.filter(k => !groups.some(g => g.id === groupIdOf(k))) }].filter(b => b.items.length)
     }
 
-    return (
-        <div className="space-y-2">
+    const rowsEl = (
+        <>
             {rowKeys.length > 0 && (
                 <div className="space-y-1.5">
                     {rowKeys.map(k => (
@@ -99,7 +101,10 @@ export default function FastIngredientFill({
                     ))}
                 </div>
             )}
-
+        </>
+    )
+    const addEl = (
+        <>
             {canEdit && !addOpen && (
                 <button onClick={() => setAddOpen(true)}
                     className="w-full text-[12px] border border-dashed border-border/70 text-text-secondary px-2.5 py-1.5 rounded-lg font-medium hover:text-primary hover:border-primary/50 transition-colors">
@@ -164,6 +169,12 @@ export default function FastIngredientFill({
                     )}
                 </div>
             ))}
+        </>
+    )
+
+    return (
+        <div className="space-y-2">
+            {addOnTop ? <>{addEl}{rowsEl}</> : <>{rowsEl}{addEl}</>}
         </div>
     )
 }

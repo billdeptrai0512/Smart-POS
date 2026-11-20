@@ -1,3 +1,4 @@
+import { ArrowUpDown, Plus } from 'lucide-react'
 import { useState } from 'react'
 import type { CartExtra } from '../../types/domain'
 import type { ExtraIngredients } from '../../utils/inventory'
@@ -13,7 +14,6 @@ export interface BaseItem { ingredient: string; amount: number; unit: string }
 export interface ExtraHandlers {
     saveName: (extraId: string, name: string) => void
     savePrice: (extraId: string, price: number) => void
-    toggleSticky: (extraId: string, sticky: boolean) => void
     deleteExtra: (extraId: string, name: string) => void
     saveExtraAmount: (extraId: string, ingredient: string, amount: number) => void
     deleteExtraIngredient: (extraId: string, ingredient: string) => void
@@ -33,6 +33,7 @@ interface Props {
     extraHandlers: ExtraHandlers
     categoryOf: (ingredient: string) => string | null | undefined
     baseAmounts?: Record<string, number>
+    basePrice?: number
     /** Tùy chọn quán đã dùng ở món khác, đã quy sẵn lượng cho món này — bấm chip là tạo luôn. */
     suggestions?: ExtraSuggestion[]
 }
@@ -42,7 +43,7 @@ const LABEL = 'text-[11px] font-black uppercase tracking-widest text-text-second
 export default function ExtrasSection({
     extras, extraIngs, ingredientUnits, dbIngredients, canEdit, saving,
     onAddExtra, onSaveSortOrder,
-    extraHandlers, categoryOf, baseAmounts, suggestions = [],
+    extraHandlers, categoryOf, baseAmounts, basePrice, suggestions = [],
 }: Props) {
     const [addingExtra, setAddingExtra] = useState(false)
     const [newExtraName, setNewExtraName] = useState('')
@@ -79,19 +80,8 @@ export default function ExtrasSection({
     const closeAddExtra = () => { setAddingExtra(false); setNewExtraName(''); setNewExtraPrice(''); setPicked(new Set()) }
 
     return (
-        // Tiêu đề "Tùy chọn thêm" đã là tên tab của trang, nên chỉ còn nút Sắp xếp.
-        <div>
-            {canEdit && extras.length > 1 && !sorting && (
-                <div className="flex justify-end mb-3">
-                    <button
-                        onClick={beginSort}
-                        className="text-[11px] text-text-dim hover:text-primary font-bold transition-colors"
-                    >
-                        Sắp xếp
-                    </button>
-                </div>
-            )}
-
+        // Tiêu đề "Tùy chọn thêm" đã là tên tab của trang; Sắp xếp (trái) + FAB thêm (phải) nổi ở đáy màn hình.
+        <div className="pb-20">
             {sorting && (
                 <SortMode
                     sortedExtras={sortedExtras}
@@ -119,18 +109,17 @@ export default function ExtrasSection({
                         canEdit={canEdit}
                         onSaveName={(v) => extraHandlers.saveName(extra.id, v)}
                         onSavePrice={(v) => extraHandlers.savePrice(extra.id, v)}
-                        onToggleSticky={() => extraHandlers.toggleSticky(extra.id, !extra.is_sticky)}
                         onDelete={() => extraHandlers.deleteExtra(extra.id, extra.name)}
                         onSaveExtraAmount={(ing, v) => extraHandlers.saveExtraAmount(extra.id, ing, v)}
                         onDeleteExtraIngredient={(ing) => extraHandlers.deleteExtraIngredient(extra.id, ing)}
                         onAddExtraIngredients={(ingredient) => extraHandlers.addExtraIngredients(extra.id, ingredient)}
                         categoryOf={categoryOf}
                         baseAmounts={baseAmounts}
+                        basePrice={basePrice}
                     />
                 ))}
             </div>
-
-            {canEdit && !sorting && (addingExtra ? (
+            {canEdit && !sorting && addingExtra && (
                 <div className="mt-2 bg-surface border border-border/60 rounded-[14px] p-4 flex flex-col gap-4">
                     <span className="text-[13px] font-black text-text uppercase tracking-wide">Thêm tùy chọn</span>
                     <hr className="-mx-4 border-border/40" />
@@ -214,14 +203,32 @@ export default function ExtrasSection({
                         </button>
                     </div>
                 </div>
-            ) : (
-                <button
-                    onClick={() => setAddingExtra(true)}
-                    className="w-full text-[12px] text-primary/70 hover:text-primary font-medium mt-2 transition-colors bg-surface border border-border/60 rounded-[14px] px-4 py-3 text-center"
-                >
-                    + Thêm tùy chọn
-                </button>
-            ))}
+            )}
+
+            {/* Sắp xếp (trái) + FAB thêm (phải) — cùng kiểu với /history (chi phí) & /discounts. */}
+            {canEdit && !sorting && !addingExtra && (
+                <div className="fixed bottom-0 left-0 right-0 max-w-lg lg:max-w-[1280px] mx-auto pointer-events-none z-50">
+                    <div className="flex items-center justify-between px-4 lg:px-8 pb-[max(env(safe-area-inset-bottom),16px)] [@media(display-mode:standalone)]:pb-[max(env(safe-area-inset-bottom),28px)]">
+                        {extras.length > 1 ? (
+                            <button
+                                onClick={beginSort}
+                                aria-label="Sắp xếp"
+                                title="Sắp xếp"
+                                className="pointer-events-auto bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center justify-center text-text-secondary hover:text-primary active:scale-95 transition-all shadow-sm"
+                            >
+                                <ArrowUpDown size={18} />
+                            </button>
+                        ) : <span />}
+                        <button
+                            onClick={() => setAddingExtra(true)}
+                            aria-label="Thêm tùy chọn"
+                            className="pointer-events-auto bg-primary rounded-[12px] px-4 py-2.5 flex items-center justify-center text-bg hover:bg-primary/90 active:scale-95 transition-all shadow-sm"
+                        >
+                            <Plus size={18} />
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
