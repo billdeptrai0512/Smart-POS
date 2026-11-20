@@ -45,10 +45,11 @@ export default function ExtraCard({
 
     return (
         <div className="bg-surface border border-border/60 rounded-[14px] px-4 max-[329px]:px-2 py-2.5 flex flex-col group">
-            <div className="flex items-center gap-2">
+            {/* Bấm cả hàng tiêu đề để thu/mở; tên (sửa), nút xóa, tay nắm kéo chặn nổi bọt nên không kích hoạt thu/mở. */}
+            <div className="group/hdr flex items-center gap-2 cursor-pointer" onClick={() => setCollapsed(c => !c)}>
                 {handle}
                 <div className="flex-1 flex min-w-0">
-                  <div className="min-w-0 max-w-full h-8 flex items-center rounded-[12px] bg-bg border border-border/60 px-3">
+                  <div className="min-w-0 max-w-full h-8 flex items-center rounded-[12px] bg-bg border border-border/60 px-3 focus-within:border-primary/60" onClick={e => e.stopPropagation()}>
                     <InlineEditor
                         value={extra.name}
                         canEdit={canEdit}
@@ -57,19 +58,19 @@ export default function ExtraCard({
                         parse={(s) => s.trim()}
                         renderDisplay={(v) => <span className="text-[13px] font-bold text-text uppercase truncate">{v}</span>}
                         displayClassName="text-[13px] font-bold text-text uppercase truncate"
-                        inputWidthClassName="flex-1"
-                        inputClassName="text-[13px] font-bold text-text uppercase"
+                        inputWidthClassName="w-[14ch] field-sizing-content max-w-full"
+                        inputClassName="!border-0 !bg-transparent !px-0 !py-0 !text-left text-[13px] font-bold text-text uppercase"
                     />
                   </div>
                 </div>
 
                 {collapsed && basePrice != null && (
-                    <span className="shrink-0 text-[14px] font-black text-success tabular-nums">{formatVND(basePrice + extra.price)}</span>
+                    <span className="shrink-0 text-[14px] font-black text-success tabular-nums group-has-[input:focus]/hdr:hidden">{formatVND(basePrice + extra.price)}</span>
                 )}
 
-                {canEdit && (
+                {canEdit && !collapsed && (
                     <button
-                        onClick={onDelete}
+                        onClick={e => { e.stopPropagation(); onDelete() }}
                         className="shrink-0 w-8 h-8 flex items-center justify-center rounded-[12px] bg-bg border border-border/60 text-danger active:bg-danger/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-danger/40"
                         title="Xóa tùy chọn"
                         aria-label="Xóa tùy chọn"
@@ -78,7 +79,6 @@ export default function ExtraCard({
                     </button>
                 )}
                 <button
-                    onClick={() => setCollapsed(c => !c)}
                     className="shrink-0 w-8 h-8 flex items-center justify-center rounded-[12px] bg-bg border border-border/60 text-text-secondary active:bg-border/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                     title={collapsed ? 'Mở rộng' : 'Thu nhỏ'}
                     aria-label={collapsed ? 'Mở rộng' : 'Thu nhỏ'}

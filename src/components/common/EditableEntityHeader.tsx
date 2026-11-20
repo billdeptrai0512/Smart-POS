@@ -58,7 +58,7 @@ export default function EditableEntityHeader({
                             <div className="text-[12px] font-bold text-text-secondary leading-none mt-1 w-full">{subtitle}</div>
                         ) : onSavePrice && (
                             <div className="flex items-center justify-center gap-1.5 text-[12px] font-bold text-text-secondary leading-none mt-1 w-full">
-                                <span>{priceLabel}</span>
+                                <span className="uppercase">{priceLabel}</span>
                                 <InlineEditor
                                     value={price}
                                     canEdit={canEdit}

@@ -241,6 +241,7 @@ function SortableRow({ id, enabled, children }: { id: string; enabled: boolean; 
             ref={setActivatorNodeRef}
             {...attributes}
             {...listeners}
+            onClick={e => e.stopPropagation()}
             aria-label="Kéo để sắp xếp"
             className="shrink-0 w-6 h-8 -ml-2 flex items-center justify-center text-text-secondary/80 hover:text-text touch-none cursor-grab active:cursor-grabbing focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-[8px]"
         >
