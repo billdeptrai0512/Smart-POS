@@ -369,7 +369,6 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
                         periodMadeMap={periodMadeMap}
                         consumptionBreakdown={consumptionBreakdown}
                         ingredientToProduct={ingredientToProduct}
-                        isSubmitting={isSaving}
                         baselineInputs={layoutRef.current.snapshot}
                         baselineVersion={layoutRef.current.version}
                         onOpeningChange={inventory.onOpeningChange}

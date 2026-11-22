@@ -56,13 +56,12 @@ describe('tồn quầy ít nhất (min_counter_stock)', () => {
         expect(out[0].need).toBe(400)
         expect(out[0].reason).toBeUndefined()
     })
-    it('Soạn hôm nay: mang hành trình trong ca (lấy thêm, số đếm cuối ca trừ bì); have/need vẫn theo đầu ca', () => {
+    it('Soạn hôm nay: mang hành trình lấy thêm trong ca; have/need vẫn theo đầu ca', () => {
         const args = { ...base, ingredientsList: [{ ...coffee, tare_weight: 20 }], openingStock: { cà_phê: 120 }, usedMap: {}, lastWeekUsedMap: { cà_phê: 500 } }
         const before = buildPrepTodayList(args)[0]
         expect(before.restock).toBeUndefined()
-        expect(before.counted).toBeUndefined()
-        const after = buildPrepTodayList({ ...args, restockInputs: { cà_phê: '300' }, inventoryInputs: { cà_phê: '70' } })[0]
-        expect(after).toMatchObject({ have: before.have, need: before.need, restock: 300, counted: 50 })
+        const after = buildPrepTodayList({ ...args, restockInputs: { cà_phê: '300' } })[0]
+        expect(after).toMatchObject({ have: before.have, need: before.need, restock: 300 })
     })
     it('Hết giữa ca: còn hàng nhưng dưới sàn quầy → báo "sắp hết"', () => {
         const out = buildDepletedList({ ...withMin(300), restockInputs: { cà_phê: '1000' }, usedMap: { cà_phê: 900 } })
@@ -86,13 +85,14 @@ describe('mergePrepItems / isPrepDone', () => {
         expect(isPrepDone(prep[0], { cà_phê: '1000' }, {})).toBe(true)
         expect(isPrepDone(prep[0], {}, {})).toBe(false)
     })
-    it('đã tick sáng nay nhưng hết giữa ca → quay lại danh sách, chưa xong', () => {
+    it('đã tick sáng nay nhưng hết giữa ca → giữ dòng sáng (khoá) + thêm dòng Cần lấy thêm chưa xong', () => {
         const restockInputs = { cà_phê: '1000' }
         const depleted = buildDepletedList({ ...base, openingStock: { cà_phê: 0 }, restockInputs, usedMap: { cà_phê: 1000 } })
         const items = mergePrepItems(prep, depleted, restockInputs)
-        expect(items).toHaveLength(1)
-        expect(items[0].kind).toBe('depleted')
-        expect(isPrepDone(items[0], restockInputs, {})).toBe(false)
+        expect(items).toHaveLength(2)
+        expect(items[0].locked).toBe(true) // b3c07e3: không thay thế, giữ dấu lần lấy buổi sáng
+        expect(items[1].kind).toBe('depleted')
+        expect(isPrepDone(items[1], restockInputs, {})).toBe(false)
     })
     it('bỏ qua luôn tính xong, kể cả món đang hết', () => {
         expect(isPrepDone({ ingredient: 'cà_phê', kind: 'depleted' }, {}, { cà_phê: true })).toBe(true)

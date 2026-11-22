@@ -17,7 +17,8 @@ import { useOnboardingProgress } from '../../hooks/useOnboardingProgress'
 import HubBuyNotice, { HubBuyBody } from './HubBuyNotice'
 import NoticeBar from '../common/NoticeBar'
 import NoticeSheet from '../common/NoticeSheet'
-import { DebtList, useDebtPay, useIngredientDebts } from './DebtSection'
+import { DebtList } from './DebtSection'
+import { useDebtPay, useIngredientDebts } from '../../hooks/useIngredientDebts'
 
 // Dải notice "Bổ sung tồn kho" ở đỉnh /inventory (Tồn kho): NVL/bao bì cần MUA thêm để đủ bán ngày
 // mai (target = max(dự báo mai, tồn tối thiểu) − tổng tồn kho + quầy). Bấm → danh sách; nút "Mua N …"

@@ -29,3 +29,19 @@ export async function fetchAdminBranchStages() {
     if (error) throw error
     return data as BranchStages
 }
+
+// Sức khoẻ vận hành đo từ DB (admin_ops_health, migration 20261121). Ném lỗi để caller tự ẩn thẻ khi chưa apply.
+export interface OpsHealth {
+    orders_by_day: { d: string; n: number }[]
+    orders_today: number
+    last_order_at: string | null
+    deleted_rate_7d: number | null
+    intents_stuck: number
+    intents_review: number
+    unclosed_yesterday: number
+}
+export async function fetchOpsHealth() {
+    const { data, error } = await supabase.rpc('admin_ops_health')
+    if (error) throw error
+    return data as OpsHealth
+}

@@ -175,7 +175,6 @@ export default function PastInventoryEditor({
                 madeMap={madeMap}
                 consumptionBreakdown={consumptionBreakdown}
                 ingredientToProduct={ingredientToProduct}
-                isSubmitting={isSaving}
                 readOnly={readOnly}
                 lockWarehouseInputs={true}
                 baselineInputs={baselineInputs}

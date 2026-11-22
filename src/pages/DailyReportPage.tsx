@@ -27,7 +27,8 @@ import { useDateScope } from '../hooks/useDateScope'
 import { goToMenuStep } from '../utils/menuSequence'
 import { useTabRoute } from '../hooks/useTabRoute'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
-import CashFlowCard, { slowScrollTo } from '../components/DailyReportPage/CashFlowCard'
+import CashFlowCard from '../components/DailyReportPage/CashFlowCard'
+import { slowScrollTo } from '../utils/slowScroll'
 import ExpenseEditorModal from '../components/DailyReportPage/ExpenseEditorModal'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
 import { fetchExpenseCategories } from '../services/expenseService'
@@ -270,13 +271,6 @@ export default function DailyReportPage() {
         const t = setTimeout(() => ctaRef.current && slowScrollTo(ctaRef.current, 'end', 1200), 500)
         return () => clearTimeout(t)
     }, [scrollToCta])
-
-    // Week/month scopes show the per-day/per-week bar chart instead of the hourly line.
-    // "Range" = khoảng NHIỀU NGÀY. Biểu đồ đường cộng dồn theo GIỜ chỉ có nghĩa cho 1
-    // ngày (dòng tiền trong ngày); week/month/custom-nhiều-ngày phải dùng biểu đồ cột.
-    // Trước đây bỏ sót custom range nhiều ngày → vẫn hiện line chart sai.
-    const isRangeScope = scope === 'week' || scope === 'month'
-        || (scope === 'custom' && !isSameDayVN(rangeStart, rangeEnd))
 
     const [printPreview, setPrintPreview] = useState(false)
 

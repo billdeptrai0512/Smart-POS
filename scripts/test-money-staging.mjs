@@ -18,17 +18,12 @@
 //
 // KHÔNG trỏ prod — prod-guard chặn cứng theo project-ref.
 
-import { readFileSync } from 'fs'
+import { env } from './stagingEnv.mjs'
 import { createClient } from '@supabase/supabase-js'
 
 const PROD_REF = 'cnkvscwmdfkajhotcijl' // prod — CẤM
-const env = Object.fromEntries(
-  readFileSync(new URL('../.env.staging.local', import.meta.url), 'utf8')
-    .split('\n').filter(l => l && !l.startsWith('#'))
-    .map(l => { const i = l.indexOf('='); return [l.slice(0, i).trim(), l.slice(i + 1).trim()] })
-)
 const URL_ = env.STAGING_SUPABASE_URL, KEY = env.STAGING_SUPABASE_SECRET
-if (!URL_ || !KEY) { console.error('Thiếu STAGING_SUPABASE_URL / STAGING_SUPABASE_SECRET trong .env.staging.local'); process.exit(1) }
+if (!URL_ || !KEY) { console.error('Thiếu STAGING_SUPABASE_URL / STAGING_SUPABASE_SECRET trong .env.staging.local hoặc biến môi trường'); process.exit(1) }
 if (URL_.includes(PROD_REF)) { console.error('❌ URL trỏ PROD — abort.'); process.exit(1) }
 
 const sb = createClient(URL_, KEY, { auth: { persistSession: false } })

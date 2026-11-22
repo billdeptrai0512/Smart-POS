@@ -41,7 +41,6 @@ interface Props {
     madeMap?: UsageMap       // ingredient → lượng thành phẩm làm ra hôm nay (mẻ sản xuất); đã nằm trong usedMap dưới dạng âm
     consumptionBreakdown?: ConsumptionBreakdown
     ingredientToProduct?: IngredientToProduct
-    isSubmitting?: boolean
     lockWarehouseInputs?: boolean
     readOnly?: boolean
     baselineInputs?: { opening: Inputs; openingLocked: Record<string, boolean>; restock: Inputs; inventory: Inputs }
@@ -96,7 +95,6 @@ export default function InventoryReportCard({
     madeAfterMap = {},
     periodMadeMap = {},
     consumptionBreakdown = {}, // ingredient → { [variantKey]: { name, qty, totalAmount } } for expand-on-tap
-    isSubmitting,
     // Sửa lịch sử (ngày cũ): khóa Đầu kỳ + Nhập thêm read-only, chỉ cho sửa Cuối kỳ —
     // tránh đụng kho tổng (Nhập thêm nằm trong công thức warehouse anchor).
     lockWarehouseInputs = false,
@@ -236,7 +234,6 @@ export default function InventoryReportCard({
             breakdown={lookupByLabel(ing.ingredient, consumptionBreakdown) || null}
             period={openingPeriods[ing.ingredient]}
             openingNote={openingNotes[ing.ingredient]}
-            isSubmitting={isSubmitting}
             lockWarehouseInputs={lockWarehouseInputs}
             readOnly={readOnly}
             onOpeningChange={onOpeningChange}
@@ -356,7 +353,6 @@ interface RowProps {
     breakdown: ConsumptionBreakdown[string] | null
     period?: OpeningPeriods[string]
     openingNote?: OpeningNotes[string]
-    isSubmitting?: boolean
     lockWarehouseInputs: boolean
     readOnly: boolean
     onOpeningChange: FieldChange
@@ -371,7 +367,7 @@ interface RowProps {
 const IngredientRow = memo(function IngredientRow({
     ing, ingredientUnits, openingValue, openingFallback, isLocked, restockValue, inventoryValue,
     warehouseAvailable, used, made, usedAfter, madeAfter, periodMade, breakdown, period, openingNote,
-    isSubmitting, lockWarehouseInputs, readOnly,
+    lockWarehouseInputs, readOnly,
     onOpeningChange, onRestockChange, onInventoryChange, onFieldBlur,
     hint, hintStep, hintFill,
 }: RowProps) {
@@ -411,7 +407,7 @@ const IngredientRow = memo(function IngredientRow({
     const todayUsed = `${r1(used + usedAfter + made + madeAfter)} ${unit}` // used là ròng của mẻ; cộng lại phần làm ra = phần bán, khớp bảng. bảng chi tiết chỉ có hôm nay; kỳ nhiều ngày thì khác ô Sử dụng (cộng dồn)
     const hintCount = hint && open && hintStep === 'count'
     const restockTotal = p ? restockNum + p.restock : restockNum
-    const { openingNum, usedNum, lyThuyet, haoHut } = p
+    const { usedNum, lyThuyet, haoHut } = p
         ? computeBalance({ inventoryValue, restockValue: restockTotal, openingValue: p.counted, used: r1(used) + p.used })
         : computeBalance({ inventoryValue, restockValue, openingValue, openingFallback, used })
     // Thành phẩm / topping: mẻ làm ra chính là "Nhập thêm" của nó (không qua kho tổng), Sử dụng chỉ còn phần bán — Lý thuyết không đổi (usedNum là ròng). Chỉ là cách hiện, không ghi vào ô Nhập thêm đã lưu.

@@ -1,14 +1,15 @@
-import { useState, useEffect, useCallback, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useNavigate, Navigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { fetchAdminDashboard, fetchAdminBranchStages, type BranchStages } from '../services/adminDashboardService'
+import { fetchAdminDashboard, fetchAdminBranchStages, fetchOpsHealth, type BranchStages, type OpsHealth } from '../services/adminDashboardService'
 import { fetchGuestOnboardingFunnel, fetchLoginPageVisits } from '../services/onboardingFunnelService'
-import { timeStringVN } from '../utils/dateVN'
+import { dateStringVN, timeStringVN } from '../utils/dateVN'
 import MonetizationToggle from '../components/AdminDashboardPage/MonetizationToggle'
 import { errorMessage } from '../utils/errorMessage'
 import AdminPageHeader from '../components/common/AdminPageHeader'
 import Skeleton from '../components/common/Skeleton'
+import { useAsync, type AsyncState } from '../hooks/useAsync'
 
 // Hình dạng JSON của RPC admin_dashboard_overview / guest_onboarding_funnel_stats
 // (supabase.rpc không có type) — chỉ khai các trường trang này đọc.
@@ -82,25 +83,16 @@ function activityAgo(iso: string) {
 export default function AdminDashboardPage() {
     const navigate = useNavigate()
     const { isAdmin, loading: authLoading } = useAuth()
-    const [data, setData] = useState<DashboardData | null>(null)
-    const [error, setError] = useState<string | null>(null)
     // Phễu guest (byRange: 1 lần gọi trả cả today/week/all) và giai đoạn chi nhánh fetch song song với overview.
-    // Hai RPC này lỗi/chưa apply → null → ẩn hẳn thẻ, không hỏng phần còn lại của dashboard.
-    const [byRange, setByRange] = useState<Record<string, GuestFunnel> | null>(null)
-    const [stages, setStages] = useState<BranchStages | null>(null)
-    const [visits, setVisits] = useState<Record<string, number> | null>(null)
-    const [funnelLoaded, setFunnelLoaded] = useState(false) // false → thẻ phễu hiện khung chờ, không phải "Chưa có khách"
-
-    const reload = useCallback(() => {
-        fetchAdminDashboard().then(setData).catch((e) => setError(errorMessage(e, '')))
-        fetchGuestOnboardingFunnel().then(setByRange).catch(() => setByRange(null)).finally(() => setFunnelLoaded(true))
-        fetchAdminBranchStages().then(setStages).catch(() => setStages(null))
-        fetchLoginPageVisits().then(setVisits).catch(() => setVisits(null))
-    }, [])
-
-    useEffect(() => {
-        if (isAdmin) reload()
-    }, [isAdmin, reload])
+    // Hai RPC này lỗi/chưa apply → data null → ẩn hẳn thẻ, không hỏng phần còn lại của dashboard.
+    const dash = useAsync(fetchAdminDashboard, isAdmin)
+    const funnel = useAsync(fetchGuestOnboardingFunnel, isAdmin)
+    const branchStages = useAsync(fetchAdminBranchStages, isAdmin)
+    const loginVisits = useAsync(fetchLoginPageVisits, isAdmin)
+    const ops = useAsync(fetchOpsHealth, isAdmin)
+    const data = dash.data
+    const error = dash.status === 'error' ? errorMessage(dash.error, '') : null
+    const reload = () => { dash.reload(); funnel.reload(); branchStages.reload(); loginVisits.reload(); ops.reload() }
 
     if (authLoading) return null
     if (!isAdmin) return <Navigate to="/addresses" />
@@ -124,7 +116,7 @@ export default function AdminDashboardPage() {
                             <Loader2 size={24} className="animate-spin text-text-dim" />
                         </div>
                     ) : (
-                        <DashboardBody data={data} byRange={byRange} funnelLoaded={funnelLoaded} stages={stages} visits={visits} />
+                        <DashboardBody data={data} byRange={funnel.data} funnelLoaded={funnel.status !== 'loading'} stages={branchStages.data} visits={loginVisits.data} ops={ops} />
                     )}
                 </div>
             </div>
@@ -132,7 +124,7 @@ export default function AdminDashboardPage() {
     )
 }
 
-function DashboardBody({ data, byRange, funnelLoaded, stages, visits }: { data: DashboardData; byRange: Record<string, GuestFunnel> | null; funnelLoaded: boolean; stages: BranchStages | null; visits: Record<string, number> | null }) {
+function DashboardBody({ data, byRange, funnelLoaded, stages, visits, ops }: { ops: AsyncState<OpsHealth>; data: DashboardData; byRange: Record<string, GuestFunnel> | null; funnelLoaded: boolean; stages: BranchStages | null; visits: Record<string, number> | null }) {
     const { attention, activity, attention_total_count } = data
     // total_count = đếm không giới hạn (đã dedupe theo chi nhánh) từ RPC; attention (mảng) chỉ là top-20
     // hiển thị nên KHÔNG dùng .length làm KPI — sẽ undercount khi > 20 chi nhánh cần chú ý.
@@ -160,6 +152,10 @@ function DashboardBody({ data, byRange, funnelLoaded, stages, visits }: { data: 
             <div className="lg:col-start-2 lg:row-start-3">
                 <MonetizationToggle />
             </div>
+            {/* RPC chưa apply / lỗi → ẩn thẻ, không hỏng phần còn lại. */}
+            {ops.status !== 'error' && (
+                <div className="lg:col-span-2 lg:row-start-5"><OpsHealthCard health={ops.data} /></div>
+            )}
         </div>
     )
 }
@@ -450,6 +446,44 @@ function ActivityCard({ items }: { items: ActivityItem[] }) {
                     })}
                 </div>
             )}
+        </div>
+    )
+}
+
+// Sức khoẻ vận hành đo từ DB production: xu hướng đơn 7 ngày + các dấu hiệu bất thường (số 0 = ổn). null = đang tải.
+function OpsHealthCard({ health }: { health: OpsHealth | null }) {
+    const title = <h3 className={`${CARD_TITLE} mb-3 pb-3 border-b border-border/60`}>Sức khoẻ vận hành</h3>
+    if (!health) return <div className={CARD}>{title}<Skeleton className="h-32 w-full" /></div>
+    const max = Math.max(1, ...health.orders_by_day.map((x) => x.n))
+    const rows = [
+        { label: 'Đơn mới nhất', value: health.last_order_at ? `${dateStringVN(new Date(health.last_order_at)).slice(5)} ${timeStringVN(new Date(health.last_order_at))}` : 'không có trong 7 ngày', bad: !health.last_order_at },
+        { label: 'Tỉ lệ đơn bị xoá (7 ngày)', value: health.deleted_rate_7d == null ? '—' : `${health.deleted_rate_7d}%`, bad: (health.deleted_rate_7d ?? 0) > 5 },
+        { label: 'Giao dịch kẹt (quá hạn >1 giờ chưa dọn)', value: String(health.intents_stuck), bad: health.intents_stuck > 0 },
+        { label: 'Giao dịch chờ xử lý tay', value: String(health.intents_review), bad: health.intents_review > 0 },
+        { label: 'Chi nhánh có đơn hôm qua nhưng chưa kết ca', value: String(health.unclosed_yesterday), bad: health.unclosed_yesterday > 0 },
+    ]
+    return (
+        <div className={CARD}>
+            {title}
+            <div className="flex items-end gap-1.5 h-16 mb-1" aria-label="Đơn 7 ngày gần nhất">
+                {health.orders_by_day.map((x) => (
+                    <div key={x.d} className="flex-1 flex flex-col items-center justify-end h-full gap-1">
+                        <span className="text-[10px] font-bold text-text-secondary tabular-nums">{x.n}</span>
+                        <div className="w-full rounded-t bg-primary/70" style={{ height: `${Math.max(4, (x.n / max) * 70)}%` }} />
+                    </div>
+                ))}
+            </div>
+            <div className="flex gap-1.5 mb-3">
+                {health.orders_by_day.map((x) => <span key={x.d} className="flex-1 text-center text-[9px] text-text-dim">{x.d.slice(8)}</span>)}
+            </div>
+            <div className="flex flex-col gap-1.5">
+                {rows.map((r) => (
+                    <div key={r.label} className="flex items-center justify-between gap-3 text-[12px]">
+                        <span className="text-text-secondary">{r.label}</span>
+                        <span className={`font-black tabular-nums ${r.bad ? 'text-danger' : 'text-text'}`}>{r.value}</span>
+                    </div>
+                ))}
+            </div>
         </div>
     )
 }

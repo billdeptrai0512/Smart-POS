@@ -38,7 +38,6 @@ interface Props {
     actualTotals?: { today: Record<string, number>; prev: Record<string, number> }
     sessionsMap: Record<string, { name: string; role: string }[]>
     subscriptionRowsMap?: Record<string, Row[]>
-    subscriptionStatusMap?: Record<string, string>
     subscriptionLoading?: boolean
     statsLoading?: boolean
     isStaff?: boolean
@@ -61,7 +60,7 @@ interface Props {
 }
 
 export default function BranchGrid({
-    addresses, fetchError, cupsMap, revenueMap, prevCupsMap = {}, prevRevenueMap = {}, actualTotals = { today: {}, prev: {} }, sessionsMap, subscriptionRowsMap = {}, subscriptionStatusMap = {}, subscriptionLoading, statsLoading,
+    addresses, fetchError, cupsMap, revenueMap, prevCupsMap = {}, prevRevenueMap = {}, actualTotals = { today: {}, prev: {} }, sessionsMap, subscriptionRowsMap = {}, subscriptionLoading, statsLoading,
     isStaff, isAdmin, error, setError,
     onSelect, onNavigate,
     onRename, onRemove, onDefaultTemplate, onCreate, onSetPrinters,

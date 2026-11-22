@@ -20,6 +20,34 @@ jobs:
       - run: npm test
       - run: npm run check:search-path
 
+  # Test tiền ở tầng SQL (bán hàng + nhập kho) chạy trên Supabase STAGING bằng RPC thật. Cần 2 secrets
+  # STAGING_SUPABASE_URL + STAGING_SUPABASE_SECRET (kèm đã áp scripts/staging-*-schema.sql lên staging);
+  # thiếu secret → bỏ qua kèm cảnh báo (PR từ fork không có secret). Có secret thì fail = chặn deploy-migrations.
+  # concurrency: 2 lần chạy cùng lúc trên 1 DB staging sẽ xoá fixture của nhau.
+  test-sql:
+    needs: check
+    runs-on: ubuntu-latest
+    concurrency: staging-sql-tests
+    env:
+      STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+      STAGING_SUPABASE_SECRET: ${{ secrets.STAGING_SUPABASE_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+      - run: npm ci
+      - name: Test tiền bán hàng (bulk_create_orders)
+        if: env.STAGING_SUPABASE_URL != ''
+        run: npm run test:money
+      - name: Test tiền nhập kho (WAC, cash_phase, owing)
+        if: env.STAGING_SUPABASE_URL != ''
+        run: npm run test:inventory
+      - name: Bỏ qua test SQL (thiếu secrets staging)
+        if: env.STAGING_SUPABASE_URL == ''
+        run: echo "::warning::Bỏ qua test:money / test:inventory — chưa cấu hình STAGING_SUPABASE_URL / STAGING_SUPABASE_SECRET"
+
   deploy-functions:
     needs: check
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -41,7 +69,7 @@ jobs:
   # GitHub Environment "production" nên cần cấu hình required reviewer (Settings →
   # Environments → production) để có 1 bước approve thủ công trước khi push.
   deploy-migrations:
-    needs: check
+    needs: [check, test-sql]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     environment: production

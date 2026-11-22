@@ -15,6 +15,7 @@ import { useProducts } from '../../contexts/ProductContext'
 import { onboardingHintClass } from '../../utils/onboardingHint'
 import type { ExpenseCategory, Row } from '../../types/domain'
 import type { PrintBillHandle } from '../common/PrintBill'
+import { slowScrollTo } from '../../utils/slowScroll'
 
 const OTHER = 'Khác' // dòng Tồn kho không thuộc nhóm nguyên liệu nào
 type Phase = 'in_shift' | 'post_close' | 'mixed'
@@ -61,25 +62,6 @@ interface Props {
     printPreview?: boolean
     onPreviewClose?: () => void
     onPrintError?: (err: unknown) => void
-}
-
-// Cuộn chậm (~0,9s, easeOut) đưa `el` vào giữa/đầu khung cuộn gần nhất — scrollIntoView({behavior:'smooth'}) của
-// trình duyệt chỉ ~0,25s, khách thấy như giật 1 cái. Bật giảm chuyển động của hệ điều hành → nhảy thẳng.
-export function slowScrollTo(el: HTMLElement, block: 'center' | 'start' | 'end', ms = 900) {
-    let sc: HTMLElement | null = el.parentElement
-    while (sc && sc.scrollHeight <= sc.clientHeight) sc = sc.parentElement
-    if (!sc) return
-    const s = sc.getBoundingClientRect(), r = el.getBoundingClientRect()
-    const from = sc.scrollTop
-    const delta = block === 'center' ? r.top + r.height / 2 - (s.top + s.height / 2) : block === 'end' ? sc.scrollHeight - sc.clientHeight - from : r.top - s.top
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { sc.scrollTop = from + delta; return }
-    const t0 = performance.now()
-    const step = (now: number) => {
-        const p = Math.min((now - t0) / ms, 1)
-        sc.scrollTop = from + delta * (1 - (1 - p) ** 3)
-        if (p < 1) requestAnimationFrame(step)
-    }
-    requestAnimationFrame(step)
 }
 
 // Phase 1 payment: cờ trên payment ưu tiên cờ hoá đơn gốc; chỉ 'in_shift' rõ ràng
