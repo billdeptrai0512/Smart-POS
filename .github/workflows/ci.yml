@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   check:
@@ -56,7 +57,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 3.2.0 # ghim: `latest` vừa dính rate limit của GitHub API vừa đổi hành vi CLI (--remote/--yes)
       # CLI mới hỏi xác nhận trước khi deploy; runner không có terminal nên phải --yes. --project-ref đã deprecated → --remote=<ref>.
       - run: |
           supabase functions deploy create-team-member --remote="$SUPABASE_PROJECT_REF" --yes
@@ -69,16 +70,19 @@ jobs:
   # DB migrations chạm schema production đang phục vụ merchant sống — chạy trong
   # GitHub Environment "production" nên cần cấu hình required reviewer (Settings →
   # Environments → production) để có 1 bước approve thủ công trước khi push.
+  # CHỈ CHẠY TAY (Actions → CI → Run workflow). KHÔNG tự chạy khi push: nhiều migration cũ đã áp tay lên production nên bảng lịch sử
+  # của Supabase lệch với supabase/migrations/ — `db push` sẽ đòi --include-all và áp lại ~90 file cũ (có cả file xoá dữ liệu).
+  # Muốn bật lại tự động: trước hết `supabase migration repair --status applied <version>` cho các bản đã áp, rồi đổi `if` về push.
   deploy-migrations:
     needs: [check, test-sql]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment: production
     steps:
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 3.2.0 # ghim: `latest` vừa dính rate limit của GitHub API vừa đổi hành vi CLI (--remote/--yes)
       - run: supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
