@@ -4,7 +4,7 @@ import { Loader2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { fetchAdminDashboard, fetchAdminBranchStages, fetchOpsHealth, type BranchStages, type OpsHealth } from '../services/adminDashboardService'
 import { fetchGuestOnboardingFunnel, fetchLoginPageVisits } from '../services/onboardingFunnelService'
-import { dateStringVN, timeStringVN } from '../utils/dateVN'
+import { timeStringVN } from '../utils/dateVN'
 import MonetizationToggle from '../components/AdminDashboardPage/MonetizationToggle'
 import { errorMessage } from '../utils/errorMessage'
 import AdminPageHeader from '../components/common/AdminPageHeader'
@@ -455,26 +455,31 @@ function OpsHealthCard({ health }: { health: OpsHealth | null }) {
     const title = <h3 className={`${CARD_TITLE} mb-3 pb-3 border-b border-border/60`}>Sức khoẻ vận hành</h3>
     if (!health) return <div className={CARD}>{title}<Skeleton className="h-32 w-full" /></div>
     const max = Math.max(1, ...health.orders_by_day.map((x) => x.n))
+    // "Nhịp tim": im lặng >3 giờ trong giờ mở cửa (8h–22h VN) là bất thường; ngoài giờ đó im lặng là bình thường.
+    const now = new Date() // thẻ chỉ vẽ lại khi tải/làm tươi dữ liệu; "X phút trước" tính theo lúc đó
+    const mins = health.last_order_at ? Math.floor((now.getTime() - new Date(health.last_order_at).getTime()) / 60_000) : null
+    const hour = Number(timeStringVN(now).slice(0, 2))
+    const openHours = hour >= 8 && hour < 22
+    const payIssues = health.intents_stuck + health.intents_review
     const rows = [
-        { label: 'Đơn mới nhất', value: health.last_order_at ? `${dateStringVN(new Date(health.last_order_at)).slice(5)} ${timeStringVN(new Date(health.last_order_at))}` : 'không có trong 7 ngày', bad: !health.last_order_at },
-        { label: 'Tỉ lệ đơn bị xoá (7 ngày)', value: health.deleted_rate_7d == null ? '—' : `${health.deleted_rate_7d}%`, bad: (health.deleted_rate_7d ?? 0) > 5 },
-        { label: 'Giao dịch kẹt (quá hạn >1 giờ chưa dọn)', value: String(health.intents_stuck), bad: health.intents_stuck > 0 },
-        { label: 'Giao dịch chờ xử lý tay', value: String(health.intents_review), bad: health.intents_review > 0 },
+        { label: 'Đơn mới nhất', value: mins == null ? 'không có trong 7 ngày' : mins < 60 ? `${mins} phút trước` : `${Math.floor(mins / 60)} giờ trước`, bad: mins == null || (openHours && mins > 180) },
+        { label: 'Thanh toán cần chú ý (kẹt hoặc chờ xử lý tay)', value: String(payIssues), bad: payIssues > 0 },
         { label: 'Chi nhánh có đơn hôm qua nhưng chưa kết ca', value: String(health.unclosed_yesterday), bad: health.unclosed_yesterday > 0 },
     ]
     return (
         <div className={CARD}>
             {title}
             <div className="flex items-end gap-1.5 h-16 mb-1" aria-label="Đơn 7 ngày gần nhất">
-                {health.orders_by_day.map((x) => (
+                {health.orders_by_day.map((x, i) => (
                     <div key={x.d} className="flex-1 flex flex-col items-center justify-end h-full gap-1">
                         <span className="text-[10px] font-bold text-text-secondary tabular-nums">{x.n}</span>
-                        <div className="w-full rounded-t bg-primary/70" style={{ height: `${Math.max(4, (x.n / max) * 70)}%` }} />
+                        {/* Cột cuối là hôm nay, ngày chưa hết → nhạt hơn để khỏi đọc nhầm thành doanh số tụt. */}
+                        <div className={`w-full rounded-t ${i === health.orders_by_day.length - 1 ? 'bg-primary/30' : 'bg-primary/70'}`} style={{ height: `${Math.max(4, (x.n / max) * 70)}%` }} />
                     </div>
                 ))}
             </div>
             <div className="flex gap-1.5 mb-3">
-                {health.orders_by_day.map((x) => <span key={x.d} className="flex-1 text-center text-[9px] text-text-dim">{x.d.slice(8)}</span>)}
+                {health.orders_by_day.map((x, i) => <span key={x.d} className="flex-1 text-center text-[9px] text-text-dim">{i === health.orders_by_day.length - 1 ? 'nay' : x.d.slice(8)}</span>)}
             </div>
             <div className="flex flex-col gap-1.5">
                 {rows.map((r) => (

@@ -57,10 +57,11 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: latest
+      # CLI mới hỏi xác nhận trước khi deploy; runner không có terminal nên phải --yes. --project-ref đã deprecated → --remote=<ref>.
       - run: |
-          supabase functions deploy create-team-member --project-ref "$SUPABASE_PROJECT_REF"
-          supabase functions deploy set-staff-password --project-ref "$SUPABASE_PROJECT_REF"
-          supabase functions deploy sepay-webhook --no-verify-jwt --project-ref "$SUPABASE_PROJECT_REF"
+          supabase functions deploy create-team-member --remote="$SUPABASE_PROJECT_REF" --yes
+          supabase functions deploy set-staff-password --remote="$SUPABASE_PROJECT_REF" --yes
+          supabase functions deploy sepay-webhook --no-verify-jwt --remote="$SUPABASE_PROJECT_REF" --yes
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
@@ -83,7 +84,8 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-      - run: supabase db push
+      # CLI mới mặc định đẩy lên local stack (127.0.0.1:54322) → ECONNREFUSED trên runner; --remote = project đã link ở bước trên.
+      - run: supabase db push --remote --yes
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
