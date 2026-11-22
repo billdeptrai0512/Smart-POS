@@ -32,6 +32,8 @@ export interface CartContextValue extends ReturnType<typeof useToast> {
     discountAmount: number
     finalTotal: number
     recentOrders: LastOrder[]
+    recentLoaded: boolean
+    tablesLoaded: boolean
     enterKey: string | null
 }
 

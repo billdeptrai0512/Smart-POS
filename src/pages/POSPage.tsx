@@ -25,7 +25,7 @@ export default function POSPage() {
     const {
         cart,
         handleAddItem, handleRemoveItem, handleToggleExtra, handleToggleTopping,
-        toast, recentOrders, enterKey,
+        toast, recentOrders, recentLoaded, enterKey,
         enabledStickyExtraIds,
         handleToggleStickyExtra,
         handleConfirm, tableName,
@@ -77,6 +77,7 @@ export default function POSPage() {
                     onOpenHistory={handleOpenHistory}
                     nav={<TopNav />}
                     recentOrders={recentOrders}
+                    loaded={recentLoaded}
                     enterKey={enterKey}
                     showOnboardingHint={showHistoryHint}
                     notice={<>

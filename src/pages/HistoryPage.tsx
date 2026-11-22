@@ -354,8 +354,8 @@ export default function HistoryPage() {
         // If the deleted expense was a refill bound to an ingredient, the server-side
         // stock formula (warehouse_stock = Σ refill − Σ restock) will recompute on next
         // fetch — trigger refreshProducts so unit cost / ingredient list stay in sync.
-        const { id, amount, is_refill, metadata } = editingExpense
-        await handleDeleteExpense(id, amount)
+        const { id, is_refill, metadata } = editingExpense
+        await handleDeleteExpense(id)
         if (!isTodayScope) reloadExpenses()
         if (is_refill && metadata?.ingredient) await refreshProducts?.()
         setShowAddModal(false)

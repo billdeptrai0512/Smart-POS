@@ -15,9 +15,6 @@ export const STORAGE_KEYS = {
     CART: 'pos_cart',
     TABLE: 'pos_table', // bàn đang chọn — sống qua reload như CART
     CART_ADDRESS: 'pos_cart_address', // chi nhánh mà CART/TABLE đang thuộc về, xem POSContext
-    REVENUE: 'pos_revenue',
-    TOTAL_COST: 'pos_total_cost',
-    CUPS: 'pos_cups',
     CURRENT_DATE: 'pos_current_date',
 
     // Offline sync

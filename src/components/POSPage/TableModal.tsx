@@ -14,6 +14,7 @@ import { Dialog } from '../common/ModalShell'
 import SortableItem from '../RecipeMenuPage/SortableItem'
 import TableDetailModal from './TableDetailModal'
 import TakeawayListModal from './TakeawayListModal'
+import Skeleton from '../common/Skeleton'
 
 // Chọn bàn — mở từ CheckoutBar (phone) hoặc hiện sẵn inline (dine-split).
 //
@@ -78,7 +79,7 @@ function pendingCups(rounds: TableRound[]) {
 interface Props { onClose?: () => void; inline?: boolean }
 
 export default function TableModal({ onClose, inline = false }: Props) {
-    const { tableName, setTableName, openTables, refreshTables, showError } = useCart()
+    const { tableName, setTableName, openTables, tablesLoaded, refreshTables, showError } = useCart()
     const { addressId, selectedAddress, setTables } = useAddress()
     const { isManager, isAdmin } = useAuth()
     const { state } = useLocation()
@@ -112,6 +113,10 @@ export default function TableModal({ onClose, inline = false }: Props) {
     // đè cái mới hơn.
     useEffect(() => { if (!inline) refreshTables() }, [inline, refreshTables])
 
+    // Chưa tải xong bàn đang mở thì chưa biết bàn nào trống → thanh giữ chỗ, không hiện "Trống" giả rồi nhảy sang có khách.
+    const emptyLabel = tablesLoaded
+        ? <span className="text-[12px] font-bold text-text-secondary/50">Trống</span>
+        : <Skeleton className="h-[14px] w-10 rounded" />
     const canEdit = isManager || isAdmin
     // Set: tên bàn là React key, danh sách trùng tên (ghi tay vào DB) sẽ làm hỏng lưới.
     const configured = [...new Set<string>(selectedAddress?.tables || [])]
@@ -279,7 +284,7 @@ export default function TableModal({ onClose, inline = false }: Props) {
             className={`${CARD_H} rounded-[20px] border p-3.5 flex flex-col gap-1 text-left transition-colors ${!tableName ? 'bg-primary/[0.07] border-primary/40' : 'bg-surface/50 border-border/40 hover:border-primary/40'}`}
         >
             <span className={`text-[13px] font-black uppercase tracking-wide ${!tableName ? 'text-text' : 'text-text-secondary'}`}>Mang đi</span>
-            <span className="text-[12px] font-bold text-text-secondary/50">Trống</span>
+            {emptyLabel}
         </button>
     )
 
@@ -366,7 +371,7 @@ export default function TableModal({ onClose, inline = false }: Props) {
                                                     {busy ? (
                                                         roundPreview(t.rounds)
                                                     ) : (
-                                                        <span className="text-[12px] font-bold text-text-secondary/50">Trống</span>
+                                                        emptyLabel
                                                     )}
                                                     {/* Còn ly chưa bưng ra — thứ duy nhất trên lưới mà nhân viên cần
                                                         thấy trước khi bấm vào bàn. Chi tiết đợt nào thì mở thẻ ra xem.

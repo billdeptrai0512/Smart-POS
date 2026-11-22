@@ -1,12 +1,9 @@
-// Today's running totals: revenue, totalCost, cupsSold, inventory snapshot.
+// Trạng thái mạng + retry đồng bộ offline.
 // Backed by POSProvider — kept separate so dashboard widgets that only show
 // totals don't re-render every time the cart changes.
 import { createContext, useContext } from 'react'
 
 export interface StatsContextValue {
-    revenue: number
-    totalCost: number
-    cupsSold: number
     isOnline: boolean
     retrySync: () => Promise<void>
 }

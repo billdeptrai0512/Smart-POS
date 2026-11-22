@@ -26,7 +26,7 @@ function programSummary(p: Pick<DiscountProgram, 'type' | 'value' | 'table_scope
 
 export default function DiscountProgramsPage() {
     const navigate = useNavigate()
-    const { discountPrograms, refreshProducts } = useProducts()
+    const { discountPrograms, refreshProducts, loading } = useProducts()
     const { addressId } = useAddress()
     const { isManager, isAdmin } = useAuth()
     const canEdit = isManager || isAdmin
@@ -82,7 +82,7 @@ export default function DiscountProgramsPage() {
                     </p>
                 )}
 
-                {discountPrograms.length === 0 && (
+                {!loading && discountPrograms.length === 0 && (
                     <p className="text-text-secondary text-[13px] text-center py-8 bg-surface-light/50 rounded-[16px] border border-border/40">
                         Chưa có chương trình nào
                     </p>

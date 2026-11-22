@@ -18,7 +18,7 @@ export interface HistoryContextValue {
         categoryId?: UUID | null, createdAt?: string | null,
     ) => Promise<Row | undefined>
     handleUpdateExpense: (expenseId: UUID, updates: Row) => Promise<Row>
-    handleDeleteExpense: (expenseId: UUID, amount: number) => Promise<void>
+    handleDeleteExpense: (expenseId: UUID) => Promise<void>
     refreshTodayExpenses: () => Promise<void>
     userRole: string
 }

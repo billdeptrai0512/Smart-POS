@@ -62,7 +62,7 @@ export default function ExpenseEditorModal({ expense, addressId, onSaved, onClos
 
     const remove = async () => {
         if (!await confirm({ title: `Xóa chi phí "${expense.name}"?`, detail: 'Hành động này không thể hoàn tác!', danger: true, confirmLabel: 'Xóa' })) return
-        await handleDeleteExpense(expense.id, expense.amount)
+        await handleDeleteExpense(expense.id)
         onSaved?.(expense.id, null)
         onClose()
     }

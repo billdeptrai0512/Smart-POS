@@ -2,18 +2,20 @@ import type { ReactNode } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { onboardingHintClass } from '../../utils/onboardingHint'
 import Typewriter from '../common/Typewriter'
+import Skeleton from '../common/Skeleton'
 import type { LastOrder } from '../../services/cartOps'
 
 interface Props {
     onOpenHistory: () => void
     nav: ReactNode // thanh điều hướng trên cùng (ô địa chỉ)
     recentOrders?: LastOrder[]
+    loaded?: boolean // đã tải xong đơn gần nhất → skeleton 3 dòng
     enterKey: string | null
     showOnboardingHint?: boolean
     notice?: ReactNode // dải notice dưới 2 thẻ, vẫn trong header (PrepPinBar)
 }
 
-export default function Header({ onOpenHistory, nav, recentOrders = [], enterKey, showOnboardingHint = false, notice }: Props) {
+export default function Header({ onOpenHistory, nav, recentOrders = [], loaded = true, enterKey, showOnboardingHint = false, notice }: Props) {
     const hintClass = onboardingHintClass(showOnboardingHint, 'solid')
     // Saved orders only, newest first (max 3). isNew matches only the exact row just
     // committed locally (enterKey) → it slides in and types out; the realtime DB echo,
@@ -44,7 +46,12 @@ export default function Header({ onOpenHistory, nav, recentOrders = [], enterKey
                             <ChevronRight size={16} strokeWidth={3} className="text-text-secondary" />
                         </div>
                         <div className="w-full">
-                            {rows.length > 0 ? (
+                            {!loaded ? (
+                                // Giữ chỗ đúng 3 dòng (cùng gap/leading với dòng thật) → thẻ không giãn khi dữ liệu về.
+                                <div className="flex flex-col mt-1 gap-1" aria-busy="true">
+                                    {[0, 1, 2].map(i => <Skeleton key={i} className="h-[16.5px] w-full rounded" />)}
+                                </div>
+                            ) : rows.length > 0 ? (
                                 <div className="flex flex-col mt-1 gap-1">
                                     {rows.map((r) => (
                                         <div

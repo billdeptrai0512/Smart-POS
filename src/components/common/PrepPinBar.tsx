@@ -13,7 +13,7 @@ import { useStats } from '../../contexts/StatsContext'
 import { usePrepNotice } from '../../hooks/usePrepNotice'
 import { useOnboardingProgress } from '../../hooks/useOnboardingProgress'
 import { writeOnboardingState } from '../../utils/onboardingStorage'
-import NoticeSheet from './NoticeSheet'
+import NoticeSheet, { SheetBody } from './NoticeSheet'
 import NoticeBar from './NoticeBar'
 import ShiftPrepCard from '../DailyReportPage/ShiftPrepCard'
 import Toast from '../POSPage/Toast'
@@ -87,6 +87,8 @@ function PinBar({ addressId, bell }: { addressId: string; bell?: BellProps }) {
                     onClose={() => { setOpen(false); settle() }}
                     hintClose={isGuest && allTaken} // không gate prep.done: hook sống, lấy đủ là done ngay → nút Đóng phải sáng đúng lúc đó
                 >
+                    {/* Chưa tính xong và chưa có ảnh chụp → skeleton, đừng hiện "Đủ hàng cho hôm nay!" giả (items còn rỗng). */}
+                    <SheetBody error={null} loading={!ready && total === 0} onRetry={reloadStocks}>
                     <ShiftPrepCard
                         packVerb="Lấy"
                         haveLabel="Tồn quầy hiện có"
@@ -101,6 +103,7 @@ function PinBar({ addressId, bell }: { addressId: string; bell?: BellProps }) {
                         onOpen={canRestock ? (ing) => setRestock(items.find(i => i.ingredient === ing) ?? null) : undefined} // kho = 0 → "Nhập kho" mở phiếu
                     />
                     <BatchPrepList items={batchItems} />
+                    </SheetBody>
                 </NoticeSheet>
             )}
             {/* Portal ra body: dải này nằm trong header POS (z-20 = stacking context riêng) nên phiếu z-[100] sẽ kẹt DƯỚI sheet (sheet đã portal ra body). */}

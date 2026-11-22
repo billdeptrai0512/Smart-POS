@@ -89,7 +89,7 @@ export default function RecipeMenuPage() {
     const navigate = useNavigate()
     const location = useLocation()
     const backTo = location.state?.from || '/history/sales'
-    const { products, batchProducts, toppings, recipes, ingredientCosts, ingredientUnits, ingredientGroups, refreshProducts } = useProducts()
+    const { products, batchProducts, toppings, recipes, ingredientCosts, ingredientUnits, ingredientGroups, refreshProducts, loading } = useProducts()
     const { addressId, selectedAddress } = useAddress()
     const { isManager, isAdmin, isGuest } = useAuth()
     const canEdit = isManager || isAdmin
@@ -482,7 +482,7 @@ export default function RecipeMenuPage() {
                                 }}
                             />
                         ))}
-                        {(kind === 'topping' ? searchedToppings : kind === 'batch' ? searchedBatches : searchedProducts).length === 0 && (
+                        {!loading && (kind === 'topping' ? searchedToppings : kind === 'batch' ? searchedBatches : searchedProducts).length === 0 && (
                             <p className="col-span-full text-text-secondary text-[13px] text-center py-6">
                                 {search.trim() ? 'Không tìm thấy kết quả nào.' : { main: 'Chưa có công thức nào.', batch: 'Chưa có bán thành phẩm nào (nước cốt, trân châu nấu…).', topping: 'Chưa có topping nào (ví dụ: Trân châu, Kem muối...).' }[kind]}
                             </p>

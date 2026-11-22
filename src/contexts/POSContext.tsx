@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { supabase } from '../lib/supabaseClient'
 import { nativePrinterIp } from '../lib/escposBitmap'
 import { printKitchenTicket } from '../components/common/KitchenTicket'
-import { fetchTodayStats, submitOrder, fetchOrderNo, fetchTodayOrders, deleteOrder, updateOrderDiscount, fetchTodayExpenses, insertExpense, updateExpense, deleteExpense, fetchRecentOrders, invalidateDailyContext, fetchOpenTables, closeTable, reopenTable, markOrder, extractRounds, dropTableByName, restoreTable, moveRoundsIntoTable, moveTableRounds as moveTableRoundsService, type OpenTable, type TableRound } from '../services/orderService'
+import { submitOrder, fetchOrderNo, fetchTodayOrders, deleteOrder, updateOrderDiscount, fetchTodayExpenses, insertExpense, updateExpense, deleteExpense, fetchRecentOrders, invalidateDailyContext, fetchOpenTables, closeTable, reopenTable, markOrder, extractRounds, dropTableByName, restoreTable, moveRoundsIntoTable, moveTableRounds as moveTableRoundsService, type OpenTable, type TableRound } from '../services/orderService'
 import { guestDemoDayPending } from '../services/localRepository'
 import {
     isNetworkError, cartTotal, cartOrderCount, cartDiscountTotal, newCartLine, patchLine, removeLatestOfProduct, toggleExtraOnLast, toggleToppingOnLast,
@@ -32,9 +31,9 @@ export function POSProvider() {
     const { addressId, selectedAddress } = useAddress()
     const { profile, isGuest, hasSession } = useAuth()
     // POSProvider bọc chung /pos, /history, /report, /category, /inventory (App.tsx) —
-    // nhưng revenue/cupsSold/recentOrders/openTables chỉ mỗi /pos render. Trước đây 2 effect
+    // nhưng recentOrders/openTables chỉ mỗi /pos render. Trước đây 2 effect
     // dưới (thống kê hôm nay + mở bàn) chạy ngay khi addressId có, bất kể trang nào đang mở:
-    // vào thẳng /history qua "Lối tắt" ở /addresses (không qua /pos) vẫn kéo fetchTodayStats +
+    // vào thẳng /history qua "Lối tắt" ở /addresses (không qua /pos) vẫn kéo
     // fetchRecentOrders + fetchOpenTables (join nặng, dine-in) chạy song song với 3 request
     // /history thật sự cần → tranh connection cho không. Gate theo pathname==='/pos', chỉ fetch
     // 1 LẦN cho mỗi addressId (không refetch mỗi lần quay lại /pos — poll/realtime lo phần cập
@@ -73,14 +72,12 @@ export function POSProvider() {
     // Các bàn còn khách, gộp từ DB (fetchOpenTables). Nguồn cho lưới chọn bàn và cho
     // số tổng cộng của bàn ở CheckoutBar.
     const [openTables, setOpenTables] = useState<OpenTable[]>([])
+    const [tablesLoaded, setTablesLoaded] = useState(false) // false → lưới bàn hiện giữ chỗ thay vì "Trống" giả
     // Bản sao đọc-đồng-bộ cho refreshTables: fetch hỏng thì trả lại danh sách ĐANG có
     // thay vì rỗng, để người gọi không tưởng là bàn đã hết khách.
     const openTablesRef = useRef<OpenTable[]>([])
     openTablesRef.current = openTables
     const [enabledStickyExtraIds, setEnabledStickyExtraIds] = useState<string[]>([])
-    const [revenue, setRevenue] = useState(() => Number(localStorage.getItem(STORAGE_KEYS.REVENUE)) || 0)
-    const [totalCost, setTotalCost] = useState(() => Number(localStorage.getItem(STORAGE_KEYS.TOTAL_COST)) || 0)
-    const [cupsSold, setCupsSold] = useState(() => Number(localStorage.getItem(STORAGE_KEYS.CUPS)) || 0)
     const [isOnline, setIsOnline] = useState(navigator.onLine)
     const { toast, showToast, showError, reportError } = useToast()
 
@@ -101,6 +98,7 @@ export function POSProvider() {
     const justArrivedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
     // Last few orders, newest first (max 3) — shown in the header "Nhật ký" card.
     const [recentOrders, setRecentOrders] = useState<LastOrder[]>([])
+    const [recentLoaded, setRecentLoaded] = useState(false) // false → Nhật ký hiện skeleton 3 dòng thay vì khung trống
     // createdAt of the row that should play the slide-in. Set only on a local
     // commit so the realtime DB echo (which refetches with a different server
     // timestamp → different key → remount) can't replay the animation.
@@ -147,20 +145,20 @@ export function POSProvider() {
     const refreshTables = useCallback(() => {
         if (!addressId) return Promise.resolve([])
         return fetchOpenTables(addressId)
-            .then(list => { setOpenTables(list); return list })
+            .then(list => { setOpenTables(list); setTablesLoaded(true); return list })
             // Lỗi fetch KHÔNG phải là "bàn hết khách" — giữ nguyên lưới đang có. Nuốt
             // lỗi rồi setOpenTables([]) là xoá trắng bàn của khách đang ngồi.
-            .catch(err => { console.error('refreshTables:', err); return openTablesRef.current })
+            .catch(err => { console.error('refreshTables:', err); setTablesLoaded(true); return openTablesRef.current })
     }, [addressId])
 
     // "Đã tải" reset mỗi khi ĐỔI địa chỉ (đứng riêng, không gộp deps vào effect dưới) — quay
     // lại /pos cho CÙNG địa chỉ thì khỏi load lại (poll lo phần cập nhật tiếp theo), nhưng đổi
     // sang địa chỉ khác rồi quay về địa chỉ cũ vẫn phải tải lại (dữ liệu có thể đã đổi lúc vắng).
-    const tablesLoadedRef = useRef(false)
-    useEffect(() => { tablesLoadedRef.current = false }, [addressId])
+    const tablesRequestedRef = useRef(false)
+    useEffect(() => { tablesRequestedRef.current = false; setTablesLoaded(false) }, [addressId])
     useEffect(() => {
-        if (!isPosPage || tablesLoadedRef.current) return
-        tablesLoadedRef.current = true
+        if (!isPosPage || tablesRequestedRef.current) return
+        tablesRequestedRef.current = true
         refreshTables()
     }, [isPosPage, refreshTables])
 
@@ -260,44 +258,36 @@ export function POSProvider() {
         }
     }, [addressId, refreshTables, showError])
 
-    // Lấy lại tổng ngày / 3 đơn gần nhất từ server. Trả về promise để chỗ nào cần thì await.
-    const refreshStats = useCallback((id: UUID | null) =>
-        fetchTodayStats(id).then(({ revenue: rev, cups }) => { setRevenue(rev); setCupsSold(cups) }), [])
+    // Lấy lại 3 đơn gần nhất từ server. Trả về promise để chỗ nào cần thì await.
     const refreshRecentOrders = useCallback((id: UUID | null) =>
         fetchRecentOrders(id, 3).then(recent => setRecentOrders(recent.map(buildLastOrderFromDB))), [])
 
     // ---- Offline sync ----
     const handleSyncComplete = useCallback(() => {
         if (!addressId) return
-        refreshStats(addressId)
         showToast('Đã đồng bộ đơn hàng offline!', 'success')
-    }, [addressId, showToast, refreshStats])
+    }, [addressId, showToast])
 
     const { getPendingCount, retrySync } = useOfflineSync(handleSyncComplete)
 
     // ---- Load data when /pos first becomes active for this address ----
     // Chỉ /pos render thẻ doanh thu/ly + "đơn gần nhất" (recentOrders) — tải 1 lần khi /pos
     // active cho địa chỉ hiện tại, không refetch mỗi lần quay lại /pos (poll lo cập nhật tiếp
-    // theo); nhưng ĐỔI địa chỉ thì phải tải lại — statsLoadedRef reset riêng theo addressId.
-    const statsLoadedRef = useRef(false)
-    useEffect(() => { statsLoadedRef.current = false }, [addressId])
+    // theo); nhưng ĐỔI địa chỉ thì phải tải lại — statsRequestedRef reset riêng theo addressId.
+    const statsRequestedRef = useRef(false)
+    useEffect(() => { statsRequestedRef.current = false; setRecentLoaded(false) }, [addressId])
     useEffect(() => {
-        if (!addressId || !isPosPage || statsLoadedRef.current) return
-        statsLoadedRef.current = true
+        if (!addressId || !isPosPage || statsRequestedRef.current) return
+        statsRequestedRef.current = true
 
         async function load() {
             try {
-                const [{ revenue: rev, cups }, recent] = await Promise.all([
-                    fetchTodayStats(addressId),
-                    fetchRecentOrders(addressId, 3)
-                ])
+                const recent = await fetchRecentOrders(addressId, 3)
                 setRecentOrders(recent.map(buildLastOrderFromDB))
-                if (supabase) {
-                    setRevenue(rev)
-                    setCupsSold(cups)
-                }
             } catch (error) {
                 showError(error, 'Tải dữ liệu hôm nay')
+            } finally {
+                setRecentLoaded(true)
             }
         }
         load()
@@ -321,15 +311,7 @@ export function POSProvider() {
             const storedDate = localStorage.getItem(STORAGE_KEYS.CURRENT_DATE)
             const todayStr = dateStringVN()
             if (storedDate && storedDate !== todayStr) {
-                if (navigator.onLine && addressId) {
-                    refreshStats(addressId)
-                    setTotalCost(0)
-                    showToast('Đã qua ngày mới, dữ liệu đã được làm mới!', 'info')
-                } else {
-                    setRevenue(0)
-                    setCupsSold(0)
-                    setTotalCost(0)
-                }
+                if (navigator.onLine && addressId) showToast('Đã qua ngày mới, dữ liệu đã được làm mới!', 'info')
                 localStorage.setItem(STORAGE_KEYS.CURRENT_DATE, todayStr)
             } else if (!storedDate) {
                 localStorage.setItem(STORAGE_KEYS.CURRENT_DATE, todayStr)
@@ -346,7 +328,7 @@ export function POSProvider() {
             window.removeEventListener('focus', checkNewDay)
             window.removeEventListener('visibilitychange', handleVisibility)
         }
-    }, [addressId, showToast, refreshStats])
+    }, [addressId, showToast])
 
     // ---- Đồng bộ đơn giữa các máy ----
     // Poll thay cho kênh realtime cũ — lý do đầy đủ ở hooks/useOrdersPoll.ts. Ở đây chỉ
@@ -389,27 +371,21 @@ export function POSProvider() {
                 // đơn thứ 4 lên đúng chỗ đơn vừa bị xoá (giống hệt handleDeleteOrder tại chỗ).
                 if (moneyChanged) refreshRecentOrders(addressId)
             }
-            // Tổng ngày lấy lại từ server chứ không tự cộng ở client: chiết khấu và đơn bị
-            // xoá làm phép cộng tay lệch dần, mà đây là con số tiền. Chỉ khi tiền thật sự
-            // đổi — máy kia lật cờ "Ra món" thì lưới bàn vẽ lại là đủ.
-            if (moneyChanged) refreshStats(addressId)
             // Chỉ khi thay đổi thật sự động tới bàn. Sửa chiết khấu một đơn MANG ĐI mà kéo
             // fetchOpenTables (join order_items + products từng bàn) là trả giá cho không.
             // Lưới bàn chỉ có ở /pos — ở /history chỉ đánh dấu cũ, quay lại /pos thì effect
             // tải bàn ở trên tự chạy lại.
             if (tableChanged) {
                 if (isPosPage) refreshTables()
-                else tablesLoadedRef.current = false
+                else tablesRequestedRef.current = false
             }
         },
         // Rời app lâu rồi quay lại. Vòng poll chỉ giỏi bắt từng đơn lẻ; cả quãng vắng thì
         // một lượt nạp đầy rẻ hơn (và ngắn hơn) một URL id=in.(...) ôm hết đơn đã lỡ.
         // Chi phí không nằm trong vòng poll nên cũng kéo ở đây.
-        // handleLoadHistory nạp cả đơn lẫn chi phí trong một lượt Promise.all, nên ở đây
-        // chỉ phải thêm tổng ngày.
+        // handleLoadHistory nạp cả đơn lẫn chi phí trong một lượt Promise.all.
         onResume: () => {
             handleLoadHistory()
-            refreshStats(addressId)
         },
     })
 
@@ -436,16 +412,10 @@ export function POSProvider() {
         return () => clearInterval(interval)
     }, [addressId, hasSession])
 
-    const revenueRef = useRef(revenue)
-    const totalCostRef = useRef(totalCost)
-    const cupsSoldRef = useRef(cupsSold)
     // Cleanup lúc unmount có dep rỗng nên không đọc được addressId của render cuối.
     const addressIdRef = useRef(addressId)
     addressIdRef.current = addressId
 
-    useEffect(() => { revenueRef.current = revenue }, [revenue])
-    useEffect(() => { totalCostRef.current = totalCost }, [totalCost])
-    useEffect(() => { cupsSoldRef.current = cupsSold }, [cupsSold])
     // enabledStickyExtraIdsRef is NOT synced via effect (unlike the 3 above) —
     // deliberately. A post-paint effect leaves a window where a 2nd
     // fast tap (extras bar) reads a stale ref before the 1st tap's effect has run,
@@ -462,21 +432,15 @@ export function POSProvider() {
         const t = setTimeout(() => {
             writeJSON(STORAGE_KEYS.CART, cart)
             if (addressId) localStorage.setItem(STORAGE_KEYS.CART_ADDRESS, addressId)
-            localStorage.setItem(STORAGE_KEYS.REVENUE, revenue.toString())
-            localStorage.setItem(STORAGE_KEYS.TOTAL_COST, totalCost.toString())
-            localStorage.setItem(STORAGE_KEYS.CUPS, cupsSold.toString())
         }, 400)
         return () => clearTimeout(t)
-    }, [cart, revenue, totalCost, cupsSold, addressId])
+    }, [cart, addressId])
 
     // Save absolute latest states synchronously on unmount
     useEffect(() => {
         return () => {
             writeJSON(STORAGE_KEYS.CART, cartRef.current)
             if (addressIdRef.current) localStorage.setItem(STORAGE_KEYS.CART_ADDRESS, addressIdRef.current)
-            localStorage.setItem(STORAGE_KEYS.REVENUE, revenueRef.current.toString())
-            localStorage.setItem(STORAGE_KEYS.TOTAL_COST, totalCostRef.current.toString())
-            localStorage.setItem(STORAGE_KEYS.CUPS, cupsSoldRef.current.toString())
         }
     }, [])
 
@@ -514,12 +478,9 @@ export function POSProvider() {
         // KHÔNG gửi programDiscount lên RPC như một phần của discountApplied — server tự cộng, gửi kèm là trừ hai lần.
         const totals = computeSubmitTotals(cartItems, discountAmountArg, products,
             item => calculateItemCost(item.productId, item.extras || [], recipes, extraIngredients, ingredientCosts))
-        const { costPerItem, cartCost, countableQty, discountApplied, netTotal, programDiscount } = totals
+        const { costPerItem, cartCost, discountApplied, netTotal, programDiscount } = totals
 
         // Optimistic UI
-        setRevenue(prev => prev + netTotal)
-        setTotalCost(prev => prev + cartCost)
-        setCupsSold(prev => prev + countableQty)
         // The header "Nhật ký" card shows the last 3 orders (newest first, sliding
         // in) — that's the confirmation. No success toast (it conflicts with the
         // card + lags a tap). Keep the added row's identity to undo it on failure.
@@ -584,7 +545,7 @@ export function POSProvider() {
             const seedsDay = isGuest && guestDemoDayPending()
             submitOrder(cartItems, netTotal, null, addressId, cartCost, costPerItem, profile?.name, discountApplied, orderId, tableNameArg, programDiscount)
                 // Demo: đơn đầu tiên sinh cả ngày bán trước đó (seedGuestDemoDay) → nạp lại tổng ngày + Nhật ký.
-                .then(() => { if (seedsDay) { refreshStats(addressId); loadHistoryNow() } })
+                .then(() => { if (seedsDay) loadHistoryNow() })
                 .then(() => fetchOrderNo(orderId).catch(() => null))
                 .then(orderNo => { patchOrderNo(orderNo); printKitchen(orderNo) })
                 .catch(err => {
@@ -607,9 +568,6 @@ export function POSProvider() {
                             cartRef.current = cartItems
                             setCart(cartItems)
                         }
-                        setRevenue(prev => prev - netTotal)
-                        setTotalCost(prev => Math.max(0, prev - cartCost))
-                        setCupsSold(prev => Math.max(0, prev - countableQty))
                         setRecentOrders(prev => prev.filter(o => o !== addedRow)) // genuine failure → don't leave a phantom order in the journal
                         setTodayOrders(prev => prev.filter(o => o !== optimisticOrder))
                         refreshTables() // gỡ phần đã cộng lạc quan cho bàn
@@ -753,10 +711,6 @@ export function POSProvider() {
             await deleteOrder(orderId, profile?.name)
             setTodayOrders(prev => prev.map(o => o.id === orderId ? { ...o, deleted_at: new Date().toISOString(), deleted_by: profile?.name } : o))
             if (addressId) {
-                // Không await: kết quả chỉ chảy vào doanh thu/ly trên header, không ai
-                // đợi nó. Await ở đây là bắt người xoá nhìn màn hình đứng thêm một RTT
-                // (rõ nhất ở nút Sửa đợt — giỏ chỉ hiện món sau khi RPC này về).
-                refreshStats(addressId)
                 // Keep the POS journal header in sync — without this a delete here
                 // leaves the removed order showing on /pos until the next reload.
                 refreshRecentOrders(addressId)
@@ -824,7 +778,6 @@ export function POSProvider() {
                 order_items: (o.order_items || []).map((i: Row) => byId.has(i.id) ? { ...i, discount_amount: byId.get(i.id) } : i),
             }))
             if (addressId) {
-                await refreshStats(addressId)
                 refreshRecentOrders(addressId)
                 invalidateDailyContext(addressId)
             }
@@ -846,7 +799,6 @@ export function POSProvider() {
             const isToday = !createdAt || isSameDayVN(createdAt, new Date())
             if (isToday) {
                 setTodayExpenses(prev => [expense, ...prev])
-                if (!isFixed) setTotalCost(prev => prev + amount)
             }
             invalidateDailyContext(addressId)
             // handleAddExpense chỉ được gọi từ modal "Thêm chi phí" — isRefill ở đây thực ra
@@ -874,12 +826,10 @@ export function POSProvider() {
         }
     }
 
-    async function handleDeleteExpense(expenseId: UUID, amount: number) {
+    async function handleDeleteExpense(expenseId: UUID) {
         try {
             await deleteExpense(expenseId)
-            const wasFixed = todayExpenses.find(e => e.id === expenseId)?.is_fixed
             setTodayExpenses(prev => prev.filter(e => e.id !== expenseId))
-            if (!wasFixed) setTotalCost(prev => Math.max(0, prev - amount))
             invalidateDailyContext(addressId)
             showToast('Đã xóa chi phí', 'success')
         } catch (err) {
@@ -911,20 +861,20 @@ export function POSProvider() {
         handleAddItem, handleRemoveItem, handleToggleExtra, handleToggleStickyExtra, handleToggleTopping, reopenRoundIntoCart,
         setItemDiscount, setItemNote,
         handleConfirm, tableName, setTableName,
-        openTables, refreshTables, handleCloseTable, toggleMark, moveTableRounds,
+        openTables, tablesLoaded, refreshTables, handleCloseTable, toggleMark, moveTableRounds,
         enabledStickyExtraIds,
         total, orderCount, hasOrder,
         discountAmount, finalTotal,
-        recentOrders, enterKey,
+        recentOrders, recentLoaded, enterKey,
         toast, showToast, showError, reportError,
         // deliberately partial deps, see comment above
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }), [cart, tableName, openTables, refreshTables, handleCloseTable, toggleMark, moveTableRounds, enabledStickyExtraIds, total, orderCount, hasOrder, discountAmount, finalTotal, recentOrders, enterKey, toast, showToast, showError, reportError])
+    }), [cart, tableName, openTables, tablesLoaded, refreshTables, handleCloseTable, toggleMark, moveTableRounds, enabledStickyExtraIds, total, orderCount, hasOrder, discountAmount, finalTotal, recentOrders, recentLoaded, enterKey, toast, showToast, showError, reportError])
 
     const statsValue = useMemo<StatsContextValue>(() => ({
-        revenue, totalCost, cupsSold, isOnline,
+        isOnline,
         retrySync,
-    }), [revenue, totalCost, cupsSold, isOnline, retrySync])
+    }), [isOnline, retrySync])
 
     const historyValue = useMemo<HistoryContextValue>(() => ({
         todayOrders, todayExpenses, isLoadingHistory, justArrivedIds,
