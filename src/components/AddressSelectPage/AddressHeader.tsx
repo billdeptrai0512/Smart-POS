@@ -1,5 +1,8 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { Mail, Loader2, Check, X, Bell, MessageCircleQuestion, LogOut, User, LayoutDashboard, ChevronDown } from 'lucide-react'
+import DatePicker, { type DateRange } from '../common/DatePicker'
+import { formatIsoShort } from '../common/datePickerUtils'
+import { addDaysVN, dateStringVN, rangeDayCount } from '../../utils/dateVN'
 import { useLocation } from 'react-router-dom'
 import { NAV_ICON_BTN } from '../../constants/navStyles'
 import { useAuth } from '../../contexts/AuthContext'
@@ -26,15 +29,12 @@ interface Props {
     onSignOut: () => void
     onAdminClick?: () => void // chỉ admin mới truyền
     today: { cups: number; revenue: number; prevCups: number; prevRevenue: number; actual: number | null; prevActual: number } | null
-    rangeDays: number
-    onRangeChange: (days: number) => void
+    range: DateRange | null // null = hôm nay
+    onRangeChange: (range: DateRange | null) => void
 }
 
-const RANGES = [{ days: 1, label: 'Hôm nay' }, { days: 7, label: 'Tổng 7 ngày' }, { days: 30, label: 'Tổng 30 ngày' }]
-
-export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTab, profile, setError, addressCount, staffCount, managerCount, onSupportClick, onSignOut, onAdminClick, today, rangeDays, onRangeChange }: Props) {
+export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTab, profile, setError, addressCount, staffCount, managerCount, onSupportClick, onSignOut, onAdminClick, today, range, onRangeChange }: Props) {
     const showTabs = !isStaff && !isGuest;
-    const vs = rangeDays === 1 ? undefined : `So với ${rangeDays} ngày liền trước`
     const [emailOpen, setEmailOpen] = useState(false)
     // ?reopen=<kho> (Back từ trang chi tiết nguyên liệu) → mở lại sheet; AddressNotice tự mở dòng kho đó.
     const { search } = useLocation()
@@ -85,11 +85,10 @@ export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTa
                     {/* Tổng hôm nay — thẻ cùng kiểu "Nhật ký" của POS */}
                     <div className="px-6 mt-3">
                         <div className="relative bg-bg rounded-[20px] p-3 sm:p-3.5 border border-border/60 shadow-sm flex flex-col gap-1">
-                            <RangeRow days={rangeDays} onChange={onRangeChange}>
-                                <Stat label="bán:" value={today && `${today.cups.toLocaleString('vi-VN')} ly`} pct={today && deltaPct(today.cups, today.prevCups)} vs={vs} />
-                            </RangeRow>
-                            <Stat label="Doanh thu:" value={today && formatVND(today.revenue)} pct={today && deltaPct(today.revenue, today.prevRevenue)} vs={vs} />
-                            <Stat label="Tổng thực thu:" value={actual != null ? formatVND(actual) : null} pct={actual != null && today ? deltaPct(actual, today.prevActual) : null} vs={rangeDays === 1 ? 'So với cả ngày hôm qua' : vs} />
+                            <RangeRow range={range} onChange={onRangeChange} />
+                            <Stat label="Bán:" value={today && `${today.cups.toLocaleString('vi-VN')} ly`} pct={today && deltaPct(today.cups, today.prevCups)} />
+                            <Stat label="Doanh thu:" value={today && formatVND(today.revenue)} pct={today && deltaPct(today.revenue, today.prevRevenue)} />
+                            <Stat label="Tổng thực thu:" value={actual != null ? formatVND(actual) : null} pct={actual != null && today ? deltaPct(actual, today.prevActual) : null} />
                         </div>
                     </div>
                     {/* Tab — cùng kiểu ReportViewFilter của trang Báo cáo */}
@@ -119,12 +118,12 @@ export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTa
 }
 
 // value null = chưa có số (lần tải đầu) → "—", không hiện "0".
-function Stat({ label, value, pct, vs }: { label: string; value: string | null; pct: number | null; vs?: string }) {
+function Stat({ label, value, pct }: { label: string; value: string | null; pct: number | null }) {
     return (
         <div className="flex items-baseline gap-1.5 text-sm whitespace-nowrap">
             <span className="text-text-secondary">{label}</span>
             <span className="text-text">{value ?? '—'}</span>
-            <Delta pct={pct} title={vs} />
+            <Delta pct={pct} />
         </div>
     )
 }
@@ -204,42 +203,40 @@ function AccountModal({ email, canEditEmail, onSignOut, onClose }: { email?: str
     )
 }
 
-// Dòng đầu thẻ tổng: bấm cả dòng (mũi tên ở mép phải) để chọn khoảng thời gian; menu thả xuống, backdrop trong suốt để bấm ra ngoài là đóng.
-function RangeRow({ days, onChange, children }: { days: number; onChange: (days: number) => void; children: ReactNode }) {
-    const [open, setOpen] = useState(false)
+const MAX_RANGE_DAYS = 92 // lùi tối đa ~3 tháng từ hôm nay
+
+// Tên kỳ khi đang chạy dở: "Tuần này" (Thứ 2 → hôm nay) / "Tháng này" (mùng 1 → hôm nay); khác → null, hiện ngày.
+function periodName({ startISO, endISO }: DateRange, todayISO: string) {
+    if (endISO !== todayISO) return null
+    if (new Date(`${startISO}T00:00:00Z`).getUTCDay() === 1 && rangeDayCount(startISO, endISO) <= 7) return 'Tuần này'
+    if (startISO.endsWith('-01') && startISO.slice(0, 7) === todayISO.slice(0, 7)) return 'Tháng này'
+    return null
+}
+
+// Dòng tiêu đề thẻ tổng: bấm cả dòng (chevron ở mép phải) mở lịch chọn khoảng ngày — cùng DatePicker range của Nhật ký / Dòng tiền.
+// null = hôm nay (dùng số live có sẵn); chọn đúng 1 ngày hôm nay cũng quy về null.
+function RangeRow({ range, onChange }: { range: DateRange | null; onChange: (range: DateRange | null) => void }) {
+    const todayISO = dateStringVN()
+    const set = (r: DateRange) => onChange(r.startISO === todayISO && r.endISO === todayISO ? null : r)
+    const title = !range ? 'Hôm nay' : periodName(range, todayISO) ?? (range.startISO === range.endISO ? formatIsoShort(range.startISO) : `${formatIsoShort(range.startISO)} – ${formatIsoShort(range.endISO)}`)
     return (
-        <div className="relative z-30">
-            <div
-                role="button"
-                tabIndex={0}
-                aria-haspopup="listbox"
-                aria-expanded={open}
-                onClick={() => setOpen(o => !o)}
-                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(o => !o) } }}
-                className="flex items-center gap-1 cursor-pointer rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"            >
-                <span className="text-sm text-text-secondary whitespace-nowrap">{RANGES.find(r => r.days === days)?.label}</span>
-                {children}
-                <ChevronDown size={16} className={`ml-auto shrink-0 text-text-secondary transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden />
-            </div>
-            {open && (
-                <>
-                    <div className="fixed inset-0" onClick={() => setOpen(false)} />
-                    <ul role="listbox" className="absolute right-0 top-full mt-2 w-44 p-1 rounded-[14px] bg-surface border border-border/60 shadow-xl">
-                        {RANGES.map(r => (
-                            <li key={r.days} role="option" aria-selected={r.days === days}>
-                                <button
-                                    type="button"
-                                    onClick={() => { onChange(r.days); setOpen(false) }}
-                                    className={`w-full h-9 px-3 flex items-center justify-between rounded-[10px] text-xs font-bold ${r.days === days ? 'bg-primary/10 text-primary' : 'text-text hover:bg-border/30'}`}
-                                >
-                                    {r.label}
-                                    {r.days === days && <Check size={14} aria-hidden />}
-                                </button>
-                            </li>
-                        ))}
-                    </ul>
-                </>
-            )}
+        <div className="relative z-30 pb-1">
+            <DatePicker
+                range
+                className="w-full"
+                align="end"
+                max={todayISO}
+                min={dateStringVN(addDaysVN(undefined, -MAX_RANGE_DAYS))} // khoảng dài = tải 2 kỳ dữ liệu thực thu của mọi địa chỉ
+                value={range ?? { startISO: todayISO, endISO: todayISO }}
+                onChange={set}
+                onPresetSelect={p => set({ startISO: p.startISO, endISO: p.endISO > todayISO ? todayISO : p.endISO })} // "Tuần/Tháng này" kết thúc ở tương lai → cắt về hôm nay
+                trigger={(_, toggle) => (
+                    <button type="button" onClick={toggle} className="w-full flex items-center gap-2 cursor-pointer rounded text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+                        <span className="truncate text-sm font-bold text-text">{title}</span>
+                        <ChevronDown size={16} className="ml-auto shrink-0 text-text-secondary" aria-hidden />
+                    </button>
+                )}
+            />
         </div>
     )
 }

@@ -120,3 +120,8 @@ export function startOfMonthVN(date = new Date(), offset = 0) {
 export function endOfMonthVN(date = new Date(), offset = 0) {
     return new Date(startOfMonthVN(date, offset + 1).getTime() - 1)
 }
+
+// Số ngày của khoảng [startISO, endISO] (gồm 2 đầu).
+export function rangeDayCount(startISO: string, endISO: string) {
+    return Math.round((Date.parse(`${endISO}T00:00:00Z`) - Date.parse(`${startISO}T00:00:00Z`)) / 86_400_000) + 1
+}

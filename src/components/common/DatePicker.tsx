@@ -22,6 +22,7 @@ interface Props {
     trigger?: (label: string, toggle: () => void) => ReactNode
     align?: 'center' | 'start' | 'end'
     anchor?: 'self' | 'parent'
+    className?: string // thêm vào wrapper (vd 'w-full' để trigger giãn hết hàng)
 }
 
 const WEEKDAY_LABELS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
@@ -61,6 +62,7 @@ export default function DatePicker({
     trigger,
     align = 'center',
     anchor = 'self',
+    className = '',
 }: Props) {
     const [open, setOpen] = useState(false)
     // value là string (single) hoặc {startISO,endISO} (range) — tách ra 2 biến để khỏi phải thu hẹp kiểu ở từng chỗ dùng.
@@ -141,7 +143,7 @@ export default function DatePicker({
     const alignCls = align === 'start' ? 'left-0' : align === 'end' ? 'right-0' : 'left-1/2 -translate-x-1/2'
 
     return (
-        <div ref={wrapRef} className={`${anchor === 'self' ? 'relative ' : ''}inline-flex`}>
+        <div ref={wrapRef} className={`${anchor === 'self' ? 'relative ' : ''}inline-flex ${className}`}>
             {trigger
                 ? trigger(displayLabel, toggle)
                 : (

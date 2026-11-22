@@ -8,6 +8,7 @@ import { fetchProducts, fetchAllRecipes, fetchIngredientCostsAndUnits, fetchProd
 import { fetchRangeTotals, type RangeTotals } from '../services/branchCashService'
 import { cloneFromShareCode, getSharedConfig } from '../services/backupService'
 import { Loader } from 'lucide-react'
+import type { DateRange } from '../components/common/DatePicker'
 import Skeleton from '../components/common/Skeleton'
 import Toast from '../components/POSPage/Toast'
 import { useToast } from '../hooks/useToast'
@@ -83,16 +84,16 @@ export default function AddressSelectPage() {
         return { cups: sum(cupsMap), revenue: sum(revenueMap), prevCups: sum(prevCupsMap), prevRevenue: sum(prevRevenueMap), actual: hasActual ? sum(actualTotals.today) : null, prevActual: sum(actualTotals.prev) }
     }, [addresses, cupsMap, revenueMap, prevCupsMap, prevRevenueMap, actualTotals])
 
-    // Lọc thẻ tổng: 1 = hôm nay (số có sẵn, poll 30s); 7/30 = tải riêng, lưu theo (danh sách địa chỉ, khoảng) —
+    // Lọc thẻ tổng: null = hôm nay (số có sẵn, poll 30s); khoảng ngày chọn từ lịch = tải riêng, lưu theo (danh sách địa chỉ, khoảng) —
     // đổi qua lại hiện ngay số đã có trong lúc tải lại ngầm, không nháy "—".
     const { toast, showError } = useToast()
-    const [rangeDays, setRangeDays] = useState(1)
+    const [range, setRange] = useState<DateRange | null>(null) // null = hôm nay
     const [rangeCache, setRangeCache] = useState<Record<string, RangeTotals | null>>({})
-    const rangeKey = `${addressIdsKey}|${rangeDays}`
+    const rangeKey = `${addressIdsKey}|${range?.startISO}|${range?.endISO}`
     useEffect(() => {
-        if (rangeDays === 1) return
+        if (!range) return
         let stale = false
-        fetchRangeTotals(addresses.map(a => a.id), rangeDays).then(t => { if (!stale) setRangeCache(c => ({ ...c, [rangeKey]: t })) }).catch(e => { if (!stale) showError(e, 'Tải tổng theo khoảng') })
+        fetchRangeTotals(addresses.map(a => a.id), range.startISO, range.endISO).then(t => { if (!stale) setRangeCache(c => ({ ...c, [rangeKey]: t })) }).catch(e => { if (!stale) showError(e, 'Tải tổng theo khoảng') })
         return () => { stale = true }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [rangeKey])
@@ -270,9 +271,9 @@ export default function AddressSelectPage() {
                 onSupportClick={() => setShowSupportModal(true)}
                 onSignOut={handleSignOut}
                 onAdminClick={isAdmin ? () => navigate('/admin/dashboard') : undefined}
-                today={rangeDays === 1 ? today : rangeCache[rangeKey] ?? null}
-                rangeDays={rangeDays}
-                onRangeChange={setRangeDays}
+                today={range ? rangeCache[rangeKey] ?? null : today}
+                range={range}
+                onRangeChange={setRange}
             />
 
             <div className="address-scroll-list flex-1 overflow-y-auto px-4 pt-4 pb-4 hide-scrollbar">
