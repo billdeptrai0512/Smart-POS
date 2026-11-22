@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, type ReactNode } from 'react'
-import { Loader2, CheckCircle2, Check, ChevronDown, ClipboardCheck, Search } from 'lucide-react'
+import { Loader2, CheckCircle2, Check, ChevronDown, ClipboardCheck } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAddress } from '../../contexts/AddressContext'
 import { useAddressStats } from '../../contexts/AddressStatsContext'
@@ -12,7 +12,7 @@ import { dateFullVN } from '../../utils/dateVN'
 import { copyText } from '../../utils/clipboard'
 import { errorMessage } from '../../utils/errorMessage'
 import type { UUID } from '../../types/domain'
-import { BottomSheet, Dialog, ModalActions } from './ModalShell'
+import { Dialog, ModalActions } from './ModalShell'
 import { SupportLinks } from './SupportModal'
 
 // Gradient vàng thương hiệu (đồng bộ badge "developed by").
@@ -40,11 +40,13 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
     // Chọn sẵn chi nhánh đang xem (hoặc chi nhánh đầu) — chạy 1 lần khi addresses sẵn sàng.
     // Dùng effect (không phải useState init) vì addresses load bất đồng bộ sau mount.
     const didInit = useRef(false)
+    const [pinnedId, setPinnedId] = useState<UUID | null>(null) // chi nhánh chọn sẵn → ghim đầu danh sách, khỏi bị đẩy khuất khỏi vùng cuộn
     useEffect(() => {
         if (didInit.current || !addresses.length) return
         const want = preselectAddressId || addressId
         const valid = want && addresses.some(a => a.id === want) ? want : addresses[0].id
         // eslint-disable-next-line react-hooks/set-state-in-effect -- init 1 lần khi addresses về (didInit chặn lặp)
+        setPinnedId(valid)
         setSelectedAddressIds([valid])
         didInit.current = true
     }, [addresses, preselectAddressId, addressId])
@@ -52,8 +54,6 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
     const [confirmReset, setConfirmReset] = useState(false) // 2-step confirm (không dùng window.confirm — bị chặn trong webview)
     const [adminError, setAdminError] = useState<string | null>(null)
     const [confirmed, setConfirmed] = useState(false)
-    const [branchQuery, setBranchQuery] = useState('')
-    const [pickerOpen, setPickerOpen] = useState(false)
     const [adminOpen, setAdminOpen] = useState(false)
     const [copied, setCopied] = useState<string | null>(null) // 'stk' | 'noidung' | null
     const [reference, setReference] = useState<string | null>(null) // mã CK (SP<reference>) từ payment_intent
@@ -105,13 +105,8 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
     const toggleAllAddresses = () =>
         setSelectedAddressIds(allAddressesSelected ? [] : addresses.map(a => a.id))
 
-    // Nhiều chi nhánh → bật search + cuộn nội bộ.
-    const manyBranches = addresses.length > 6
-    const matched = branchQuery.trim()
-        ? addresses.filter(a => normalizeText(a.name).includes(normalizeText(branchQuery)))
-        : addresses
     // Sort ổn định nên thứ tự cũ giữ trong mỗi nhóm.
-    const filteredAddresses = [...matched].sort((a, b) => statusRank(subByAddr[a.id]) - statusRank(subByAddr[b.id]))
+    const sortedAddresses = [...addresses].sort((a, b) => Number(b.id === pinnedId) - Number(a.id === pinnedId) || statusRank(subByAddr[a.id]) - statusRank(subByAddr[b.id]))
 
     // ── Tính tiền: giá cố định × số chi nhánh ────────────────────────────────────
     const addrCount = selectedAddressIds.length
@@ -226,31 +221,45 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
 
     return (
         <div className="flex flex-col gap-5 animate-fade-in">
-            {/* ── Địa chỉ + hạn: mỗi địa chỉ đã chọn 1 dòng "tên | dùng đến ngày" (gia hạn nối tiếp nên hạn mỗi chi nhánh có thể khác nhau). Bấm "Đổi" hoặc cả thẻ để mở sheet chọn. ── */}
+            {/* ── Địa chỉ: liệt kê SẴN mọi chi nhánh dạng checkbox — nhìn là biết chọn nhiều để trả chung 1 QR (không cần sheet). Chọn: "dùng đến" sau gia hạn (nối tiếp nên mỗi chi nhánh một hạn); chưa chọn: trạng thái gói hiện tại. ── */}
             <section className="flex flex-col gap-2.5">
                 <SectionHeader
                     title="Địa chỉ"
-                    action={addresses.length > 0 && (
-                        <button onClick={() => setPickerOpen(true)} className="text-[11px] font-black text-primary uppercase tracking-wide whitespace-nowrap">
-                            {addrCount > 0 ? 'Đổi' : 'Chọn'}
+                    hint={addresses.length > 1 ? `${addrCount}/${addresses.length}` : undefined}
+                    action={addresses.length > 1 && (
+                        <button onClick={toggleAllAddresses} className="text-[11px] font-black text-primary uppercase tracking-wide whitespace-nowrap">
+                            {allAddressesSelected ? 'Bỏ tất cả' : 'Tất cả'}
                         </button>
                     )}
                 />
-                <button
-                    type="button"
-                    onClick={() => setPickerOpen(true)}
-                    disabled={addresses.length === 0}
-                    className="w-full text-left rounded-[18px] border border-border/60 bg-surface px-3.5 py-3 flex flex-col gap-2 max-h-[168px] overflow-y-auto active:bg-surface-light transition-colors"
-                >
-                    {addrCount > 0 ? selectedAddressIds.map(id => (
-                        <span key={id} className="w-full flex items-center justify-between gap-3">
-                            <span className="min-w-0 truncate text-[13px] font-bold text-text">{addresses.find(a => a.id === id)?.name || '—'}</span>
-                            <span className="shrink-0 text-[12px] text-text-secondary tabular-nums">dùng đến {accessLoaded ? dateFullVN(newExpiryFor(id)) : '…'}</span>
-                        </span>
-                    )) : (
-                        <span className="text-[12px] text-text-secondary font-medium">{addresses.length === 0 ? 'Chưa có chi nhánh nào.' : 'Chọn chi nhánh để đăng ký'}</span>
-                    )}
-                </button>
+                <div className="max-h-[168px] flex flex-col gap-1.5 overflow-y-auto">
+                    {addresses.length === 0 && <p className="text-[12px] text-text-secondary">Chưa có chi nhánh nào.</p>}
+                    {sortedAddresses.map(addr => {
+                        const active = selectedAddressIds.includes(addr.id)
+                        const { status, daysLeft = 0, trialEnded } = subByAddr[addr.id]
+                        const [pillText, pillCls] = status !== 'none'
+                            ? [`${status === 'trial' ? 'Dùng thử · ' : ''}còn ${daysLeft} ngày`, PILL_TONE[expiryTone(daysLeft)]]
+                            : [trialEnded ? 'Hết dùng thử' : 'Chưa đăng ký', 'bg-primary/10 text-primary']
+                        return (
+                            <button
+                                key={addr.id}
+                                type="button"
+                                role="checkbox"
+                                aria-checked={active}
+                                onClick={() => toggleAddress(addr.id)}
+                                className={`w-full flex items-center gap-2.5 text-left rounded-[12px] border px-3 py-2.5 transition-colors ${active ? 'border-primary bg-primary/[0.07]' : 'border-border/60 bg-surface'}`}
+                            >
+                                <span className={`w-4 h-4 shrink-0 rounded-[5px] border-2 flex items-center justify-center ${active ? 'bg-primary border-primary text-bg' : 'border-text-dim'}`}>
+                                    {active && <Check size={11} strokeWidth={4} />}
+                                </span>
+                                <span className={`min-w-0 flex-1 text-[13px] font-bold truncate ${active ? 'text-text' : 'text-text-secondary'}`}>{addr.name}</span>
+                                {accessLoaded && (active
+                                    ? <span className="shrink-0 text-[12px] text-text-secondary tabular-nums">dùng đến {dateFullVN(newExpiryFor(addr.id))}</span>
+                                    : <span className={`shrink-0 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full ${pillCls}`}>{pillText}</span>)}
+                            </button>
+                        )
+                    })}
+                </div>
             </section>
 
             {confirmSaveQr && (
@@ -261,60 +270,6 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
                     </div>
                     <ModalActions confirmLabel="Lưu ảnh" onCancel={() => setConfirmSaveQr(false)} onConfirm={() => { setConfirmSaveQr(false); saveQr() }} />
                 </Dialog>
-            )}
-
-            {pickerOpen && (
-                <BottomSheet onClose={() => setPickerOpen(false)} panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-6 flex flex-col gap-3 animate-slide-up max-h-[85dvh]">
-                    <SectionHeader
-                        title="Chọn địa chỉ"
-                        hint={`${addrCount}/${addresses.length}`}
-                        action={addresses.length > 1 && (
-                            <button onClick={toggleAllAddresses} className="text-[11px] font-black text-primary uppercase tracking-wide whitespace-nowrap">
-                                {allAddressesSelected ? 'Bỏ tất cả' : 'Tất cả'}
-                            </button>
-                        )}
-                    />
-                    {manyBranches && (
-                        <div className="relative">
-                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-dim pointer-events-none" />
-                            <input
-                                type="text"
-                                value={branchQuery}
-                                onChange={e => setBranchQuery(e.target.value)}
-                                aria-label="Tìm chi nhánh"
-                                className="w-full pl-9 pr-3 py-2 rounded-[10px] bg-surface-light border border-border/60 text-text text-[13px] focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
-                            />
-                        </div>
-                    )}
-                    <div className="min-h-0 flex flex-col gap-1.5 overflow-y-auto">
-                        {filteredAddresses.map(addr => {
-                            const active = selectedAddressIds.includes(addr.id)
-                            const { status, daysLeft = 0, trialEnded } = subByAddr[addr.id]
-                            const [pillText, pillCls] = status !== 'none'
-                                ? [`${status === 'trial' ? 'Dùng thử · ' : ''}còn ${daysLeft} ngày`, PILL_TONE[expiryTone(daysLeft)]]
-                                : [trialEnded ? 'Hết dùng thử' : 'Chưa đăng ký', 'bg-primary/10 text-primary']
-                            return (
-                                <button
-                                    key={addr.id}
-                                    onClick={() => toggleAddress(addr.id)}
-                                    className={`w-full flex items-center gap-2 text-left rounded-[12px] border px-3 py-2 transition-colors ${active ? 'border-primary bg-primary/[0.07]' : 'border-border/60 bg-surface-light'}`}
-                                >
-                                    <span className={`min-w-0 flex-1 text-[13px] font-bold truncate ${active ? 'text-text' : 'text-text-secondary'}`}>{addr.name}</span>
-                                    {/* Pill: còn X ngày (đã đăng ký) / Dùng thử · còn X ngày — màu theo độ gấp như chấm của SubscriptionBadge (>7 xanh, ≤7 vàng, ≤3 đỏ); Hết dùng thử / Chưa đăng ký (cam). */}
-                                    {accessLoaded && <span className={`shrink-0 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full ${pillCls}`}>{pillText}</span>}
-                                    {active && <Check size={15} strokeWidth={3} className="shrink-0 text-primary" />}
-                                </button>
-                            )
-                        })}
-                        {filteredAddresses.length === 0 && <p className="text-[12px] text-text-secondary py-2">Không tìm thấy chi nhánh.</p>}
-                    </div>
-                    <button
-                        onClick={() => setPickerOpen(false)}
-                        className="w-full py-3 rounded-[12px] bg-primary text-bg text-[14px] font-black uppercase active:scale-[0.98] transition"
-                    >
-                        Xong{addrCount > 0 && ` (${addrCount})`}
-                    </button>
-                </BottomSheet>
             )}
 
             {/* ── Thanh toán — 1 card gắn kết: QR + tổng cộng + status ───────────── */}
@@ -479,9 +434,6 @@ function CopyRow({ label, value, onCopy, copied }: { label: string; value: strin
 }
 
 // Chuẩn hoá để search không phân biệt hoa/thường & dấu tiếng Việt.
-function normalizeText(s = '') {
-    return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd')
-}
 
 // Cộng tháng, clamp về ngày cuối tháng nếu tràn — KHỚP Postgres `date + interval 'N months'`
 // (vd 31/08 + 6 tháng → 28/02, không cuộn sang 03/03 như Date.setMonth mặc định).
