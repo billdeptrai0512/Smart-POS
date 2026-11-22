@@ -1,4 +1,5 @@
 import { useLocation, useNavigate, Navigate } from 'react-router-dom'
+import Skeleton from '../components/common/Skeleton'
 import SubscriptionScreen from '../components/common/SubscriptionScreen'
 import { useMonetizationEnabled } from '../hooks/useEntitlement'
 import { useAddress } from '../contexts/AddressContext'
@@ -24,7 +25,16 @@ export default function SubscriptionPage() {
     const { enabled, loading } = useMonetizationEnabled()
 
     // Đang đọc server flag → chờ (tránh redirect nhầm trước khi biết trạng thái).
-    if (loading) return null
+    // Cùng khung xương với PageLoading (App.tsx) → chuyển từ fallback lazy sang đây không nháy trắng.
+    if (loading) return (
+        <div className="flex flex-col items-center justify-center min-h-screen bg-bg px-6">
+            <div className="w-full max-w-sm space-y-3">
+                <Skeleton className="h-14 w-full" />
+                <Skeleton className="h-14 w-full" />
+                <Skeleton className="h-10 w-3/4 mx-auto" />
+            </div>
+        </div>
+    )
     const { preselectAddressId, from, locked, skipTo = '/pos', skipState } = location.state || {}
     // Monetization OFF (client build hoặc server app_config) → không có trang đăng ký: đi tiếp tới đích (vd Danh mục
     // của địa chỉ vừa tạo, đã chọn sẵn) thay vì /pos.

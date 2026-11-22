@@ -8,6 +8,7 @@ import { timeStringVN } from '../utils/dateVN'
 import MonetizationToggle from '../components/AdminDashboardPage/MonetizationToggle'
 import { errorMessage } from '../utils/errorMessage'
 import AdminPageHeader from '../components/common/AdminPageHeader'
+import Skeleton from '../components/common/Skeleton'
 
 // Hình dạng JSON của RPC admin_dashboard_overview / guest_onboarding_funnel_stats
 // (supabase.rpc không có type) — chỉ khai các trường trang này đọc.
@@ -88,10 +89,11 @@ export default function AdminDashboardPage() {
     const [byRange, setByRange] = useState<Record<string, GuestFunnel> | null>(null)
     const [stages, setStages] = useState<BranchStages | null>(null)
     const [visits, setVisits] = useState<Record<string, number> | null>(null)
+    const [funnelLoaded, setFunnelLoaded] = useState(false) // false → thẻ phễu hiện khung chờ, không phải "Chưa có khách"
 
     const reload = useCallback(() => {
         fetchAdminDashboard().then(setData).catch((e) => setError(errorMessage(e, '')))
-        fetchGuestOnboardingFunnel().then(setByRange).catch(() => setByRange(null))
+        fetchGuestOnboardingFunnel().then(setByRange).catch(() => setByRange(null)).finally(() => setFunnelLoaded(true))
         fetchAdminBranchStages().then(setStages).catch(() => setStages(null))
         fetchLoginPageVisits().then(setVisits).catch(() => setVisits(null))
     }, [])
@@ -122,7 +124,7 @@ export default function AdminDashboardPage() {
                             <Loader2 size={24} className="animate-spin text-text-dim" />
                         </div>
                     ) : (
-                        <DashboardBody data={data} byRange={byRange} stages={stages} visits={visits} />
+                        <DashboardBody data={data} byRange={byRange} funnelLoaded={funnelLoaded} stages={stages} visits={visits} />
                     )}
                 </div>
             </div>
@@ -130,7 +132,7 @@ export default function AdminDashboardPage() {
     )
 }
 
-function DashboardBody({ data, byRange, stages, visits }: { data: DashboardData; byRange: Record<string, GuestFunnel> | null; stages: BranchStages | null; visits: Record<string, number> | null }) {
+function DashboardBody({ data, byRange, funnelLoaded, stages, visits }: { data: DashboardData; byRange: Record<string, GuestFunnel> | null; funnelLoaded: boolean; stages: BranchStages | null; visits: Record<string, number> | null }) {
     const { attention, activity, attention_total_count } = data
     // total_count = đếm không giới hạn (đã dedupe theo chi nhánh) từ RPC; attention (mảng) chỉ là top-20
     // hiển thị nên KHÔNG dùng .length làm KPI — sẽ undercount khi > 20 chi nhánh cần chú ý.
@@ -140,7 +142,7 @@ function DashboardBody({ data, byRange, stages, visits }: { data: DashboardData;
     return (
         <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
             <div className="lg:col-start-1 lg:row-start-2 lg:row-span-2">
-                <OnboardingFunnelCard byRange={byRange} visits={visits} />
+                <OnboardingFunnelCard byRange={byRange} loaded={funnelLoaded} visits={visits} />
             </div>
             <div className="lg:col-start-2 lg:row-start-1 lg:self-stretch"><ActiveTodayHeroCard stages={stages} /></div>
             <div className="lg:col-start-1 lg:row-start-1 lg:self-stretch"><KpiRow stages={stages} attentionCount={attentionCount} /></div>
@@ -234,7 +236,7 @@ const RANGE_TABS = [
 // Fetch riêng (không qua fetchAdminDashboard) — 1 lần gọi trả cả 3 khoảng thời gian
 // (today/week/all), đổi tab KHÔNG cần round-trip mới. byRange = null khi RPC chưa apply
 // hoặc lỗi → ẩn hẳn phần guest funnel, không hỏng phần còn lại của dashboard.
-function OnboardingFunnelCard({ byRange, visits }: { byRange: Record<string, GuestFunnel> | null; visits: Record<string, number> | null }) {
+function OnboardingFunnelCard({ byRange, loaded, visits }: { byRange: Record<string, GuestFunnel> | null; loaded: boolean; visits: Record<string, number> | null }) {
     const [range, setRange] = useState('week')
 
     const funnel = byRange?.[range]
@@ -260,6 +262,8 @@ function OnboardingFunnelCard({ byRange, visits }: { byRange: Record<string, Gue
             <div className="mt-1">
                 {funnel?.stages?.length ? (
                     <GuestFunnelBody funnel={funnel} visits={visits?.[range]} loggedIn={visits?.[`${range}_members`]} signupOpened={visits?.[`${range}_signup`]} />
+                ) : !loaded ? (
+                    <Skeleton className="h-24 w-full" />
                 ) : (
                     <p className="text-[11px] text-text-dim">Chưa có khách nào vào dùng thử trong khoảng này</p>
                 )}
