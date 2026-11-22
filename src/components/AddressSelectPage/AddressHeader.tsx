@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Mail, Loader2, Check, X, Bell, MessageCircleQuestion, LogOut, User, LayoutDashboard, ChevronDown } from 'lucide-react'
 import DatePicker, { type DateRange } from '../common/DatePicker'
 import { formatIsoShort } from '../common/datePickerUtils'
-import { addDaysVN, dateStringVN, rangeDayCount } from '../../utils/dateVN'
+import { addDaysVN, dateFullVN, dateStringVN, rangeDayCount } from '../../utils/dateVN'
 import { useLocation } from 'react-router-dom'
 import { NAV_ICON_BTN } from '../../constants/navStyles'
 import { useAuth } from '../../contexts/AuthContext'
@@ -218,9 +218,9 @@ function periodName({ startISO, endISO }: DateRange, todayISO: string) {
 function RangeRow({ range, onChange }: { range: DateRange | null; onChange: (range: DateRange | null) => void }) {
     const todayISO = dateStringVN()
     const set = (r: DateRange) => onChange(r.startISO === todayISO && r.endISO === todayISO ? null : r)
-    const title = !range ? 'Hôm nay' : periodName(range, todayISO) ?? (range.startISO === range.endISO ? formatIsoShort(range.startISO) : `${formatIsoShort(range.startISO)} – ${formatIsoShort(range.endISO)}`)
+    const title = !range ? `Hôm nay, ${dateFullVN()}` : periodName(range, todayISO) ?? (range.startISO === range.endISO ? formatIsoShort(range.startISO) : `${formatIsoShort(range.startISO)} – ${formatIsoShort(range.endISO)}`)
     return (
-        <div className="relative z-30 pb-1">
+        <div className="relative z-30 pb-2 mb-1 border-b border-border/60">
             <DatePicker
                 range
                 className="w-full"

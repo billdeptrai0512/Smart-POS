@@ -35,6 +35,7 @@ img[src^="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP"] {
 }
 
 @theme {
+  --default-transition-timing-function: cubic-bezier(0, 0, 0.2, 1); /* ease-out cho mọi transition/transition-* của Tailwind (mặc định là ease-in-out) */
   /* KOPOS navy palette — bản UI: giữ hue brand (#01324c) nhưng tối + giảm bão hòa
      để card/chữ/primary nổi lên; màu brand gốc chỉ dùng cho logo & accent. */
   --color-bg: #0c141f;
@@ -167,7 +168,7 @@ body {
 
 /* ====== Active press animations ====== */
 .menu-btn {
-  transition: transform 50ms ease, background-color 50ms ease;
+  transition: transform 50ms ease-out, background-color 50ms ease-out;
   /* iOS Safari shows a text-selection / "Copy" callout on a long-press over text —
      exactly the hold-to-confirm gesture. Kill the callout + selection on the card. */
   -webkit-touch-callout: none;
@@ -227,7 +228,7 @@ body {
 .onboarding-look {
   outline: 3px solid transparent;
   outline-offset: -3px;
-  animation: onboarding-look 2s ease-in-out var(--look-delay, 0s) 1 both; /* --look-delay: chờ cuộn tới xong rồi mới sáng */
+  animation: onboarding-look 2s ease-out var(--look-delay, 0s) 1 both; /* --look-delay: chờ cuộn tới xong rồi mới sáng */
 }
 @keyframes onboarding-hint-soft {
   0%, 100% { color: var(--color-text-dim); transform: scale(1); }
@@ -257,7 +258,7 @@ body {
 }
 
 .order-item-btn {
-  transition: transform 50ms ease, background-color 50ms ease;
+  transition: transform 50ms ease-out, background-color 50ms ease-out;
 }
 
 .order-item-btn:active {

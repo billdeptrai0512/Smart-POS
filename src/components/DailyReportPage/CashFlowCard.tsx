@@ -63,7 +63,7 @@ interface Props {
     onPrintError?: (err: unknown) => void
 }
 
-// Cuộn chậm (~0,9s, easeInOut) đưa `el` vào giữa/đầu khung cuộn gần nhất — scrollIntoView({behavior:'smooth'}) của
+// Cuộn chậm (~0,9s, easeOut) đưa `el` vào giữa/đầu khung cuộn gần nhất — scrollIntoView({behavior:'smooth'}) của
 // trình duyệt chỉ ~0,25s, khách thấy như giật 1 cái. Bật giảm chuyển động của hệ điều hành → nhảy thẳng.
 export function slowScrollTo(el: HTMLElement, block: 'center' | 'start' | 'end', ms = 900) {
     let sc: HTMLElement | null = el.parentElement
@@ -76,7 +76,7 @@ export function slowScrollTo(el: HTMLElement, block: 'center' | 'start' | 'end',
     const t0 = performance.now()
     const step = (now: number) => {
         const p = Math.min((now - t0) / ms, 1)
-        sc.scrollTop = from + delta * (p < 0.5 ? 2 * p * p : 1 - (-2 * p + 2) ** 2 / 2)
+        sc.scrollTop = from + delta * (1 - (1 - p) ** 3)
         if (p < 1) requestAnimationFrame(step)
     }
     requestAnimationFrame(step)
