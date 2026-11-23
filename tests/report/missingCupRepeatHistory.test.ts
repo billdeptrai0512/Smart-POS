@@ -113,3 +113,15 @@ describe('findMissingCupCandidates — chỉ đích danh món + số ly', () => 
         expect(find({ ca_phe: -5, sua_dac: -3, cup: -1, lid: 0, matcha: -2, sua_tuoi: -10 })).toEqual([])
     })
 })
+
+describe('findMissingCupCandidates — topping 0đ không làm loãng mẫu số', () => {
+    const withTopping = {
+        ingredientsList: [...ingredientsList, { ingredient: 'kem', unit_cost: 80 }],
+        recipes: [...recipes, { product_id: 'p0', ingredient: 'kem', amount: 120 }, { product_id: 'p0', ingredient: 'sua', amount: 10 }],
+        products: [...products, { id: 'p0', name: 'Kem muối', price: 0, is_active: true }],
+    }
+    it('hụt kem (chỉ có trong món 0đ) không chặn card của món có giá', () => {
+        const out = findMissingCupCandidates({ ...withTopping, haoHutByIngredient: { ...haoHut3Cups, kem: -2000 } })
+        expect(out.map(c => c.productId)).toEqual(['p1'])
+    })
+})

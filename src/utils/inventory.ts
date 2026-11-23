@@ -701,11 +701,14 @@ export function findMissingCupCandidates({ ingredientsList = [], haoHutByIngredi
     // Trọng số = độ phổ biến trong công thức (ly, nắp có ở mọi món → nặng nhất, rồi cà phê/cacao/matcha) / định lượng
     // lớn nhất → quy về "đơn vị ly", không phụ thuộc giá vốn. Giá vốn chỉ dùng cho ingredientValue.
     const productCount = Object.keys(baseByProduct).length
+    // Nguyên liệu chỉ nằm trong món 0đ (topping miễn phí như Kem muối): hụt của nó không thể là ly bán thiếu → weight 0, khỏi làm loãng mẫu số.
+    const priceOf = new Map((products || []).map(p => [p.id, Number(p.price) || 0]))
+    const pricedIngs = new Set(variants.filter(v => priceOf.get(v.productId)! > 0).flatMap(v => v.rows.map(r => r.ingredient)))
     const weight: UsageMap = {}
     const unitCost: UsageMap = {}
     for (const ing of ingredientsList) {
         const k = ing.ingredient
-        weight[k] = skip(k) || !maxAmount[k] ? 0 : (usedBy[k] || 0) / productCount / maxAmount[k]
+        weight[k] = skip(k) || !maxAmount[k] || !pricedIngs.has(k) ? 0 : (usedBy[k] || 0) / productCount / maxAmount[k]
         unitCost[k] = Number(ing.unit_cost) || 0
     }
     // Dung sai = 2× độ nhiễu lịch sử (sàn 30% định lượng 1 ly). Ly/nắp đếm được từng cái → không dung sai (đếm sai 1 cái là đã lệch 1 ly): không để nhiễu
