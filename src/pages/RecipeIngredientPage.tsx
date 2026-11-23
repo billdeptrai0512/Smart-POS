@@ -142,7 +142,8 @@ export default function RecipeIngredientPage() {
     }
     // ─── Base recipe handlers ─────────────────────────────────────────
     // Amount box only upserts (0 stays a 0-amount row, never deletes — removal is the
-    // ✕ button). Optimistic state is authoritative; no refetch on a pure amount edit.
+    // ✕ button). Optimistic state hiển thị ngay ở trang này; context vẫn phải làm tươi để thẻ công thức ở danh sách
+    // (đọc recipes từ context) không đứng số cũ sau khi quay lại.
     async function setBaseAmount(ingredient: string, amount: number, unit: string) {
         await withSaving('Lưu công thức', async () => {
             await upsertRecipe(productId, ingredient, amount, addressId, unit)
@@ -152,8 +153,7 @@ export default function RecipeIngredientPage() {
                 : [...recipes, { product_id: productId, ingredient, amount, unit: unit || getIngredientUnit(ingredient) }]
             setRecipes(next)
             await syncBatchCost(next)
-            // Guest: context đọc từ localStorage nên đồng bộ ngay (user thật thì không cần refetch).
-            if (isGuest) refreshProducts?.()
+            refreshProducts?.() // không await: UI đã lạc quan; context cập nhật nền
         })
     }
 
@@ -302,6 +302,7 @@ export default function RecipeIngredientPage() {
                     ei.ingredient === ingredient ? { ...ei, amount: newAmount } : ei
                 ),
             }))
+            refreshProducts?.() // extraIngredients của context cấp giá vốn/tiêu hao cho POS & kiểm kê
         })
     }
 
