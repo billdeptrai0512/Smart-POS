@@ -213,12 +213,19 @@ function periodName({ startISO, endISO }: DateRange, todayISO: string) {
     return null
 }
 
+// "Ngày 16 → 22 tháng 11" (cùng tháng) / "Ngày 28/10 → 03/11" (khác tháng) / "Ngày 16 tháng 11" (1 ngày).
+function rangeLabel({ startISO, endISO }: DateRange) {
+    const [, sm, sd] = startISO.split('-').map(Number), [, em, ed] = endISO.split('-').map(Number)
+    if (startISO === endISO) return `Ngày ${sd} tháng ${sm}`
+    return sm === em ? `Ngày ${sd} → ${ed} tháng ${sm}` : `Ngày ${formatIsoShort(startISO)} → ${formatIsoShort(endISO)}`
+}
+
 // Dòng tiêu đề thẻ tổng: bấm cả dòng (chevron ở mép phải) mở lịch chọn khoảng ngày — cùng DatePicker range của Nhật ký / Dòng tiền.
 // null = hôm nay (dùng số live có sẵn); chọn đúng 1 ngày hôm nay cũng quy về null.
 function RangeRow({ range, onChange }: { range: DateRange | null; onChange: (range: DateRange | null) => void }) {
     const todayISO = dateStringVN()
     const set = (r: DateRange) => onChange(r.startISO === todayISO && r.endISO === todayISO ? null : r)
-    const title = !range ? `Hôm nay, ${dateFullVN()}` : periodName(range, todayISO) ?? (range.startISO === range.endISO ? formatIsoShort(range.startISO) : `${formatIsoShort(range.startISO)} – ${formatIsoShort(range.endISO)}`)
+    const title = !range ? `Hôm nay, ${dateFullVN()}` : periodName(range, todayISO) ?? rangeLabel(range)
     return (
         <div className="relative z-30 pb-2 mb-1 border-b border-border/60">
             <DatePicker
@@ -232,7 +239,7 @@ function RangeRow({ range, onChange }: { range: DateRange | null; onChange: (ran
                 onPresetSelect={p => set({ startISO: p.startISO, endISO: p.endISO > todayISO ? todayISO : p.endISO })} // "Tuần/Tháng này" kết thúc ở tương lai → cắt về hôm nay
                 trigger={(_, toggle) => (
                     <button type="button" onClick={toggle} className="w-full flex items-center gap-2 cursor-pointer rounded text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
-                        <span className="truncate text-sm font-bold text-text">{title}</span>
+                        <span className="truncate text-sm font-bold uppercase text-text">{title}</span>
                         <ChevronDown size={16} className="ml-auto shrink-0 text-text-secondary" aria-hidden />
                     </button>
                 )}
