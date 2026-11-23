@@ -21,9 +21,7 @@ const idObjs = (ids?: string[]) => (ids || []).map(id => ({ id }))
 /** Món nghi "pha bán nhưng không bấm bill" (findMissingCupCandidates). */
 export interface MissingCupCandidate {
     productId: string; productName: string; estimatedCups: number; confidence: number
-    estimatedRevenue: number; ingredientValue: number
-    cashMatch: boolean // két dư (Thực thu − Doanh thu) ≈ estimatedRevenue
-    similar: string[] // món khác khớp gần bằng (±3%) cùng số ly — không phân biệt nổi bằng hao hụt
+    cashMatch: boolean // két dư (Thực thu − Doanh thu) ≈ estimatedCups × giá bán
     matches: { ingredient: string; haoHut: number; amount: number; ratio: number }[]
     // Phân rã hao hụt hôm nay thành từng ly (chung cho mọi ứng viên, xem `decomposed`): cups = ly gán được món (mỗi phần tử = 1 ly),
     // rest = hao hụt còn lại chưa gán được, restCups = số ly còn hụt trong rest.
@@ -141,7 +139,7 @@ export function calculateEstimatedConsumption(orderItems: OrderItem[], recipes: 
     // Xóa những nguyên liệu có lượng tiêu hao = 0 (tránh bị hiển thị trống hoặc âm do bù trừ do thiết lập sai sót nhẹ nếu có)
     Object.keys(estimated).forEach(key => {
         // Làm tròn lấy 1 chữ số thập phân để tránh lỗi epsilon Math floating point của JS (ví dụ 0.1 + 0.2 = 0.30000000004)
-        estimated[key] = Math.round(estimated[key] * 10) / 10;
+        estimated[key] = r1(estimated[key]);
         if (estimated[key] === 0) {
             delete estimated[key];
         }
@@ -181,9 +179,7 @@ export function averageIngredientMaps(maps?: (UsageMap | null | undefined)[] | n
 // Dự báo tiêu hao: trung bình các tuần mẫu. weeks = mỗi phần tử là order_items của 1 ngày mẫu
 // [{ product_id, quantity, extra_ids }] (fetchLastWeekSameDayOrderItems).
 export function forecastFromWeeks(weeks: Row[][], recipes: RecipeRow[], extraIngredients: ExtraIngredients) {
-    return averageIngredientMaps(weeks.map(items => calculateEstimatedConsumption(
-        items.map(i => ({ productId: i.product_id, qty: i.quantity, extras: [...idObjs(i.extra_ids), ...idObjs(i.topping_ids)] })),
-        recipes, extraIngredients)));
+    return averageIngredientMaps(weeks.map(items => calculateEstimatedConsumption(orderItemsOf({ order_items: items }), recipes, extraIngredients)));
 }
 
 /**
@@ -220,7 +216,7 @@ export function calculateConsumptionBreakdown(orderItems: OrderItem[], recipes: 
         const extras = item.extras || [];
         const productName: string = productNames.get(id) || String(id);
 
-        const extraIds = extras.map(e => e?.id).filter((id): id is string => !!id).slice().sort();
+        const extraIds = extras.map(e => e?.id).filter((id): id is string => !!id).sort();
         const variantKey = extraIds.length ? `${id}|${extraIds.join(',')}` : String(id);
         const extraLabels = extraIds.map(eid => extraNames[eid] || eid);
         const displayName = extraLabels.length
@@ -535,7 +531,7 @@ export function formatPackCount(packs: number, packUnit: string | null | undefin
 //   { compact: true } drops the base remainder when 0 (e.g. "5 bịch" not "5 bịch + 0 g")
 //   { pack2: { size, unit } } cấp 2 tính theo CẤP 1: 1 thùng = 12 hộp → "1 thùng + 2 hộp + 40 ml"
 export function formatPackedQty(qty: unknown, packSize: unknown, packUnit: string | null | undefined, baseUnit: string | null | undefined, opts: { pack2?: Pack2 | null; compact?: boolean } = {}) {
-    const n = Math.round(Number(qty || 0) * 10) / 10
+    const n = r1(qty)
     const unit = baseUnit || 'đv'
     const ps = Number(packSize || 0)
     if (!ps || !packUnit || ps <= 0 || !Number.isFinite(n)) {
@@ -641,7 +637,7 @@ export function computeBalance({ inventoryValue, restockValue, openingValue, ope
 export const computeHaoHut = (args: Parameters<typeof computeBalance>[0]) => computeBalance(args).haoHut
 
 /**
- * PROTOTYPE — dò nghi vấn "pha bán nhưng không bấm bill": chỉ ra MÓN NÀO, THIẾU MẤY LY.
+ * Dò nghi vấn "pha bán nhưng không bấm bill": chỉ ra MÓN NÀO, THIẾU MẤY LY.
  *
  * Ý tưởng: coi hao hụt hôm nay là 1 vector (mỗi nguyên liệu hụt bao nhiêu, quy ra tiền). Giả thuyết
  * "pha N ly món P không bấm bill" dự đoán đúng N × công thức P. Điểm của giả thuyết =
@@ -656,7 +652,7 @@ export const computeHaoHut = (args: Parameters<typeof computeBalance>[0]) => com
  *   "dự đoán sai" = 2× độ ồn; chưa có lịch sử thì 30% định lượng 1 ly.
  * @param soldByVariant soldKey(món, extra) → số ly bán gần đây (countSoldByVariant): món ít người gọi bị phạt khi phân rã từng ly; rỗng = không phạt.
  * @returns ứng viên confidence ≥ 50%, ≥ 2 nguyên liệu khớp, sort confidence giảm dần — phần tử đầu là nghi vấn
- *   chính. estimatedRevenue = N × giá bán; ingredientValue = giá trị hụt được giải thích; matches = nguyên liệu khớp.
+ *   chính. matches = nguyên liệu khớp.
  */
 export function findMissingCupCandidates({ ingredientsList = [], haoHutByIngredient = {}, recipes = [], products = [], noiseByIngredient = {}, extraIngredients = {}, productExtras = {}, cashDiff = null, soldByVariant = {} }: { ingredientsList?: Row[]; haoHutByIngredient?: Record<string, number | null>; recipes?: RecipeRow[]; products?: Row[] | null; noiseByIngredient?: UsageMap; extraIngredients?: ExtraIngredients; productExtras?: Record<string, CartExtra[]>; cashDiff?: number | null; soldByVariant?: UsageMap }) {
     const baseByProduct: Record<string, Record<string, number>> = {}
@@ -699,17 +695,15 @@ export function findMissingCupCandidates({ ingredientsList = [], haoHutByIngredi
     // Bao bì không đếm được (bịch T, ống hút) hụt không nói gì về số ly → loại khỏi cả mẫu số lẫn công thức.
     const skip = (ingredient: string) => /^(bịch t|ống hút)/.test(ingredientLabel(ingredient).toLowerCase())
     // Trọng số = độ phổ biến trong công thức (ly, nắp có ở mọi món → nặng nhất, rồi cà phê/cacao/matcha) / định lượng
-    // lớn nhất → quy về "đơn vị ly", không phụ thuộc giá vốn. Giá vốn chỉ dùng cho ingredientValue.
+    // lớn nhất → quy về "đơn vị ly", không phụ thuộc giá vốn.
     const productCount = Object.keys(baseByProduct).length
     // Nguyên liệu chỉ nằm trong món 0đ (topping miễn phí như Kem muối): hụt của nó không thể là ly bán thiếu → weight 0, khỏi làm loãng mẫu số.
     const priceOf = new Map((products || []).map(p => [p.id, Number(p.price) || 0]))
     const pricedIngs = new Set(variants.filter(v => priceOf.get(v.productId)! > 0).flatMap(v => v.rows.map(r => r.ingredient)))
     const weight: UsageMap = {}
-    const unitCost: UsageMap = {}
     for (const ing of ingredientsList) {
         const k = ing.ingredient
         weight[k] = skip(k) || !maxAmount[k] || !pricedIngs.has(k) ? 0 : (usedBy[k] || 0) / productCount / maxAmount[k]
-        unitCost[k] = Number(ing.unit_cost) || 0
     }
     // Dung sai = 2× độ nhiễu lịch sử (sàn 30% định lượng 1 ly). Ly/nắp đếm được từng cái → không dung sai (đếm sai 1 cái là đã lệch 1 ly): không để nhiễu
     // lịch sử làm "hụt 4 ly" không còn bác được giả thuyết "5 ly".
@@ -845,10 +839,7 @@ export function findMissingCupCandidates({ ingredientsList = [], haoHutByIngredi
             productName: label ? `${product.name} (${label})` : product.name,
             estimatedCups: bestN,
             confidence,
-            estimatedRevenue: bestN * price,
             cashMatch,
-            similar: [],
-            ingredientValue: known.reduce((s, r) => s + Math.min(r.loss, bestN * r.amount) * (unitCost[r.ingredient] ?? 0), 0),
             matches,
             ...decomposed,
         })
@@ -856,7 +847,6 @@ export function findMissingCupCandidates({ ingredientsList = [], haoHutByIngredi
     // Mỗi món chỉ giữ biến thể khớp nhất (attachRepeatHistory tra theo productId).
     const sorted = candidates.sort((a, b) => Number(b.cashMatch) - Number(a.cashMatch) || b.confidence - a.confidence)
         .filter((c, i, a) => a.findIndex(o => o.productId === c.productId) === i)
-    for (const c of sorted) c.similar = sorted.filter(o => o !== c && o.estimatedCups === c.estimatedCups && Math.abs(o.confidence - c.confidence) <= 0.03).map(o => o.productName)
     return sorted
 }
 

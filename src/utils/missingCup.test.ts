@@ -34,10 +34,6 @@ describe('findMissingCupCandidates', () => {
         expect(r[0].estimatedCups).toBe(4)
         expect(r[0].cashMatch).toBe(true)
     })
-    it('món giống hệt nhau được gộp: có similar', () => {
-        const [c] = find({ cà_phê: -100, ly_470ml: -4, ly_350ml: 4, nắp: -4 })
-        expect(c.similar.length).toBe(1)
-    })
     it('ngày bình thường (không hụt) → không có thẻ', () => {
         expect(find({ cà_phê: 0, ly_470ml: 0, ly_350ml: 0, nắp: 0, bịch_t: 0 })).toEqual([])
     })

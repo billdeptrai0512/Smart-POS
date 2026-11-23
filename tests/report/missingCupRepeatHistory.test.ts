@@ -104,7 +104,6 @@ describe('findMissingCupCandidates — chỉ đích danh món + số ly', () => 
         expect(out.map(c => c.productId)).toEqual(['sua'])
         expect(out[0].estimatedCups).toBe(2)
         expect(out[0].confidence).toBeGreaterThan(0.95)
-        expect(out[0].estimatedRevenue).toBe(32000)
     })
     it('chỉ hụt 1 ly + 1 nắp → không nghi món nào (món có NVL riêng không hụt bị trừ điểm)', () => {
         expect(find({ ca_phe: 0, sua_dac: 0, cup: -1, lid: -1, matcha: 0, sua_tuoi: 0 })).toEqual([])

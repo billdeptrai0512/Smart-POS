@@ -104,13 +104,6 @@ export async function upsertToppingIngredient(toppingId: UUID, ingredient: strin
     if (error) throw error
 }
 
-export async function deleteToppingIngredient(toppingId: UUID, ingredient: string) {
-    if (localRepo.isGuest()) return localRepo.deleteLocalToppingIngredient(toppingId, ingredient)
-    const { error } = await supabase.from('topping_ingredients').delete().eq('topping_id', toppingId).eq('ingredient', ingredient)
-    if (error) throw error
-    return true
-}
-
 // ---- Product<->Topping links (nhiều-nhiều: món nào dùng topping nào) ----
 
 // Trả về mảng {product_id, topping_id} thô — caller tự dựng map theo chiều cần

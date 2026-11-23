@@ -51,6 +51,12 @@ const patchLocalWhere = (key: string, match: (r: Row) => boolean, patch: Row) =>
 
 const patchLocal = (key: string, id: string, patch: Row) => patchLocalWhere(key, r => r.id === id, patch);
 
+// DELETE ... WHERE bản local: bỏ mọi dòng khớp rồi ghi lại cả bảng.
+const deleteLocalWhere = (key: string, match: (r: Row) => boolean) => set(key, get(key).filter(r => !match(r)));
+
+// sort_order ASC (null cuối), hoà thì theo tên — khớp order của select Supabase.
+const bySortThenName = (a: Row, b: Row) => (a.sort_order ?? 999999) - (b.sort_order ?? 999999) || (a.name || '').localeCompare(b.name || '');
+
 // --- Auth / State ---
 export const setIsGuest = (val: boolean) => localStorage.setItem(KEYS.IS_GUEST, val ? 'true' : 'false');
 export const isGuest = () => localStorage.getItem(KEYS.IS_GUEST) === 'true';
@@ -188,12 +194,7 @@ export const initializeGuestFromGlobal = (data: Row) => {
 
 export const fetchLocalProducts = (addressId: string | null) => {
     const list = get(KEYS.PRODUCTS).filter(p => p.owner_address_id === addressId && p.is_active) as Product[];
-    list.sort((a, b) => {
-        const aSort = a.sort_order ?? 999999;
-        const bSort = b.sort_order ?? 999999;
-        if (aSort !== bSort) return aSort - bSort;
-        return (a.name || '').localeCompare(b.name || '');
-    });
+    list.sort(bySortThenName);
     return list;
 };
 export const insertLocalProduct = (payload: Row) => {
@@ -281,13 +282,7 @@ export const upsertLocalIngredientCost = (payload: Row) => {
 
 export const fetchLocalProductExtras = (addressId: string | null) => {
     const list = get(KEYS.PRODUCT_EXTRAS).filter(e => e.address_id === addressId);
-    // Match Supabase path: order by sort_order ASC, nulls last.
-    list.sort((a, b) => {
-        const aSort = a.sort_order ?? 999999;
-        const bSort = b.sort_order ?? 999999;
-        if (aSort !== bSort) return aSort - bSort;
-        return (a.name || '').localeCompare(b.name || '');
-    });
+    list.sort(bySortThenName);
     const map: Record<string, Row[]> = {};
     list.forEach(ex => {
         if (!map[ex.product_id]) map[ex.product_id] = [];
@@ -429,7 +424,7 @@ export const fetchAllLocalExpensePayments = (addressId: string | null) =>
 // Remove every payment linked to an expense (mirrors the DB's ON DELETE CASCADE
 // on expense_payments.expense_id, used when cancelling a restock in guest mode).
 export const deleteLocalExpensePaymentsByExpense = (expenseId: string) => {
-    set(KEYS.EXPENSE_PAYMENTS, get(KEYS.EXPENSE_PAYMENTS).filter(p => p.expense_id !== expenseId));
+    deleteLocalWhere(KEYS.EXPENSE_PAYMENTS, p => p.expense_id === expenseId);
     return true;
 };
 
@@ -765,9 +760,7 @@ export const updateLocalExpense = (id: string, updates: Row) =>
     patchLocal(KEYS.EXPENSES, id, { ...updates, updated_at: new Date().toISOString() });
 
 export const deleteLocalExpense = (expenseId: string) => {
-    let expenses = get(KEYS.EXPENSES);
-    expenses = expenses.filter(e => e.id !== expenseId);
-    set(KEYS.EXPENSES, expenses);
+    deleteLocalWhere(KEYS.EXPENSES, e => e.id === expenseId);
     return true;
 };
 
@@ -795,15 +788,11 @@ export const updateLocalOrderDiscount = (orderId: string, total: number, discoun
 };
 
 export const deleteLocalRecipeRow = (productId: string, ingredient: string) => {
-    let recipes = get(KEYS.RECIPES);
-    recipes = recipes.filter(r => !(r.product_id === productId && r.ingredient === ingredient));
-    set(KEYS.RECIPES, recipes);
+    deleteLocalWhere(KEYS.RECIPES, r => r.product_id === productId && r.ingredient === ingredient);
 };
 
 export const deleteLocalIngredientCost = (ingredient: string) => {
-    let costs = get(KEYS.INGREDIENT_COSTS);
-    costs = costs.filter(c => c.ingredient !== ingredient);
-    set(KEYS.INGREDIENT_COSTS, costs);
+    deleteLocalWhere(KEYS.INGREDIENT_COSTS, c => c.ingredient === ingredient);
 };
 
 // --- Missing Extras Helpers ---
@@ -832,13 +821,8 @@ export const updateLocalExtrasSortOrder = (orderedExtraIds: string[]) => {
 };
 
 export const deleteLocalProductExtra = (extraId: string) => {
-    let extras = get(KEYS.PRODUCT_EXTRAS);
-    extras = extras.filter(e => e.id !== extraId);
-    set(KEYS.PRODUCT_EXTRAS, extras);
-    
-    let extraIngs = get(KEYS.EXTRA_INGREDIENTS);
-    extraIngs = extraIngs.filter(i => i.extra_id !== extraId);
-    set(KEYS.EXTRA_INGREDIENTS, extraIngs);
+    deleteLocalWhere(KEYS.PRODUCT_EXTRAS, e => e.id === extraId);
+    deleteLocalWhere(KEYS.EXTRA_INGREDIENTS, i => i.extra_id === extraId);
     return true;
 };
 
@@ -854,9 +838,7 @@ export const upsertLocalExtraIngredient = (payload: Row) => {
 };
 
 export const deleteLocalExtraIngredient = (extraId: string, ingredient: string) => {
-    let extraIngs = get(KEYS.EXTRA_INGREDIENTS);
-    extraIngs = extraIngs.filter(i => !(i.extra_id === extraId && i.ingredient === ingredient));
-    set(KEYS.EXTRA_INGREDIENTS, extraIngs);
+    deleteLocalWhere(KEYS.EXTRA_INGREDIENTS, i => i.extra_id === extraId && i.ingredient === ingredient);
     return true;
 };
 
@@ -864,12 +846,7 @@ export const deleteLocalExtraIngredient = (extraId: string, ingredient: string) 
 
 export const fetchLocalToppings = (addressId: string | null) => {
     const list = get(KEYS.TOPPINGS).filter(t => t.address_id === addressId);
-    list.sort((a, b) => {
-        const aSort = a.sort_order ?? 999999;
-        const bSort = b.sort_order ?? 999999;
-        if (aSort !== bSort) return aSort - bSort;
-        return (a.name || '').localeCompare(b.name || '');
-    });
+    list.sort(bySortThenName);
     return list;
 };
 
@@ -887,17 +864,9 @@ export const updateLocalToppingName = (toppingId: string, name: string) => { pat
 export const updateLocalToppingPrice = (toppingId: string, price: number) => { patchLocal(KEYS.TOPPINGS, toppingId, { price }); };
 
 export const deleteLocalTopping = (toppingId: string) => {
-    let toppings = get(KEYS.TOPPINGS);
-    toppings = toppings.filter(t => t.id !== toppingId);
-    set(KEYS.TOPPINGS, toppings);
-
-    let toppingIngs = get(KEYS.TOPPING_INGREDIENTS);
-    toppingIngs = toppingIngs.filter(i => i.topping_id !== toppingId);
-    set(KEYS.TOPPING_INGREDIENTS, toppingIngs);
-
-    let links = get(KEYS.PRODUCT_TOPPINGS);
-    links = links.filter(l => l.topping_id !== toppingId);
-    set(KEYS.PRODUCT_TOPPINGS, links);
+    deleteLocalWhere(KEYS.TOPPINGS, t => t.id === toppingId);
+    deleteLocalWhere(KEYS.TOPPING_INGREDIENTS, i => i.topping_id === toppingId);
+    deleteLocalWhere(KEYS.PRODUCT_TOPPINGS, l => l.topping_id === toppingId);
     return true;
 };
 
@@ -921,13 +890,6 @@ export const upsertLocalToppingIngredient = (payload: Row) => {
         toppingIngs.push({ id: generateId(), ...payload });
     }
     set(KEYS.TOPPING_INGREDIENTS, toppingIngs);
-};
-
-export const deleteLocalToppingIngredient = (toppingId: string, ingredient: string) => {
-    let toppingIngs = get(KEYS.TOPPING_INGREDIENTS);
-    toppingIngs = toppingIngs.filter(i => !(i.topping_id === toppingId && i.ingredient === ingredient));
-    set(KEYS.TOPPING_INGREDIENTS, toppingIngs);
-    return true;
 };
 
 export const fetchLocalProductToppingLinks = (toppingIds: string[]) => {
@@ -963,13 +925,8 @@ export const insertLocalDiscountProgram = (payload: Row) => {
 export const updateLocalDiscountProgram = (programId: string, patch: Row) => { patchLocal(KEYS.DISCOUNT_PROGRAMS, programId, patch); };
 
 export const deleteLocalDiscountProgram = (programId: string) => {
-    let programs = get(KEYS.DISCOUNT_PROGRAMS);
-    programs = programs.filter(p => p.id !== programId);
-    set(KEYS.DISCOUNT_PROGRAMS, programs);
-
-    let links = get(KEYS.DISCOUNT_PROGRAM_PRODUCTS);
-    links = links.filter(l => l.discount_program_id !== programId);
-    set(KEYS.DISCOUNT_PROGRAM_PRODUCTS, links);
+    deleteLocalWhere(KEYS.DISCOUNT_PROGRAMS, p => p.id === programId);
+    deleteLocalWhere(KEYS.DISCOUNT_PROGRAM_PRODUCTS, l => l.discount_program_id === programId);
     return true;
 };
 
