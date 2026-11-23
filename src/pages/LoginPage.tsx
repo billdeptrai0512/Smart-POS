@@ -5,6 +5,7 @@ import ErrorBanner from '../components/common/ErrorBanner'
 import PasswordInput from '../components/common/PasswordInput'
 import FloatingLabelInput from '../components/common/FloatingLabelInput'
 import { errorMessage } from '../utils/errorMessage'
+import { setGuestShopName } from '../services/localRepository'
 import { trackLoginPageVisit } from '../services/onboardingFunnelService'
 
 // Supabase auth trả message tiếng Anh — dịch những lỗi login thường gặp
@@ -14,6 +15,9 @@ const AUTH_ERROR_VI: Record<string, string> = {
     'Too many requests': 'Thử lại quá nhiều lần, vui lòng chờ một chút',
 }
 
+const GUEST_BTN =
+    'w-full py-3.5 rounded-[14px] bg-primary/5 uppercase border border-primary/40 text-primary font-black text-sm hover:bg-primary/10 hover:border-primary/60 focus-visible:outline-2 focus-visible:outline-primary/50 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed'
+
 export default function LoginPage() {
     const { signIn, initGuestMode } = useAuth()
     const navigate = useNavigate()
@@ -22,12 +26,17 @@ export default function LoginPage() {
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
     const [guestLoading, setGuestLoading] = useState(false)
+    const [shopFormOpen, setShopFormOpen] = useState(false)
+    const [shopName, setShopName] = useState('')
 
     useEffect(() => { trackLoginPageVisit() }, [])
 
-    async function handleGuest() {
+    async function handleGuest(e: FormEvent) {
+        e.preventDefault()
         setGuestLoading(true)
         await initGuestMode()
+        // Sau initGuestMode: lúc này mới chắc không bị dọn cùng dữ liệu guest cũ.
+        setGuestShopName(shopName.trim())
         navigate('/pos')
     }
 
@@ -106,18 +115,35 @@ export default function LoginPage() {
                         <div className="flex-1 h-px bg-border-light" />
                     </div>
 
-                    {/* Sử dụng thử (Guest Mode) */}
-                    <div>
+                    {/* Sử dụng thử (Guest Mode): bấm → hỏi tên quán → vào POS với menu mẫu mang tên đó */}
+                    {shopFormOpen ? (
+                        <form onSubmit={handleGuest} className="space-y-4">
+                            <FloatingLabelInput
+                                id="guest-shop-name"
+                                label="Tên quán / địa chỉ"
+                                value={shopName}
+                                onChange={e => setShopName(e.target.value)}
+                                autoFocus
+                            />
+                            <button
+                                id="guest-mode-btn"
+                                type="submit"
+                                disabled={guestLoading || !shopName.trim()}
+                                className={GUEST_BTN}
+                            >
+                                {guestLoading ? 'Đang tải...' : 'Tạo quán'}
+                            </button>
+                        </form>
+                    ) : (
                         <button
                             id="guest-mode-btn"
                             type="button"
-                            onClick={handleGuest}
-                            disabled={guestLoading}
-                            className="w-full py-3.5 rounded-[14px] bg-primary/5 uppercase border border-primary/40 text-primary font-black text-sm hover:bg-primary/10 hover:border-primary/60 focus-visible:outline-2 focus-visible:outline-primary/50 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            onClick={() => setShopFormOpen(true)}
+                            className={GUEST_BTN}
                         >
-                            {guestLoading ? 'Đang tải...' : 'Tạo quán mới'}
+                            Tạo quán mới
                         </button>
-                    </div>
+                    )}
                 </div>
             </div>
         </div>

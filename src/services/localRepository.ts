@@ -33,6 +33,7 @@ const KEYS = {
     TABLES: 'guest_tables',
     // { budget: tồn kho+quầy của mẫu theo NVL, day: ngày đã sinh ngày bán giả, unbilled: món + số ly pha không bấm bill } — xem seedGuestDemoDay.
     DEMO_DAY: 'guest_demo_day',
+    SHOP_NAME: 'guest_shop_name',
     IS_GUEST: 'pos_is_guest'
 };
 
@@ -73,9 +74,12 @@ export const setGuestIngredientSortOrder = (arr: string[]) => writeJSON(KEY_GUES
 // ngay lưới bàn thay vì phải tự tạo trước khi gọi món được.
 export const setGuestTables = (tables: string[]) => writeJSON(KEYS.TABLES, tables);
 
+export const setGuestShopName = (name: string) => localStorage.setItem(KEYS.SHOP_NAME, name);
+export const getGuestShopName = () => localStorage.getItem(KEYS.SHOP_NAME) || '';
+
 export const getDemoAddress = () => ({
     id: DEMO_ADDRESS_ID,
-    name: 'Sử dụng thử',
+    name: getGuestShopName() || 'Sử dụng thử',
     manager_id: 'guest',
     ingredient_sort_order: getGuestIngredientSortOrder() || [],
     tables: readJSON<string[]>(KEYS.TABLES, ['Bàn 1', 'Bàn 2', 'Bàn 3', 'Bàn 4', 'Bàn 5', 'Bàn 6']),

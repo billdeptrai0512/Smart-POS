@@ -10,6 +10,7 @@ import { capitalizeWords, formatVND } from '../utils'
 import { PLAN } from '../constants/monetization'
 import { errorMessage } from '../utils/errorMessage'
 import { isStrongPassword } from '../utils/password'
+import { getGuestShopName } from '../services/localRepository'
 import { trackSignupPageVisit } from '../services/onboardingFunnelService'
 
 // ponytail: bảng typo cứng thay vì thư viện (mailcheck) — email chỉ dùng để reset
@@ -29,7 +30,9 @@ export default function SignUpPage() {
     const { signUp, isGuest } = useAuth()
     const navigate = useNavigate()
     const [name, setName] = useState('')
-    const [branch, setBranch] = useState('')
+    // Khách dùng thử đã nhập tên quán ở bước đầu → dùng lại, không hỏi lần nữa.
+    const guestShop = getGuestShopName()
+    const [branch, setBranch] = useState(guestShop)
     // Có link ?clone=MÃ → chi nhánh đầu tiên do modal "Tạo địa chỉ" ở /addresses lo (chép cấu hình
     // từ mã), nên ở đây không hỏi tên quán.
     const hasCloneCode = !!sessionStorage.getItem('pending_clone_code')
@@ -97,7 +100,7 @@ export default function SignUpPage() {
                         autoComplete="name"
                     />
 
-                    {!hasCloneCode && (
+                    {!hasCloneCode && !guestShop && (
                         <FloatingLabelInput
                             id="signup-branch"
                         aria-invalid={error?.field === 'branch'}
@@ -113,7 +116,7 @@ export default function SignUpPage() {
                     <FloatingLabelInput
                         id="signup-username"
                         aria-invalid={error?.field === 'username'}
-                        label="Tài khoản"
+                        label="Tài khoản đăng nhập"
                         value={username}
                         onChange={e => setUsername(e.target.value)}
                         required
