@@ -1,4 +1,4 @@
-import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type FocusEvent, type ReactNode } from 'react'
 import { Check, ChevronDown, ChevronUp, ClipboardList, Info } from 'lucide-react'
 import { ingredientLabel, getIngredientUnit, lookupByLabel, normalizeIngredientCategory, INGREDIENT_CATEGORIES } from '../../utils/ingredients'
 import { computeBalance, computeHaoHut, r1, type UsageMap, type buildIngredientToProduct, type calculateConsumptionBreakdown } from '../../utils/inventory'
@@ -377,6 +377,7 @@ const IngredientRow = memo(function IngredientRow({
     const [open, setOpen] = useState(hint)
     // Onboarding: dòng đang được gợi ý tự mở sẵn — khỏi 1 lần bấm đi tìm ô Cuối kỳ.
     const [seenHint, setSeenHint] = useState(hint)
+    const typedRef = useRef(false) // đã gõ vào ô Cuối kỳ từ lần rời ô trước — chỉ chạm rồi rời thì không thu dòng
     const [listOpen, setListOpen] = useState(false) // sheet "Xem đủ N món" của bảng chi tiết Sử dụng
     // Hết gợi ý (đã lưu Cuối kỳ) → tự thu lại, nhường chỗ cho Tổng hao hụt bên dưới.
     if (hint !== seenHint) { setSeenHint(hint); setOpen(hint) }
@@ -483,8 +484,14 @@ const IngredientRow = memo(function IngredientRow({
             unit={unit}
             disabled={readOnly} // không khoá theo isSubmitting: tự lưu khi rời ô sẽ tắt luôn ô vừa được focus kế tiếp
             locked={readOnly}
-            onChange={(v) => onInventoryChange(ing.ingredient, v)}
-            onBlur={onFieldBlur}
+            onChange={(v) => { typedRef.current = true; onInventoryChange(ing.ingredient, v) }}
+            onBlur={e => {
+                onFieldBlur?.()
+                const typed = typedRef.current
+                typedRef.current = false
+                // Vừa đếm xong → thu dòng lại (trừ khi focus chuyển sang ô khác cùng dòng, hoặc đang trong guide có hint riêng).
+                if (typed && !hint && e.currentTarget.value !== '' && !(e.relatedTarget as Element | null)?.closest('[data-ing-row]')) setOpen(false)
+            }}
             hint={hintCount}
             onHintFill={hintCount && hintFill ? () => onInventoryChange(ing.ingredient, String(hintFill)) : undefined}
             emphasis
@@ -525,7 +532,7 @@ const IngredientRow = memo(function IngredientRow({
     )
 
     return (
-        <div className="border-b border-border/20 last:border-0">
+        <div data-ing-row className="border-b border-border/20 last:border-0">
             <button
                 type="button"
                 onClick={() => setOpen(o => !o)}
@@ -600,7 +607,7 @@ interface ColumnInputProps {
     disabled?: boolean
     locked?: boolean
     onChange?: (value: string) => void
-    onBlur?: () => void
+    onBlur?: (e: FocusEvent<HTMLInputElement>) => void
     overflow?: boolean
     tone?: string
     onBoxClick?: () => void
