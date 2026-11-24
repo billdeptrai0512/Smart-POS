@@ -22,9 +22,8 @@ import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
 import OrdersList from '../components/HistoryPage/OrdersList'
 import OnboardingGuide from '../components/common/onboarding/OnboardingGuide'
-import Collapse from '../components/common/onboarding/Collapse'
+import GuideTapRow from '../components/common/onboarding/GuideTapRow'
 import FocusMask from '../components/common/FocusMask'
-import Typewriter from '../components/common/Typewriter'
 import { JOURNAL_FORWARD_MS } from '../utils/onboardingHint'
 import SalesCard from '../components/DailyReportPage/SalesCard'
 import ExpensePanel from '../components/HistoryPage/ExpensePanel'
@@ -89,12 +88,6 @@ export default function HistoryPage() {
         return () => clearTimeout(t)
     }, [journalGuide])
     const reportCta = journalGuide && forwardReady
-    const ctaRef = useRef<HTMLDivElement>(null)
-    useEffect(() => {
-        if (!reportCta) return
-        const t = setTimeout(() => ctaRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 350) // dải nằm ngoài màn hình → cuộn nhẹ xuống
-        return () => clearTimeout(t)
-    }, [reportCta])
 
     // Date selection (scope/offset/customRange + handlers) lives in the shared
     // hook so /history and /report stay in lock-step. Seeded from nav state
@@ -426,13 +419,7 @@ export default function HistoryPage() {
                             productStats={productStats}
                             lineChartData={isRangeScope ? weekdayChartData : lineChartData}
                         />
-                        <Collapse show={reportCta}>
-                            <div className="pt-3">
-                                <div ref={ctaRef} onClick={handleForward} className="flex items-center justify-center h-10 px-4 rounded-[14px] bg-primary/15 text-text text-center uppercase tracking-wider text-[12px] font-black cursor-pointer active:scale-[0.98] transition-transform onboarding-hint">
-                                    {reportCta && <Typewriter text="Bây giờ xem báo cáo dòng tiền" />}
-                                </div>
-                            </div>
-                        </Collapse>
+                        <GuideTapRow show={reportCta} text="Bây giờ xem báo cáo dòng tiền" onTap={handleForward} />
                     </div>}
                     isLoading={isTodayScope ? isLoadingHistory : isLoadingRangeOrders}
                     isTodayScope={isTodayScope}

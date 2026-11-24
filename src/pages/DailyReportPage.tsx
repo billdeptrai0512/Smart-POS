@@ -28,6 +28,8 @@ import { goToMenuStep } from '../utils/menuSequence'
 import { useTabRoute } from '../hooks/useTabRoute'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
 import CashFlowCard from '../components/DailyReportPage/CashFlowCard'
+import OnboardingGuide from '../components/common/onboarding/OnboardingGuide'
+import GuideTapRow from '../components/common/onboarding/GuideTapRow'
 import { slowScrollTo } from '../utils/slowScroll'
 import ExpenseEditorModal from '../components/DailyReportPage/ExpenseEditorModal'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
@@ -254,6 +256,7 @@ export default function DailyReportPage() {
         const t = setTimeout(() => setForwardReady(true), REPORT_FORWARD_MS)
         return () => clearTimeout(t)
     }, [hintGoToInventory])
+    const goInventoryCta = hintGoToInventory && forwardReady
     // Bước cuối: nhập kho xong quay về đây → cuộn tới Thực chi, mở nhóm Tồn kho (CashFlowCard, ~1,4s); 2,4s sau đó
     // đánh dấu viewedNet → cuộn chậm xuống nút Đăng ký.
     const restockProgress = useOnboardingProgress('restockProgress', { isGuest, addressId })
@@ -686,9 +689,6 @@ export default function DailyReportPage() {
                 title="Báo cáo"
                 rangeLabel={rangeLabel}
                 scope={scope}
-                onBack={() => guardLeave(() => goToMenuStep('report', -1, { navigate, backTo, scopeState: dateNavState, wizard: location.state?.wizard }))}
-                onForward={() => goToMenuStep('report', +1, { navigate, backTo, scopeState: dateNavState, wizard: location.state?.wizard })}
-                hintForward={hintGoToInventory && forwardReady}
                 canGoForward={canGoForwardPeriod}
                 onOffsetPrev={() => guardLeave(goOffsetPrev)}
                 onOffsetNext={() => guardLeave(goOffsetNext)}
@@ -742,6 +742,9 @@ export default function DailyReportPage() {
                             không rời tab Báo cáo (xem ExpenseEditorModal ở cuối trang). */}
                         {(view === VIEW_ALL || view === VIEW_CASHFLOW) && (
                             <CashFlowCard
+                                guide={<OnboardingGuide inline hide={goInventoryCta} />}
+                                focusDiff={goInventoryCta}
+                                guideAfterDiff={<GuideTapRow show={goInventoryCta} text="Bây giờ kiểm kê nguyên vật liệu" onTap={() => goToMenuStep('report', +1, { navigate, backTo, scopeState: dateNavState, wizard: location.state?.wizard })} />}
                                 actualCash={actualCash}
                                 actualTransfer={actualTransfer}
                                 dailyExpense={dailyExpense}

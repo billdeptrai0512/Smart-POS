@@ -19,15 +19,16 @@ export default function FocusMask({ target, badge = false, radius = 14, delay = 
             const [L, T, R, B, k] = [r.left - 3, r.top - 3, r.right + 3, r.bottom + 3, radius + 3] // đệm 3px
             let top = `H${R - k}` // cạnh trên chạy tới góc bo trên-phải
             let end = `${R} ${T + k}` // điểm bắt đầu cạnh phải
-            if (badge) {
+            const badgeEl = badge ? el.querySelector('span') : null // huy hiệu có thể chưa có (số về 0)
+            if (badgeEl) {
                 // Góc trên-phải của ô nằm gọn trong hình tròn huy hiệu: cạnh trên → cung tròn lớn quanh huy hiệu → cạnh phải.
-                const bd = el.querySelector('span')!.getBoundingClientRect()
+                const bd = badgeEl.getBoundingClientRect()
                 const [cx, cy, rr] = [bd.left + bd.width / 2, bd.top + bd.height / 2, bd.width / 2 + 2 + 2] // +2 viền ring-2, +2 đệm
                 top = `H${cx - Math.sqrt(rr * rr - (cy - T) ** 2)}A${rr} ${rr} 0 1 1 `
                 end = `${R} ${cy + Math.sqrt(rr * rr - (R - cx) ** 2)}`
             }
             const corner = `A${k} ${k} 0 0 1 ` // 3 góc bo còn lại + góc trên-phải khi không có huy hiệu
-            setClip(`path(evenodd, 'M0 0H${innerWidth}V${innerHeight}H0Z M${L + k} ${T}${top}${badge ? '' : corner}${end}V${B - k}${corner}${R - k} ${B}H${L + k}${corner}${L} ${B - k}V${T + k}${corner}${L + k} ${T}Z')`)
+            setClip(`path(evenodd, 'M0 0H${innerWidth}V${innerHeight}H0Z M${L + k} ${T}${top}${badgeEl ? '' : corner}${end}V${B - k}${corner}${R - k} ${B}H${L + k}${corner}${L} ${B - k}V${T + k}${corner}${L + k} ${T}Z')`)
         }
         let raf = 0
         let ro: ResizeObserver | undefined

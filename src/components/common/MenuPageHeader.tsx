@@ -12,7 +12,7 @@ interface Props {
     count?: number
     unitLabel?: string
     subtitle?: ReactNode
-    onBack: () => void
+    onBack?: () => void // ‹ › chỉ hiện khi trang truyền handler (Kiểm kê/Lưu trữ không truyền)
     onForward?: () => void
     tabs: MenuTab[]
     activeTab: string | undefined
@@ -27,7 +27,7 @@ export default function MenuPageHeader({ title, count, unitLabel, subtitle, onBa
         <header className="shrink-0 pt-3 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 px-4 lg:px-8">
             <div className="flex flex-col gap-3 lg:max-w-[1280px] lg:mx-auto">
             <div className="flex items-center gap-3">
-                {isGuest && (
+                {isGuest && onBack && (
                     <button onClick={onBack} className={ICON_BTN} title="Trở về">
                         <ArrowLeft size={20} strokeWidth={2.5} />
                     </button>

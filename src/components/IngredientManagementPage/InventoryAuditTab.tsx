@@ -22,6 +22,7 @@ import { ingredientLabel } from '../../utils/ingredients'
 import { findIngredientByLabel } from '../../utils/onboardingHint'
 import { inShiftCashTotal } from '../../utils/reportStats'
 import { getGuestUnbilled } from '../../services/localRepository'
+import OnboardingGuide from '../common/onboarding/OnboardingGuide'
 import { isInventoryProgressDone, isCashFlowProgressDone } from '../../utils/onboardingStorage'
 import { dateStringVN, isSameDayVN, timeStringVN } from '../../utils/dateVN'
 import { productionOnDay, mergeUsage, madeOf, madeInPeriods } from '../../utils/production'
@@ -351,6 +352,7 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
                     {/* setTimeout: calcRef (useCounterCalc) cập nhật mẻ mới ở effect sau render — tải lại tồn quầy phải đợi nó. */}
                     {!isGuest && <TodayProduction onChanged={() => setTimeout(() => inventory.reloadStocks(), 50)} onError={showError} />}
                     <InventoryReportCard
+                        guide={<OnboardingGuide inline="below" />}
                         ingredientsList={inventory.ingredientsList}
                         isLoading={inventory.isLoadingIngredients}
                         openingStock={inventory.openingStock}

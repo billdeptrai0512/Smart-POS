@@ -47,7 +47,7 @@ export function OnboardingLayout() {
           </div>
         </div>
       )}
-      {!onPos && !pathname.startsWith('/history') && <OnboardingGuide />}
+      {!onPos && !pathname.startsWith('/history') && !pathname.startsWith('/report') && <OnboardingGuide hide={pathname === '/inventory/management'} />} {/* Kiểm kê: dải nằm dưới thẻ nguyên liệu (InventoryReportCard) */}
       <div className="flex-1 min-h-0">
         <Outlet />
       </div>

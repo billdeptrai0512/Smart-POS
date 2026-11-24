@@ -9,10 +9,11 @@ import { STOCK_CACHE_KEY } from '../../hooks/useRestockOverview'
 import { readJSON } from '../../utils/storage'
 import { useOnboardingProgress } from '../../hooks/useOnboardingProgress'
 import { onboardingHintClass } from '../../utils/onboardingHint'
+import { isInventoryProgressDone } from '../../utils/onboardingStorage'
 import FocusMask from '../common/FocusMask'
 import AddressNotice from '../AddressSelectPage/AddressNotice'
 import { ingredientDetailPath } from '../../hooks/useIngredientDebts'
-import WarehousePrepNotice from '../IngredientManagementPage/WarehousePrepNotice'
+import WarehousePrepNotice, { RestockCount } from '../IngredientManagementPage/WarehousePrepNotice'
 import PrepPinBar from '../common/PrepPinBar'
 import AddressSwitcher from './AddressSwitcher'
 import { NAV_SECTIONS, type NavItem } from '../../constants/navSections'
@@ -63,13 +64,21 @@ export default function TopNav() {
         return () => window.removeEventListener('keydown', esc)
     }, [showMenu])
     const { isOnline } = useStats() // offline: PrepPinBar không vẽ gì → đừng cho chuông mở sheet rỗng
-    // Khách dùng thử cũng có chuông trên /pos (y như người dùng thật) — chuông sáng nhịp guide tới khi lấy hàng xong.
-    const hasBell = onPos ? isOnline : !isGuest && !!kind
-    const n = onPos ? prepCount : kind === 'tasks' ? pending : 0
+    // Bước cuối (Tồn kho): đếm xong ở /inventory → chuông sáng ngay, trang tối sau ~3s (để khách đọc kết luận) như bước 1; sheet "Tồn kho cần bổ sung".
+    const restock = useOnboardingProgress('restockProgress', { isGuest, addressId })
+    const inventory = useOnboardingProgress('inventoryProgress', { isGuest, addressId })
+    const restockStep = isGuest && !onPos && pathname.startsWith('/inventory') && isInventoryProgressDone(inventory) && !restock.bought
+    // bellOpen: mua xong (bought) nhưng chưa đóng sheet → bell + lớp tối còn tới khi đóng (rồi closeSheet đưa sang Báo cáo).
+    const restockSpot = isGuest && !onPos && (restockStep || bellOpen)
+    const [restockCount, setRestockCount] = useState(0)
+    const n = onPos ? prepCount : restockSpot ? (restock.bought ? 0 : restockCount) : kind === 'tasks' ? pending : 0
     const prep = useOnboardingProgress('prepProgress', { isGuest, addressId })
     // spot: còn trong bước 1 (tới khi khách bấm ✓ chốt prep.done). Chuông nhấp nháy khi sheet đóng; lớp tối giữ nguyên cả lúc sheet mở.
     // `|| bellOpen`: lấy đủ hàng thì n về 0 nhưng chưa bấm ✓ — lớp tối chưa được tắt.
-    const spot = isGuest && onPos && !prep.done && (n > 0 || bellOpen)
+    const prepSpot = isGuest && onPos && !prep.done && (n > 0 || bellOpen)
+    const spot = prepSpot || restockSpot
+    // Khách dùng thử cũng có chuông trên /pos (y như người dùng thật) — chuông sáng nhịp guide tới khi lấy hàng xong.
+    const hasBell = onPos ? isOnline : restockSpot || (!isGuest && !!kind)
     const bellHint = spot && !bellOpen
 
     function go({ route, state }: NavItem) {
@@ -86,7 +95,7 @@ export default function TopNav() {
 
     return (
         <>
-            {spot && <FocusMask target={bellRef} badge />}
+            {spot && <FocusMask target={bellRef} badge delay={restockSpot ? 3000 : undefined} />}
             <AddressSwitcher />
             {hasBell && (
                 <button ref={bellRef} type="button" aria-label="Việc cần làm" onClick={() => setBellOpen(true)} className={`${NAV_ICON_BTN} ${onboardingHintClass(bellHint)}`}>
@@ -123,10 +132,12 @@ export default function TopNav() {
                     </nav>
                 </>)}
             </div>
+            {restockStep && !bellOpen && addressId && <RestockCount addressId={addressId} onCount={setRestockCount} />}
             {onPos && isOnline && <PrepPinBar bell={{ open: bellOpen, onClose: () => setBellOpen(false), onCount: setPrepCount }} />}
             {!onPos && bellOpen && kind === 'tasks' && <AddressNotice onClose={() => { setBellOpen(false); setPending(pendingCount()) }} />}
-            {!onPos && bellOpen && kind === 'restock' && (
+            {!onPos && bellOpen && (kind === 'restock' || restockSpot) && (
                 <WarehousePrepNotice
+                    hint={restockSpot}
                     onClose={() => setBellOpen(false)}
                     onOpenIngredient={(ing, t, since) => { setBellOpen(false); navigate(ingredientDetailPath(ing, t, since)) }}
                 />

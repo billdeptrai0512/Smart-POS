@@ -4,7 +4,6 @@ import { useAuth } from '../../../contexts/AuthContext'
 import { useAddress } from '../../../contexts/AddressContext'
 import { trackGuestOnboardingStage } from '../../../services/onboardingFunnelService'
 import { readOnboardingState, DEFAULT_ONBOARDING_STATE, ONBOARDING_EVENT } from '../../../utils/onboardingStorage'
-import { REPORT_FORWARD_MS } from '../../../utils/onboardingHint'
 import Typewriter from '../Typewriter'
 import Collapse from './Collapse'
 import { STEPS } from './steps'
@@ -16,7 +15,7 @@ import { STEPS } from './steps'
 // CTA đăng ký nằm cuối Báo cáo (DailyReportPage). Từ bước Nhật ký trở đi chữ dẫn do pageGuide quyết định theo trang.
 // onPos: POS chỉ hiện dải ở bước 2 (Bán hàng: "Chạm vào món rồi bấm tạo đơn") và bước Nhật ký — bước 1 pill "Bạn cần chuẩn bị" đã tự sáng. Pill nằm chung hàng với pill bàn.
 // checkoutReady (chỉ POS): đã chạm đủ món → dải này nhường chỗ cho dải "Bấm Tạo đơn" nằm ngay trên thanh chốt đơn (POSPage).
-export default function OnboardingGuide({ onPos = false, checkoutReady = false, inline = false, hide = false }: { onPos?: boolean; checkoutReady?: boolean; inline?: boolean; hide?: boolean }) {
+export default function OnboardingGuide({ onPos = false, checkoutReady = false, inline = false, hide = false }: { onPos?: boolean; checkoutReady?: boolean; inline?: boolean | 'below'; hide?: boolean }) {
     const { isGuest } = useAuth()
     const { addressId } = useAddress()
     const { pathname } = useLocation()
@@ -50,20 +49,12 @@ export default function OnboardingGuide({ onPos = false, checkoutReady = false, 
 
     // idx -1 = xong hết: không dải — CTA đăng ký nằm cuối Báo cáo (DailyReportPage), các trang khác sáng đường về đó.
     // Chữ dẫn theo trang — nút cần bấm tự sáng. Nhật ký giải thích số liệu; Kết ca nói đây là lúc đếm/đối chiếu tiền.
-    // Nhật ký và Kết ca (Đối chiếu) đều: chữ giải thích → (cùng lúc mũi tên "tiến" sáng) câu cầu nối sang bước sau.
+    // Nhật ký và Kết ca (Đối chiếu): chữ giải thích ở đây; câu cầu nối sang bước sau là GuideTapRow do trang tự dựng.
     // idx 3 vẫn ở /history = lúc bấm mũi tên (viewedReport ghi trước khi chuyển trang): giữ dải, không thì nó biến mất rồi hiện lại ở /report → trang nhảy 40px.
     const onJournal = onHistory && (idx === 2 || idx === 3) && !pathname.endsWith('/expense')
     const onReport = pathname.startsWith('/report') && !pathname.endsWith('/revenue')
-    const bridgeFrom = onReport && idx === 4 ? REPORT_FORWARD_MS : 0
-    const [bridge, setBridge] = useState(false)
-    useEffect(() => {
-        setBridge(false)
-        if (!bridgeFrom) return
-        const t = setTimeout(() => setBridge(true), bridgeFrom)
-        return () => clearTimeout(t)
-    }, [bridgeFrom])
     const pageGuide = onJournal ? 'Xem hôm nay bán được bao nhiêu'
-        : onReport ? (idx === 3 ? 'Nhập tiền mặt và chuyển khoản' : idx === 4 ? (bridge ? 'Sau đó, kiểm kê tồn nguyên vật liệu' : 'Đối chiếu chênh lệch với doanh thu') : null)
+        : onReport ? (idx === 3 ? 'Nhập tiền mặt và chuyển khoản' : idx === 4 ? 'Đối chiếu chênh lệch với doanh thu' : null)
         : pathname.startsWith('/inventory') && !pathname.startsWith('/inventory/stocking') && idx === 4 ? 'Nhập tồn cà phê cuối kỳ' : null // không "Sau đó": câu cầu nối ở /report vừa mở đầu bằng nó
     const gone = (onPos && (idx !== 1 || checkoutReady)) || (onHistory && idx === 1) || !isGuest || !addressId || idx === -1
     const current = gone ? undefined : STEPS[idx].items(local).find(i => !i.done)
@@ -91,5 +82,5 @@ export default function OnboardingGuide({ onPos = false, checkoutReady = false, 
     // POS: dải luôn mount (khách), pt-3 (cách thẻ Nhật ký) nằm trong phần bị cắt nên co cùng dải.
     if (onPos) return <Collapse show={!hidden} className="flex-1 min-w-0"><div className="pt-3">{content}</div></Collapse>
     // inline: nằm trong trang (ngay trên thẻ Tổng cộng của Nhật ký), pb-3 nằm trong phần bị cắt. hide: trang ẩn dải khi đã chuyển sang dải khác.
-    return <Collapse show={!hidden}>{inline ? <div className="pb-3">{content}</div> : content}</Collapse>
+    return <Collapse show={!hidden}>{inline ? <div className={inline === 'below' ? 'pt-3' : 'pb-3'}>{content}</div> : content}</Collapse>
 }

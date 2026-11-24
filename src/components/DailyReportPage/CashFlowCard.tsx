@@ -2,6 +2,7 @@ import { useMemo, useState, useRef, useEffect, type ReactNode, type Ref } from '
 import { createPortal } from 'react-dom'
 import { ChevronDown, ChevronRight, Clock } from 'lucide-react'
 import { formatVND, parseVNDInput, capFirst } from '../../utils'
+import FocusMask from '../common/FocusMask'
 import { dateStringVN, dayMonthVN, timeStringVN } from '../../utils/dateVN'
 import { OFFSCREEN_FRAME_CSS, captureOffscreen, printBillJob } from '../../lib/escposBitmap'
 import { Dialog } from '../common/ModalShell'
@@ -40,6 +41,9 @@ interface Props {
     payments?: Row[]
     expenseCategories?: ExpenseCategory[]
     children?: ReactNode
+    guide?: ReactNode // dải guide khách, ngay trên thẻ Thực thu
+    guideAfterDiff?: ReactNode // dải guide thứ hai, ngay dưới thẻ Đối chiếu
+    focusDiff?: boolean // làm tối cả trang, chỉ chừa thẻ Đối chiếu + dải guide thứ hai
     footer?: ReactNode // đặt dưới Thực nhận
     editable?: boolean
     cashInput?: string
@@ -84,6 +88,9 @@ export default function CashFlowCard({
     expenseCategories = [],  // nhãn chi phí — nhóm section Vận hành theo tên nhãn
     // Khối doanh thu (SalesCard + biểu đồ) render phía trên panel Thực thu.
     children,
+    guide,
+    guideAfterDiff,
+    focusDiff = false,
     footer,
     // Inline-edit props (today scope on /report). When `editable` is true the
     // Tiền mặt / Chuyển khoản rows become text inputs; rời ô (blur) là tự lưu.
@@ -118,6 +125,7 @@ export default function CashFlowCard({
     const panelRef = useRef<HTMLDivElement>(null)
     const netRef = useRef<HTMLDivElement>(null)
     const diffRef = useRef<HTMLDivElement>(null)
+    const focusRef = useRef<HTMLDivElement>(null)
     const scrollTo = hintNet ? 'net' : hintDiff ? 'diff' : hintCash || hintTransfer ? 'cash' : null
     useEffect(() => {
         if (!scrollTo) return
@@ -383,6 +391,7 @@ export default function CashFlowCard({
             {children && <div className="w-full">{children}</div>}
 
             <div className="flex flex-col gap-4">
+            {guide && <div className="-mb-4">{guide}</div>}{/* -mb-4 bù gap-4 để dải co lại không chừa khoảng trống */}
             {/* PANEL 1: THỰC THU */}
             <ReportPanel
                 panelRef={panelRef}
@@ -426,6 +435,8 @@ export default function CashFlowCard({
                 </div>
             </ReportPanel>
 
+            <div ref={focusRef} className="flex flex-col gap-4">
+            {focusDiff && <FocusMask target={focusRef} radius={20} delay={800} />}
             {/* PANEL: CHÊNH LỆCH — Thực thu (két đếm + chi trong ca) so với Doanh thu theo đơn.
                 Dương = két dư so với đơn, âm = két hụt. Chưa nhập tiền → "—" như Thực nhận. */}
             {revenue != null && (() => {
@@ -445,6 +456,8 @@ export default function CashFlowCard({
                     </ReportPanel>
                 )
             })()}
+            {guideAfterDiff && <div className="-mt-4">{guideAfterDiff}</div>}
+            </div>
             </div>
 
             <div className="flex flex-col gap-4">
