@@ -1,8 +1,9 @@
-import type { ReactNode } from 'react'
+import { useRef, type ReactNode } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { onboardingHintClass } from '../../utils/onboardingHint'
 import Typewriter from '../common/Typewriter'
 import Skeleton from '../common/Skeleton'
+import FocusMask from '../common/FocusMask'
 import type { LastOrder } from '../../services/cartOps'
 
 interface Props {
@@ -12,11 +13,13 @@ interface Props {
     loaded?: boolean // đã tải xong đơn gần nhất → skeleton 3 dòng
     enterKey: string | null
     showOnboardingHint?: boolean
+    focusJournal?: boolean // guide khách: làm tối cả trang trừ thẻ Nhật ký
     notice?: ReactNode // dải notice dưới 2 thẻ, vẫn trong header (PrepPinBar)
 }
 
-export default function Header({ onOpenHistory, nav, recentOrders = [], loaded = true, enterKey, showOnboardingHint = false, notice }: Props) {
+export default function Header({ onOpenHistory, nav, recentOrders = [], loaded = true, enterKey, showOnboardingHint = false, focusJournal = false, notice }: Props) {
     const hintClass = onboardingHintClass(showOnboardingHint, 'solid')
+    const journalRef = useRef<HTMLDivElement>(null)
     // Saved orders only, newest first (max 3). isNew matches only the exact row just
     // committed locally (enterKey) → it slides in and types out; the realtime DB echo,
     // which remounts the row under a new server-timestamp key, can't replay it.
@@ -32,9 +35,11 @@ export default function Header({ onOpenHistory, nav, recentOrders = [], loaded =
             <div className="px-6 flex items-center gap-2 mb-2">
                 {nav}
             </div>
+            {focusJournal && <FocusMask target={journalRef} radius={20} delay={1250} />}
             <div className="px-6">
                 {/* Nhật ký — trải hết chiều ngang */}
                 <div
+                    ref={journalRef}
                     onClick={onOpenHistory}
                     role="button"
                     tabIndex={0}
@@ -73,7 +78,7 @@ export default function Header({ onOpenHistory, nav, recentOrders = [], loaded =
                 </div>
             </div>
             {/* empty:hidden — notice trả null thì không chừa khoảng trống (kể cả khi chỉ còn hàng bọc rỗng) */}
-            <div className="px-6 mt-3 empty:hidden [&:has(>div:empty)]:hidden [&>button]:rounded-[14px]">{notice}</div>
+            <div className="px-6 empty:hidden [&:has(>div:empty)]:hidden [&>button]:rounded-[14px]">{notice}</div>
         </header>
     )
 }

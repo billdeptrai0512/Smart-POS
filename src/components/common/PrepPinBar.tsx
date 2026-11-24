@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { Hand } from 'lucide-react'
 import { useProducts } from '../../contexts/ProductContext'
 import { useHistory } from '../../contexts/HistoryContext'
 import { useCashClosedToday } from '../../hooks/useCashClosedToday'
@@ -14,7 +13,6 @@ import { usePrepNotice } from '../../hooks/usePrepNotice'
 import { useOnboardingProgress } from '../../hooks/useOnboardingProgress'
 import { writeOnboardingState } from '../../utils/onboardingStorage'
 import NoticeSheet, { SheetBody } from './NoticeSheet'
-import NoticeBar from './NoticeBar'
 import ShiftPrepCard from '../DailyReportPage/ShiftPrepCard'
 import Toast from '../POSPage/Toast'
 import BatchPrepList from './BatchPrepList'
@@ -24,9 +22,9 @@ import BatchPrepList from './BatchPrepList'
 // chưa xong, hoặc Lý thuyết ở quầy đã về 0 giữa ca). Bấm → modal checklist, nhân viên
 // xác nhận đã lấy ngay tại chỗ. Offline ẩn — hook cần đọc kho.
 // Guest: bước 1 "Chuẩn bị" của guide (onboarding/steps.ts) — quầy mẫu = 0, kho mẫu = 1 bịch/hộp/cây mỗi món.
-// Người dùng thật: không vẽ dải — chuông trên TopNav điều khiển sheet (open/onClose) và nhận số việc (onCount). Khách: vẫn là dải của guide.
+// Người dùng thật: không vẽ dải — chuông trên TopNav điều khiển sheet (open/onClose) và nhận số việc (onCount). Khách dùng thử cũng vậy (chuông sáng nhịp guide ở bước 1).
 interface BellProps { open: boolean; onClose: () => void; onCount: (n: number) => void }
-export default function PrepPinBar({ bell }: { bell?: BellProps }) {
+export default function PrepPinBar({ bell }: { bell: BellProps }) {
     const { addressId } = useAddress()
     const { isOnline } = useStats()
     // Thân nằm ở component con chỉ mount cùng POSPage — rời trang thì state `open` + hook unmount theo,
@@ -34,7 +32,7 @@ export default function PrepPinBar({ bell }: { bell?: BellProps }) {
     return isOnline && addressId ? <PinBar addressId={addressId} bell={bell} /> : null
 }
 
-function PinBar({ addressId, bell }: { addressId: string; bell?: BellProps }) {
+function PinBar({ addressId, bell }: { addressId: string; bell: BellProps }) {
     const { isGuest, isManager, isAdmin, profile } = useAuth()
     const { refreshProducts } = useProducts()
     const { refreshTodayExpenses } = useHistory()
@@ -43,11 +41,8 @@ function PinBar({ addressId, bell }: { addressId: string; bell?: BellProps }) {
     const canRestock = isManager || isAdmin
     const [restock, setRestock] = useState<PrepItem | null>(null) // ảnh chụp món lúc mở phiếu — danh sách tải lại sau khi ghi cũng không làm phiếu biến mất
     const cashClosedToday = useCashClosedToday(addressId, !!restock)
-    const [barOpen, setBarOpen] = useState(false)
-    const open = bell ? bell.open : barOpen
-    const setOpen = (v: boolean) => { setBarOpen(v); if (!v) bell?.onClose() }
-    const onCount = bell?.onCount
-    useEffect(() => { onCount?.(pendingCount) }, [onCount, pendingCount])
+    const { open, onClose, onCount } = bell
+    useEffect(() => { onCount(pendingCount) }, [onCount, pendingCount])
 
     const total = items.length + batchItems.length
     const doneCount = total - pendingCount
@@ -56,7 +51,6 @@ function PinBar({ addressId, bell }: { addressId: string; bell?: BellProps }) {
     const prep = useOnboardingProgress('prepProgress', { isGuest, addressId })
     const lastRef = useRef(prep)
     const allTaken = total > 0 && pendingCount === 0
-    const intro = isGuest && !prep.done // lời chào đầu guide: icon vẫy tay + "Đầu tiên, …"
     useEffect(() => {
         const last = lastRef.current
         if (!isGuest || !ready || last.done || !(open || last.opened)) return
@@ -68,23 +62,13 @@ function PinBar({ addressId, bell }: { addressId: string; bell?: BellProps }) {
 
     return (
         <>
-            {!bell && pendingCount > 0 && <NoticeBar // không icon: pill đã nổi nhờ nền/viền
-                icon={intro ? <Hand size={18} className="shrink-0 text-primary wave-hand" /> : undefined}
-                label={intro ? 'Đầu tiên, bạn cần chuẩn bị' : 'Bạn cần chuẩn bị'}
-                count={pendingCount} // số việc đang chờ lấy ra quầy
-                chevron={false}
-                calm={!isGuest} // người dùng thật: viền sáng nhạt ~75%, khách giữ nhịp guide
-                typed={isGuest} // chữ gõ dần chỉ cho khách (mặc định theo hint, mà hint giờ cũng bật cho người dùng thật)
-                onClick={ready ? () => setOpen(true) : undefined} // số từ ảnh chụp: chờ tính xong mới cho thao tác
-                hint={ready && !open && (!isGuest || (!prep.done && !allTaken))} // viền sáng nhấp nháy như dải guide của khách; người dùng thật cũng thấy (còn việc chờ lấy ra quầy)
-            />}
             <Toast toast={toast} />
 
             {open && (
                 <NoticeSheet
                     icon={<span className="shrink-0 text-[12px] font-black text-primary tabular-nums">{doneCount}/{total}</span>}
                     title="Bạn cần chuẩn bị"
-                    onClose={() => { setOpen(false); settle() }}
+                    onClose={() => { onClose(); settle() }}
                     hintClose={isGuest && allTaken} // không gate prep.done: hook sống, lấy đủ là done ngay → nút Đóng phải sáng đúng lúc đó
                 >
                     {/* Chưa tính xong và chưa có ảnh chụp → skeleton, đừng hiện "Đủ hàng cho hôm nay!" giả (items còn rỗng). */}

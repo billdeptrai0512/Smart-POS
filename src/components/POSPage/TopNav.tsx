@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Bell, Menu, X } from 'lucide-react'
 import { useAddress } from '../../contexts/AddressContext'
@@ -7,9 +7,13 @@ import { useHistory } from '../../contexts/HistoryContext'
 import { useStats } from '../../contexts/StatsContext'
 import { STOCK_CACHE_KEY } from '../../hooks/useRestockOverview'
 import { readJSON } from '../../utils/storage'
+import { useOnboardingProgress } from '../../hooks/useOnboardingProgress'
+import { onboardingHintClass } from '../../utils/onboardingHint'
+import { isInventoryProgressDone } from '../../utils/onboardingStorage'
+import FocusMask from '../common/FocusMask'
 import AddressNotice from '../AddressSelectPage/AddressNotice'
 import { ingredientDetailPath } from '../../hooks/useIngredientDebts'
-import WarehousePrepNotice from '../IngredientManagementPage/WarehousePrepNotice'
+import WarehousePrepNotice, { RestockCount } from '../IngredientManagementPage/WarehousePrepNotice'
 import PrepPinBar from '../common/PrepPinBar'
 import AddressSwitcher from './AddressSwitcher'
 import { NAV_SECTIONS, type NavItem } from '../../constants/navSections'
@@ -38,12 +42,13 @@ export default function TopNav() {
     const { handleLoadHistory } = useHistory()
     const navigate = useNavigate()
     const { pathname, search } = useLocation()
-    const { warehouseRole, addresses } = useAddress()
+    const { warehouseRole, addresses, addressId } = useAddress()
     // Chuông = "việc cần làm" của người dùng, không chia đôi: quản lý nhiều địa chỉ → danh sách việc từng địa chỉ (AddressNotice);
     // còn lại (1 địa chỉ, hoặc nhân viên) → bổ sung tồn kho của địa chỉ đang đứng. Chi nhánh thành viên kho chung không mua hàng → không có chuông.
     const isOwner = isManager || isAdmin
     const kind = isOwner && addresses.length > 1 ? 'tasks' : isOwner && warehouseRole !== 'member' && warehouseRole !== 'pending' ? 'restock' : null
     const [bellOpen, setBellOpen] = useState(false)
+    const bellRef = useRef<HTMLButtonElement>(null)
     const [pending, setPending] = useState(pendingCount)
     // Chuông theo trang: ở /pos chỉ "Bạn cần chuẩn bị" (hook soạn hàng chỉ được mount 1 chỗ); các trang khác chỉ "Cần bổ sung" (chủ/quản lý).
     const [prepCount, setPrepCount] = useState(0)
@@ -59,8 +64,22 @@ export default function TopNav() {
         return () => window.removeEventListener('keydown', esc)
     }, [showMenu])
     const { isOnline } = useStats() // offline: PrepPinBar không vẽ gì → đừng cho chuông mở sheet rỗng
-    const hasBell = !isGuest && (onPos ? isOnline : !!kind)
-    const n = onPos ? prepCount : kind === 'tasks' ? pending : 0
+    // Bước cuối (Tồn kho): đếm xong ở /inventory → chuông sáng ngay, trang tối sau ~3s (để khách đọc kết luận) như bước 1; sheet "Tồn kho cần bổ sung".
+    const restock = useOnboardingProgress('restockProgress', { isGuest, addressId })
+    const inventory = useOnboardingProgress('inventoryProgress', { isGuest, addressId })
+    const restockStep = isGuest && !onPos && pathname.startsWith('/inventory') && isInventoryProgressDone(inventory) && !restock.bought
+    // bellOpen: mua xong (bought) nhưng chưa đóng sheet → bell + lớp tối còn tới khi đóng (rồi closeSheet đưa sang Báo cáo).
+    const restockSpot = isGuest && !onPos && (restockStep || bellOpen)
+    const [restockCount, setRestockCount] = useState(0)
+    const n = onPos ? prepCount : restockSpot ? (restock.bought ? 0 : restockCount) : kind === 'tasks' ? pending : 0
+    const prep = useOnboardingProgress('prepProgress', { isGuest, addressId })
+    // spot: còn trong bước 1 (tới khi khách bấm ✓ chốt prep.done). Chuông nhấp nháy khi sheet đóng; lớp tối giữ nguyên cả lúc sheet mở.
+    // `|| bellOpen`: lấy đủ hàng thì n về 0 nhưng chưa bấm ✓ — lớp tối chưa được tắt.
+    const prepSpot = isGuest && onPos && !prep.done && (n > 0 || bellOpen)
+    const spot = prepSpot || restockSpot
+    // Khách dùng thử cũng có chuông trên /pos (y như người dùng thật) — chuông sáng nhịp guide tới khi lấy hàng xong.
+    const hasBell = onPos ? isOnline : restockSpot || (!isGuest && !!kind)
+    const bellHint = spot && !bellOpen
 
     function go({ route, state }: NavItem) {
         setShowMenu(false)
@@ -76,9 +95,10 @@ export default function TopNav() {
 
     return (
         <>
+            {spot && <FocusMask target={bellRef} badge delay={restockSpot ? 3000 : undefined} />}
             <AddressSwitcher />
             {hasBell && (
-                <button type="button" aria-label="Việc cần làm" onClick={() => setBellOpen(true)} className={NAV_ICON_BTN}>
+                <button ref={bellRef} type="button" aria-label="Việc cần làm" onClick={() => setBellOpen(true)} className={`${NAV_ICON_BTN} ${onboardingHintClass(bellHint)}`}>
                     <Bell size={19} className={n > 0 ? 'text-primary' : ''} />
                     {/* 1 chữ số: ô vuông 20×20 → tròn hẳn; ≥2 chữ số: giãn ngang thành viên thuốc */}
                     {n > 0 && (
@@ -112,10 +132,12 @@ export default function TopNav() {
                     </nav>
                 </>)}
             </div>
-            {onPos && !isGuest && isOnline && <PrepPinBar bell={{ open: bellOpen, onClose: () => setBellOpen(false), onCount: setPrepCount }} />}
+            {restockStep && !bellOpen && addressId && <RestockCount addressId={addressId} onCount={setRestockCount} />}
+            {onPos && isOnline && <PrepPinBar bell={{ open: bellOpen, onClose: () => setBellOpen(false), onCount: setPrepCount }} />}
             {!onPos && bellOpen && kind === 'tasks' && <AddressNotice onClose={() => { setBellOpen(false); setPending(pendingCount()) }} />}
-            {!onPos && bellOpen && kind === 'restock' && (
+            {!onPos && bellOpen && (kind === 'restock' || restockSpot) && (
                 <WarehousePrepNotice
+                    hint={restockSpot}
                     onClose={() => setBellOpen(false)}
                     onOpenIngredient={(ing, t, since) => { setBellOpen(false); navigate(ingredientDetailPath(ing, t, since)) }}
                 />

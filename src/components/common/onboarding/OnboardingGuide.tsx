@@ -4,8 +4,8 @@ import { useAuth } from '../../../contexts/AuthContext'
 import { useAddress } from '../../../contexts/AddressContext'
 import { trackGuestOnboardingStage } from '../../../services/onboardingFunnelService'
 import { readOnboardingState, DEFAULT_ONBOARDING_STATE, ONBOARDING_EVENT } from '../../../utils/onboardingStorage'
-import { JOURNAL_FORWARD_MS, REPORT_FORWARD_MS } from '../../../utils/onboardingHint'
 import Typewriter from '../Typewriter'
+import Collapse from './Collapse'
 import { STEPS } from './steps'
 
 // Hướng dẫn "một ngày của quán" — 1 dải IN-FLOW trên đỉnh layout (App.tsx OnboardingLayout đặt
@@ -14,7 +14,8 @@ import { STEPS } from './steps'
 // số bước/thanh tiến độ; mỗi việc đã có spotlight ngay trên nút/món cần bấm. Hết các bước → không dải:
 // CTA đăng ký nằm cuối Báo cáo (DailyReportPage). Từ bước Nhật ký trở đi chữ dẫn do pageGuide quyết định theo trang.
 // onPos: POS chỉ hiện dải ở bước 2 (Bán hàng: "Chạm vào món rồi bấm tạo đơn") và bước Nhật ký — bước 1 pill "Bạn cần chuẩn bị" đã tự sáng. Pill nằm chung hàng với pill bàn.
-export default function OnboardingGuide({ onPos = false }: { onPos?: boolean }) {
+// checkoutReady (chỉ POS): đã chạm đủ món → dải này nhường chỗ cho dải "Bấm Tạo đơn" nằm ngay trên thanh chốt đơn (POSPage).
+export default function OnboardingGuide({ onPos = false, checkoutReady = false, inline = false, hide = false }: { onPos?: boolean; checkoutReady?: boolean; inline?: boolean | 'below'; hide?: boolean }) {
     const { isGuest } = useAuth()
     const { addressId } = useAddress()
     const { pathname } = useLocation()
@@ -47,38 +48,28 @@ export default function OnboardingGuide({ onPos = false }: { onPos?: boolean }) 
     }, [stageReached, isGuest, addressId])
 
     // idx -1 = xong hết: không dải — CTA đăng ký nằm cuối Báo cáo (DailyReportPage), các trang khác sáng đường về đó.
-    // Trên POS dải còn hiện ở bước Nhật ký (idx 2): thẻ Nhật ký đang sáng, dải nói rõ phải bấm vào đó.
-    const journalOnPos = onPos && idx === 2
     // Chữ dẫn theo trang — nút cần bấm tự sáng. Nhật ký giải thích số liệu; Kết ca nói đây là lúc đếm/đối chiếu tiền.
-    // Nhật ký và Kết ca (Đối chiếu) đều: chữ giải thích → (cùng lúc mũi tên "tiến" sáng) câu cầu nối sang bước sau.
+    // Nhật ký và Kết ca (Đối chiếu): chữ giải thích ở đây; câu cầu nối sang bước sau là GuideTapRow do trang tự dựng.
     // idx 3 vẫn ở /history = lúc bấm mũi tên (viewedReport ghi trước khi chuyển trang): giữ dải, không thì nó biến mất rồi hiện lại ở /report → trang nhảy 40px.
     const onJournal = onHistory && (idx === 2 || idx === 3) && !pathname.endsWith('/expense')
     const onReport = pathname.startsWith('/report') && !pathname.endsWith('/revenue')
-    const bridgeFrom = onJournal ? JOURNAL_FORWARD_MS : onReport && idx === 4 ? REPORT_FORWARD_MS : 0
-    const [bridge, setBridge] = useState(false)
-    useEffect(() => {
-        setBridge(false)
-        if (!bridgeFrom) return
-        const t = setTimeout(() => setBridge(true), bridgeFrom)
-        return () => clearTimeout(t)
-    }, [bridgeFrom])
-    const pageGuide = onJournal ? (bridge || idx === 3 ? 'Sau khi bán xong, bấm sang báo cáo' : 'Bên dưới là thống kê bán hàng')
-        : onReport ? (idx === 3 ? 'Nhập tiền mặt và chuyển khoản' : idx === 4 ? (bridge ? 'Sau đó, kiểm kê tồn nguyên vật liệu' : 'Đối chiếu chênh lệch với doanh thu') : null)
+    const pageGuide = onJournal ? 'Xem hôm nay bán được bao nhiêu'
+        : onReport ? (idx === 3 ? 'Nhập tiền mặt và chuyển khoản' : idx === 4 ? 'Đối chiếu chênh lệch với doanh thu' : null)
         : pathname.startsWith('/inventory') && !pathname.startsWith('/inventory/stocking') && idx === 4 ? 'Nhập tồn cà phê cuối kỳ' : null // không "Sau đó": câu cầu nối ở /report vừa mở đầu bằng nó
-    const gone = (onPos && idx !== 1 && !journalOnPos) || (onHistory && idx === 1) || !isGuest || !addressId || idx === -1
+    const gone = (onPos && (idx !== 1 || checkoutReady)) || (onHistory && idx === 1) || !isGuest || !addressId || idx === -1
     const current = gone ? undefined : STEPS[idx].items(local).find(i => !i.done)
-    const hidden = gone || (current?.hideBar && !journalOnPos && !pageGuide)
-    const label = journalOnPos ? 'Tiếp theo, bấm xem nhật ký' : pageGuide ?? current?.label ?? ''
+    const hidden = gone || hide || (current?.hideBar && !pageGuide)
+    const label = pageGuide ?? current?.label ?? ''
     // Nhớ câu cuối đã hiện: dải ẩn đi thì thu chiều cao dần (bên dưới) thay vì mất hẳn — khỏi giật trang 40px (vd. xong Kiểm kê → dải biến mất).
     const [lastLabel, setLastLabel] = useState('')
     if (!hidden && label !== lastLabel) setLastLabel(label)
-    if (hidden && (onPos || !lastLabel)) return null
+    if (onPos ? !(isGuest && addressId) : hidden && !lastLabel) return null
 
     // Nền cam nhạt để tách hẳn khỏi header (bg-surface) ngay bên dưới — cùng
     // màu nền với header thì dải bị đọc như 1 phần header và dễ bị lướt qua.
     // max-w-lg mx-auto w-full: cùng bề rộng khung trang (các trang bọc nội dung bằng max-w-lg mx-auto) —
     // màn rộng thì dải không tràn ra ngoài header.
-    const bar = `shrink-0 flex items-center gap-2.5 min-h-10 py-1.5 px-4 text-[14px] w-full max-w-lg mx-auto ${onPos ? `flex-1 min-w-0 !w-auto h-10 !min-h-0 !py-0 rounded-[14px]` : ''}`
+    const bar = `shrink-0 flex items-center gap-2.5 min-h-10 py-1.5 px-4 text-[14px] w-full max-w-lg mx-auto ${onPos ? `flex-1 min-w-0 !w-auto h-10 !min-h-0 !py-0 rounded-[14px]` : inline ? 'rounded-[14px]' : ''}`
     const content = (
         <div className={`${bar} relative bg-primary/15 text-text`}>
             {/* Chữ gõ dần (Typewriter); bản ẩn cùng nội dung giữ chỗ để dải không đổi chiều cao lúc đang gõ. */}
@@ -88,10 +79,8 @@ export default function OnboardingGuide({ onPos = false }: { onPos?: boolean }) 
             </span>
         </div>
     )
-    if (onPos) return content
-    return (
-        <div className={`grid transition-[grid-template-rows] duration-300 ${hidden ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]'}`}>
-            <div className="min-h-0 overflow-hidden">{content}</div>
-        </div>
-    )
+    // POS: dải luôn mount (khách), pt-3 (cách thẻ Nhật ký) nằm trong phần bị cắt nên co cùng dải.
+    if (onPos) return <Collapse show={!hidden} className="flex-1 min-w-0"><div className="pt-3">{content}</div></Collapse>
+    // inline: nằm trong trang (ngay trên thẻ Tổng cộng của Nhật ký), pb-3 nằm trong phần bị cắt. hide: trang ẩn dải khi đã chuyển sang dải khác.
+    return <Collapse show={!hidden}>{inline ? <div className={inline === 'below' ? 'pt-3' : 'pb-3'}>{content}</div> : content}</Collapse>
 }

@@ -58,6 +58,7 @@ interface Props {
     hintFill?: number
     // Chen ngay trên "Tổng hao hụt" (vd dòng Xác nhận kiểm kê của tab).
     beforeTotal?: ReactNode
+    guide?: ReactNode // dải guide khách, nằm trong dòng nguyên liệu đang được gợi ý (hintIngredient), dưới ô Cuối kỳ
     // Màu viền thẻ bọc các nhóm + dải trạng thái (beforeTotal) ở đầu thẻ: success = đã xác nhận kiểm kê, primary = chưa.
     statusTone?: "success" | "primary"
     // Dưới Tổng hao hụt, cùng cột (laptop: cột phải dính).
@@ -111,7 +112,7 @@ export default function InventoryReportCard({
     // Nguyên liệu đang được onboarding phase 4 gợi ý bấm vào — xem DailyReportPage.tsx
     // (hintCoffeeIngredient) + onboarding/steps.ts.
     hintIngredient = null,
-    hintStep = null, hintFill, beforeTotal, afterTotal, statusTone = "primary",
+    hintStep = null, hintFill, beforeTotal, guide, afterTotal, statusTone = "primary",
 }: Props) {
     // Sort by status priority so staff sees "Chưa nhập" first, then anomalies,
     // then matched rows at the bottom. Tie-break by display name for stability.
@@ -243,6 +244,7 @@ export default function InventoryReportCard({
             hint={ing.ingredient === hintIngredient}
             hintStep={ing.ingredient === hintIngredient ? hintStep : null}
             hintFill={ing.ingredient === hintIngredient ? hintFill : undefined}
+            guide={ing.ingredient === hintIngredient ? guide : undefined}
         />
     )
 
@@ -362,6 +364,7 @@ interface RowProps {
     hint: boolean
     hintStep: HintStep | null
     hintFill?: number
+    guide?: ReactNode
 }
 
 const IngredientRow = memo(function IngredientRow({
@@ -369,7 +372,7 @@ const IngredientRow = memo(function IngredientRow({
     warehouseAvailable, used, made, usedAfter, madeAfter, periodMade, breakdown, period, openingNote,
     lockWarehouseInputs, readOnly,
     onOpeningChange, onRestockChange, onInventoryChange, onFieldBlur,
-    hint, hintStep, hintFill,
+    hint, hintStep, hintFill, guide,
 }: RowProps) {
     // Whole-row collapse: default closed so staff can scroll the list of NVL fast and
     // open just the ones they're counting. Status badge in the header tells them
@@ -579,6 +582,7 @@ const IngredientRow = memo(function IngredientRow({
                         <div className="col-span-2">{cellCuoiKy}</div>
                     </div>
                 </>)}
+                {guide /* dải guide khách: ngay dưới ô Cuối kỳ, trong dòng đang mở */}
             </div>)}
             {listOpen && (
                 <NoticeSheet icon={<ClipboardList size={18} className="text-primary shrink-0" />} title={`${ingredientLabel(ing.ingredient)} · Sử dụng`} count={p ? todayUsed : `${usedShown} ${unit}`} onClose={() => setListOpen(false)}>

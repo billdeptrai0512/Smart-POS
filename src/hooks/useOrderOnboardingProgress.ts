@@ -44,6 +44,8 @@ export function useOrderOnboardingProgress({ isGuest, addressId, products, cart,
         hintProductIds: selling ? pending : [],
         showCheckoutHint: selling && ready,
         // Bán xong → sáng Nhật ký (Header), nơi đã có cả ngày bán vừa sinh.
+        // Vừa bán xong, chưa vào Nhật ký: làm tối cả trang để khách bấm vào thẻ Nhật ký (khác showHistoryHint: không tối ở bước cuối, lúc đó thẻ chỉ là đường quay về).
+        focusJournal: isGuest && !!addressId && orderProgress.sent >= 1 && !orderProgress.viewedHistory,
         showHistoryHint: isGuest && !!addressId && ((orderProgress.sent >= 1 && !orderProgress.viewedHistory) || finalStep),
     }
 }
