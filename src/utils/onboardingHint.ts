@@ -16,7 +16,7 @@ export function onboardingHintClass(active: unknown, variant = 'default') {
 
 // Nhật ký (guide): sau chừng này ms chữ gõ xong + thẻ thống kê sáng xong → mũi tên "tiến" sáng VÀ dải đổi sang câu cầu nối.
 // Dùng chung HistoryPage (mũi tên) + OnboardingGuide (câu) để hai nơi không lệch nhịp.
-export const JOURNAL_FORWARD_MS = 2800
+export const JOURNAL_FORWARD_MS = 5600
 // Báo cáo, bước Kiểm kê: cuộn tới Đối chiếu + thẻ sáng xong → mũi tên "tiến" sáng VÀ dải đổi sang câu cầu nối (DailyReportPage + OnboardingGuide).
 export const REPORT_FORWARD_MS = 3300
 

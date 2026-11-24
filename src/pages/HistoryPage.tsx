@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { calculateItemCost, parseVNDInput, formatVNDInput } from '../utils'
 import { aggregateOrderStats, buildExtraMaps, buildHourlyLineChart } from '../utils/reportStats'
@@ -21,7 +21,11 @@ import { readOnboardingState, writeOnboardingState } from '../utils/onboardingSt
 import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
 import OrdersList from '../components/HistoryPage/OrdersList'
-import { onboardingHintClass, JOURNAL_FORWARD_MS } from '../utils/onboardingHint'
+import OnboardingGuide from '../components/common/onboarding/OnboardingGuide'
+import Collapse from '../components/common/onboarding/Collapse'
+import FocusMask from '../components/common/FocusMask'
+import Typewriter from '../components/common/Typewriter'
+import { JOURNAL_FORWARD_MS } from '../utils/onboardingHint'
 import SalesCard from '../components/DailyReportPage/SalesCard'
 import ExpensePanel from '../components/HistoryPage/ExpensePanel'
 import AddExpenseModal from '../components/HistoryPage/AddExpenseModal'
@@ -76,15 +80,21 @@ export default function HistoryPage() {
     const orderStored = useOnboardingProgress('orderProgress', { isGuest, addressId })
     const orderDone = orderStored.sent >= 1
     const journalProgress = useOnboardingProgress('journalProgress', { isGuest, addressId })
-    // Hint: mũi tên "tiến" sang trang Báo cáo (Báo cáo là trang riêng).
-    const journalHint = !(isGuest && orderDone) ? null : !journalProgress.viewedReport ? 'report' : null
-    // Nhịp guide: dải chữ gõ xong (~0,8s) → thẻ thống kê sáng kiểu "nhìn vào đây" 2s → mũi tên "tiến" mới sáng.
+    const journalGuide = isGuest && orderDone && !journalProgress.viewedReport
+    // Nhịp guide: dải trên giải thích số (làm tối, chỉ chừa dải + thẻ Tổng cộng) → hết JOURNAL_FORWARD_MS đổi sang dải dưới thẻ, bấm để sang Báo cáo.
     const [forwardReady, setForwardReady] = useState(false)
     useEffect(() => {
-        if (journalHint !== 'report') return
+        if (!journalGuide) return
         const t = setTimeout(() => setForwardReady(true), JOURNAL_FORWARD_MS)
         return () => clearTimeout(t)
-    }, [journalHint])
+    }, [journalGuide])
+    const reportCta = journalGuide && forwardReady
+    const ctaRef = useRef<HTMLDivElement>(null)
+    useEffect(() => {
+        if (!reportCta) return
+        const t = setTimeout(() => ctaRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 350) // dải nằm ngoài màn hình → cuộn nhẹ xuống
+        return () => clearTimeout(t)
+    }, [reportCta])
 
     // Date selection (scope/offset/customRange + handlers) lives in the shared
     // hook so /history and /report stay in lock-step. Seeded from nav state
@@ -372,6 +382,9 @@ export default function HistoryPage() {
         goToMenuStep(activeTab, +1, { navigate, backTo, scopeState: dateNavState, wizard: location.state?.wizard })
     }
 
+    // Vùng sáng của bước Nhật ký: dải guide + thẻ Tổng cộng (lớp làm tối chừa cả hai).
+    const summaryRef = useRef<HTMLDivElement>(null)
+
     // ─── Render ───────────────────────────────────────────────────────
     return (
         <div className="flex flex-col h-full max-w-lg lg:max-w-none mx-auto bg-bg">
@@ -381,9 +394,6 @@ export default function HistoryPage() {
                 scope={scope}
                 isReadOnly={isReadOnly}
                 canGoForward={canGoForwardPeriod}
-                onBack={() => goToMenuStep(activeTab, -1, { navigate, backTo, wizard: location.state?.wizard })}
-                onForward={handleForward}
-                hintForward={journalHint === 'report' && forwardReady}
                 activeTab={activeTab}
                 onTabSelect={setActiveTab}
                 onOffsetPrev={goOffsetPrev}
@@ -405,7 +415,9 @@ export default function HistoryPage() {
             {activeTab === 'sales' && (
                 <OrdersList
                     orders={allOrders}
-                    summary={
+                    summary={<div ref={summaryRef}>
+                        {journalGuide && <FocusMask target={summaryRef} radius={20} delay={1250} watch={reportCta} />}
+                        <OnboardingGuide inline hide={reportCta} />
                         <SalesCard
                             totalCups={totalCups}
                             products={products}
@@ -413,9 +425,15 @@ export default function HistoryPage() {
                             totalRevenue={totalRevenue}
                             productStats={productStats}
                             lineChartData={isRangeScope ? weekdayChartData : lineChartData}
-                            className={`${onboardingHintClass(journalHint === 'report', 'look')} [--look-delay:0.8s]`}
                         />
-                    }
+                        <Collapse show={reportCta}>
+                            <div className="pt-3">
+                                <div ref={ctaRef} onClick={handleForward} className="flex items-center justify-center h-10 px-4 rounded-[14px] bg-primary/15 text-text text-center uppercase tracking-wider text-[12px] font-black cursor-pointer active:scale-[0.98] transition-transform onboarding-hint">
+                                    {reportCta && <Typewriter text="Bây giờ xem báo cáo dòng tiền" />}
+                                </div>
+                            </div>
+                        </Collapse>
+                    </div>}
                     isLoading={isTodayScope ? isLoadingHistory : isLoadingRangeOrders}
                     isTodayScope={isTodayScope}
                     justArrivedIds={isTodayScope ? justArrivedIds : null}

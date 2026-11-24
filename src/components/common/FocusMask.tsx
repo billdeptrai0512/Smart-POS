@@ -1,16 +1,18 @@
-import { useEffect, useState, type RefObject } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 
 // Guide khách dùng thử: làm tối + khoá cả trang trừ `target`. clip-path cắt lỗ trên lớp phủ — vùng bị cắt cũng không
 // nhận chạm, nên target vẫn bấm được. Chờ `delay` ms (cho khách kịp nhìn màn hình) rồi tối dần trong delay/5.
 // badge: target có huy hiệu số nhô ra góc trên-phải (chuông) → lỗ ôm cả huy hiệu; không thì lỗ là ô bo tròn bán kính `radius`.
-// ponytail: chỉ đo 1 lần lúc hiện (target đứng yên); xoay màn hình giữa chừng thì lỗ lệch — thêm resize listener nếu gặp.
-export default function FocusMask({ target, badge = false, radius = 14, delay = 2500 }: {
-    target: RefObject<HTMLElement | null>; badge?: boolean; radius?: number; delay?: number
+// Lỗ đo lúc hiện, rồi đo lại khi cuộn/xoay màn hình; đổi chỗ mà target không đổi kích thước (dải trên co, dải dưới giãn) thì báo bằng `watch`.
+export default function FocusMask({ target, badge = false, radius = 14, delay = 2500, watch }: {
+    target: RefObject<HTMLElement | null>; badge?: boolean; radius?: number; delay?: number; watch?: unknown
 }) {
     const [clip, setClip] = useState('')
+    const first = useRef(true)
+    // watch đổi (layout đổi dưới lớp phủ) → đo lại sau khi animation layout xong; lớp phủ giữ nguyên, chỉ lỗ dời.
     useEffect(() => {
-        const t = setTimeout(() => {
+        const measure = () => {
             const el = target.current
             if (!el) return
             const r = el.getBoundingClientRect()
@@ -26,8 +28,22 @@ export default function FocusMask({ target, badge = false, radius = 14, delay = 
             }
             const corner = `A${k} ${k} 0 0 1 ` // 3 góc bo còn lại + góc trên-phải khi không có huy hiệu
             setClip(`path(evenodd, 'M0 0H${innerWidth}V${innerHeight}H0Z M${L + k} ${T}${top}${badge ? '' : corner}${end}V${B - k}${corner}${R - k} ${B}H${L + k}${corner}${L} ${B - k}V${T + k}${corner}${L + k} ${T}Z')`)
-        }, delay)
-        return () => clearTimeout(t)
-    }, [target, badge, radius, delay])
+        }
+        let raf = 0
+        let ro: ResizeObserver | undefined
+        const follow = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(measure) } // cuộn / xoay màn hình → lỗ bám theo target
+        const t = setTimeout(() => {
+            first.current = false
+            measure()
+            addEventListener('scroll', follow, true) // capture: container cuộn không phải window
+            addEventListener('resize', follow)
+            ro = new ResizeObserver(follow) // target co/giãn (vd. thu gọn thẻ Tổng cộng)
+            if (target.current) ro.observe(target.current)
+        }, first.current ? delay : 700)
+        return () => {
+            clearTimeout(t); cancelAnimationFrame(raf); ro?.disconnect()
+            removeEventListener('scroll', follow, true); removeEventListener('resize', follow)
+        }
+    }, [target, badge, radius, delay, watch])
     return clip ? createPortal(<div className="fixed inset-0 z-[60] bg-black/60" style={{ clipPath: clip, animation: `fade-in ${delay / 5}ms ease-out` }} />, document.body) : null
 }

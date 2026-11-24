@@ -1,6 +1,5 @@
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
-import { useAuth } from './contexts/AuthContext'
 import { useProducts } from './contexts/ProductContext'
 import { recipeBackUrl } from './utils/recipeBackUrl'
 import OnboardingGuide from './components/common/onboarding/OnboardingGuide'
@@ -18,11 +17,10 @@ export { POSProvider } from './contexts/POSContext'
 export function OnboardingLayout() {
   // /pos tự đặt guide trong Header (dưới thẻ Địa chỉ + Nhật ký, cạnh "Chuẩn bị hôm nay").
   const { pathname, state } = useLocation()
-  const { isGuest } = useAuth()
   const onPos = pathname === '/pos'
   const { products, batchProducts, toppings } = useProducts()
   const recipeId = pathname.match(/^\/category\/(?:recipes|toppings)\/([^/]+)$/)?.[1]
-  const back = pathname.startsWith('/history') ? (isGuest ? null : { to: '/pos', state: undefined })
+  const back = pathname.startsWith('/history') ? { to: '/pos', state: undefined }
     : /^\/inventory\/stocking\/[^/]+$/.test(pathname) ? { to: state?.backTo || '/inventory/stocking', state: state?.backTo ? undefined : state }
     : recipeId ? { to: recipeBackUrl(recipeId, products, batchProducts, toppings, state?.recipeFrom), state: state && { ...state, recipeFrom: undefined } }
     : pathname === '/category/discounts' ? { to: '/category/overall', state }
@@ -49,7 +47,7 @@ export function OnboardingLayout() {
           </div>
         </div>
       )}
-      {!onPos && <OnboardingGuide />}
+      {!onPos && !pathname.startsWith('/history') && <OnboardingGuide />}
       <div className="flex-1 min-h-0">
         <Outlet />
       </div>
