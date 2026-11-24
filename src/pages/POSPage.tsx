@@ -13,8 +13,9 @@ import MenuGrid from '../components/POSPage/MenuGrid'
 import CheckoutBar from '../components/POSPage/CheckoutBar'
 import TableModal from '../components/POSPage/TableModal'
 import Toast from '../components/POSPage/Toast'
-import PrepPinBar from '../components/common/PrepPinBar'
 import OnboardingGuide from '../components/common/onboarding/OnboardingGuide'
+import Typewriter from '../components/common/Typewriter'
+import Collapse from '../components/common/onboarding/Collapse'
 
 export default function POSPage() {
     const navigate = useNavigate()
@@ -49,7 +50,9 @@ export default function POSPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
-    const { hintProductIds, showCheckoutHint, showHistoryHint } = useOrderOnboardingProgress({ isGuest, addressId, products, cart, enterKey })
+    const [checkoutSeen, setCheckoutSeen] = useState(false)
+    const { hintProductIds, showCheckoutHint, showHistoryHint, focusJournal } = useOrderOnboardingProgress({ isGuest, addressId, products, cart, enterKey })
+    if (showCheckoutHint && !checkoutSeen) setCheckoutSeen(true)
 
     // Prefetch the lazy History chunk on mount so "go next" doesn't flash the Suspense
     // fallback while it loads. Same module App.tsx lazy-imports → warms the same chunk.
@@ -80,12 +83,12 @@ export default function POSPage() {
                     loaded={recentLoaded}
                     enterKey={enterKey}
                     showOnboardingHint={showHistoryHint}
+                    focusJournal={focusJournal}
                     notice={<>
                         {/* Chip bàn ("Mang đi" khi chưa chọn bàn) đã chuyển xuống CheckoutBar, cạnh Tạo đơn. */}
                         <div className="flex gap-2 [&>button]:rounded-[14px] [&>button]:w-auto [&>button]:min-w-0 [&>button:first-child]:flex-1">
-                            {/* Pill guide (sáng): ẩn ở bước Chuẩn bị (pill dưới đã sáng), xong rồi mới hiện bước kế. Luôn mount để ghi phễu. */}
-                            <OnboardingGuide onPos />
-                            {isGuest && <PrepPinBar />}
+                            {/* Dải guide (sáng): ẩn ở bước Chuẩn bị (chuông trên TopNav đã sáng + khoá cả trang), xong rồi mới hiện bước kế. Luôn mount để ghi phễu. */}
+                            <OnboardingGuide onPos checkoutReady={showCheckoutHint} />
                         </div>
                     </>}
                 />
@@ -119,6 +122,17 @@ export default function POSPage() {
             {showTables && <TableModal onClose={() => setShowTables(false)} />}
 
             <div className="[grid-area:checkout] w-full max-w-lg mx-auto dine-split:max-w-none">
+                {/* Guide bước Bán hàng, phần 2: đã chạm đủ món → chữ dẫn nằm ngay trên nút Tạo đơn (phần 1 là dải ở header). */}
+                {isGuest && (
+                    <Collapse show={showCheckoutHint}>
+                        <div className="px-6 dine-split:px-4 py-2 bg-bg">
+                            <div className="flex items-center justify-center h-10 px-4 rounded-[14px] bg-primary/15 text-text text-center uppercase tracking-wider text-[12px] font-black">
+                                {/* Gõ chữ lần đầu hiện; sau đó giữ nguyên chữ để lúc co lại không bị trống. */}
+                                {checkoutSeen && <Typewriter text="Bấm Tạo đơn để ghi vào nhật ký" />}
+                            </div>
+                        </div>
+                    </Collapse>
+                )}
                 <CheckoutBar
                     discountAmount={discountAmount}
                     finalTotal={finalTotal}

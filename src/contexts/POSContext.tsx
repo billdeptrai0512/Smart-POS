@@ -416,8 +416,8 @@ export function POSProvider() {
             setTodayOrders(prev => [optimisticOrder, ...prev])
             const seedsDay = isGuest && guestDemoDayPending()
             submitOrder(cartItems, netTotal, null, addressId, cartCost, costPerItem, profile?.name, discountApplied, orderId, tableNameArg, programDiscount)
-                // Demo: đơn đầu tiên sinh cả ngày bán trước đó (seedGuestDemoDay) → nạp lại tổng ngày + Nhật ký.
-                .then(() => { if (seedsDay) loadHistoryNow() })
+                // Demo: đơn đầu tiên sinh cả ngày bán trước đó (seedGuestDemoDay) → nạp lại tổng ngày + Nhật ký + đủ 3 dòng thẻ Nhật ký.
+                .then(() => { if (seedsDay) { loadHistoryNow(); return refreshRecentOrders(addressId) } })
                 .then(() => fetchOrderNo(orderId).catch(() => null))
                 .then(orderNo => { patchOrderNo(orderNo); printKitchen(orderNo) })
                 .catch(err => {

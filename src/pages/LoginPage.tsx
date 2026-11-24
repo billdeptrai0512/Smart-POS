@@ -5,6 +5,7 @@ import ErrorBanner from '../components/common/ErrorBanner'
 import PasswordInput from '../components/common/PasswordInput'
 import FloatingLabelInput from '../components/common/FloatingLabelInput'
 import { errorMessage } from '../utils/errorMessage'
+import { capitalizeWords } from '../utils'
 import { setGuestShopName } from '../services/localRepository'
 import { trackLoginPageVisit } from '../services/onboardingFunnelService'
 
@@ -122,7 +123,8 @@ export default function LoginPage() {
                                 id="guest-shop-name"
                                 label="Tên quán / địa chỉ"
                                 value={shopName}
-                                onChange={e => setShopName(e.target.value)}
+                                autoCapitalize="words"
+                                onChange={e => setShopName(capitalizeWords(e.target.value))}
                                 autoFocus
                             />
                             <button
