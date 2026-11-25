@@ -22,7 +22,7 @@ export function OnboardingLayout() {
   const recipeId = pathname.match(/^\/category\/(?:recipes|toppings)\/([^/]+)$/)?.[1]
   const back = pathname.startsWith('/history') ? { to: '/pos', state: undefined }
     : /^\/inventory\/stocking\/[^/]+$/.test(pathname) ? { to: state?.backTo || '/inventory/stocking', state: state?.backTo ? undefined : state }
-    : recipeId ? { to: recipeBackUrl(recipeId, products, batchProducts, toppings, state?.recipeFrom), state: state && { ...state, recipeFrom: undefined } }
+    : recipeId ? { to: recipeBackUrl(recipeId, products, batchProducts, toppings), state }
     : pathname === '/category/discounts' ? { to: '/category/overall', state }
     : null
   // Hàng TopNav phải rộng bằng khung của trang bên dưới (mỗi trang tự đặt max-w-lg + trần ở lg): trang chi tiết 4xl, Tổng hợp tồn kho 6xl, còn lại full.
