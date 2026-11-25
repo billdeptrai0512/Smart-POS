@@ -64,10 +64,10 @@ export default function TopNav() {
         return () => window.removeEventListener('keydown', esc)
     }, [showMenu])
     const { isOnline } = useStats() // offline: PrepPinBar không vẽ gì → đừng cho chuông mở sheet rỗng
-    // Bước cuối (Tồn kho): đếm xong ở /inventory → chuông sáng ngay, trang tối sau ~3s (để khách đọc kết luận) như bước 1; sheet "Tồn kho cần bổ sung".
+    // Bước cuối (Tồn kho): xem xong kết luận kiểm kê (viewedLoss) → chuông sáng, trang tối như bước 1; sheet "Tồn kho cần bổ sung".
     const restock = useOnboardingProgress('restockProgress', { isGuest, addressId })
     const inventory = useOnboardingProgress('inventoryProgress', { isGuest, addressId })
-    const restockStep = isGuest && !onPos && pathname.startsWith('/inventory') && isInventoryProgressDone(inventory) && !restock.bought
+    const restockStep = isGuest && !onPos && pathname.startsWith('/inventory') && isInventoryProgressDone(inventory) && inventory.viewedLoss && !restock.bought
     // bellOpen: mua xong (bought) nhưng chưa đóng sheet → bell + lớp tối còn tới khi đóng (rồi closeSheet đưa sang Báo cáo).
     const restockSpot = isGuest && !onPos && (restockStep || bellOpen)
     const [restockCount, setRestockCount] = useState(0)
@@ -95,7 +95,7 @@ export default function TopNav() {
 
     return (
         <>
-            {spot && <FocusMask target={bellRef} badge delay={restockSpot ? 3000 : undefined} />}
+            {spot && <FocusMask target={bellRef} badge delay={restockSpot ? 800 : undefined} />}
             <AddressSwitcher />
             {hasBell && (
                 <button ref={bellRef} type="button" aria-label="Việc cần làm" onClick={() => setBellOpen(true)} className={`${NAV_ICON_BTN} ${onboardingHintClass(bellHint)}`}>

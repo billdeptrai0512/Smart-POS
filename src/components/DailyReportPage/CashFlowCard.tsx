@@ -42,8 +42,10 @@ interface Props {
     expenseCategories?: ExpenseCategory[]
     children?: ReactNode
     guide?: ReactNode // dải guide khách, ngay trên thẻ Thực thu
+    guideBeforeDiff?: ReactNode // dải guide giải thích Đối chiếu, ngay trên thẻ Đối chiếu (dưới thẻ Thực thu)
     guideAfterDiff?: ReactNode // dải guide thứ hai, ngay dưới thẻ Đối chiếu
-    focusDiff?: boolean // làm tối cả trang, chỉ chừa thẻ Đối chiếu + dải guide thứ hai
+    focusDiff?: boolean // làm tối cả trang, chỉ chừa thẻ Đối chiếu + dải guide trên/dưới nó
+    focusWatch?: unknown // đổi khi dải trên nhường dải dưới → lớp tối đo lại
     footer?: ReactNode // đặt dưới Thực nhận
     editable?: boolean
     cashInput?: string
@@ -59,7 +61,7 @@ interface Props {
     hintTransfer?: boolean
     onHintFill?: () => void // guide: bấm vào 1 ô đang sáng → cả hai ô hiện số gợi ý rồi tự lưu
     hintNet?: boolean
-    hintDiff?: boolean // guide: đã nhập đủ thực thu → cuộn tới thẻ Đối chiếu + sáng viền thẻ
+    hintDiff?: boolean // guide: đã nhập đủ thực thu → cuộn tới thẻ Đối chiếu
     onEditExpense?: (expense: Row) => void
     onEditRestockPayment?: (payment: Row) => void
     printInfo?: { addressName?: string | null; dateLabel?: string; revenue?: number; cups?: number; printerIp?: string | null }
@@ -89,8 +91,10 @@ export default function CashFlowCard({
     // Khối doanh thu (SalesCard + biểu đồ) render phía trên panel Thực thu.
     children,
     guide,
+    guideBeforeDiff,
     guideAfterDiff,
     focusDiff = false,
+    focusWatch,
     footer,
     // Inline-edit props (today scope on /report). When `editable` is true the
     // Tiền mặt / Chuyển khoản rows become text inputs; rời ô (blur) là tự lưu.
@@ -436,7 +440,8 @@ export default function CashFlowCard({
             </ReportPanel>
 
             <div ref={focusRef} className="flex flex-col gap-4">
-            {focusDiff && <FocusMask target={focusRef} radius={20} delay={800} />}
+            {focusDiff && <FocusMask target={focusRef} radius={20} delay={1250} watch={focusWatch} />}
+            {guideBeforeDiff && <div className="-mb-4">{guideBeforeDiff}</div>}
             {/* PANEL: CHÊNH LỆCH — Thực thu (két đếm + chi trong ca) so với Doanh thu theo đơn.
                 Dương = két dư so với đơn, âm = két hụt. Chưa nhập tiền → "—" như Thực nhận. */}
             {revenue != null && (() => {
@@ -445,7 +450,6 @@ export default function CashFlowCard({
                 return (
                     <ReportPanel
                         panelRef={diffRef}
-                        className={`${onboardingHintClass(hintDiff, 'look')} [--look-delay:1.3s]`} // sáng sau khi cuộn tới xong (0,4s trễ + 0,9s cuộn)
                         title="Đối chiếu"
                         total={{ label: 'Chênh lệch', value: cashNotEntered ? '—' : `${diff > 0 ? '+' : ''}${formatVND(diff)}`, className: tone }}
                     >

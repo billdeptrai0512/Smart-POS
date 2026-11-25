@@ -19,7 +19,8 @@ import { ingredientLabel, getIngredientUnit } from '../utils/ingredients'
 import { readOnboardingState, writeOnboardingState, DEFAULT_ONBOARDING_STATE, isCashFlowProgressDone, isInventoryProgressDone } from '../utils/onboardingStorage'
 import { useOnboardingProgressPersist } from '../hooks/useOnboardingProgressPersist'
 import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
-import { onboardingHintClass, REPORT_FORWARD_MS } from '../utils/onboardingHint'
+import { onboardingHintClass } from '../utils/onboardingHint'
+import { useForwardReady } from '../hooks/useForwardReady'
 import Typewriter from '../components/common/Typewriter'
 import { dateStringVN, isSameDayVN } from '../utils/dateVN'
 import { overlayProduction } from '../utils/production'
@@ -249,14 +250,8 @@ export default function DailyReportPage() {
         if (hintTransfer && !transferInput && cashFlowProgress.expectTransfer) setTransferInput(formatVNDInput(String(cashFlowProgress.expectTransfer)))
     }
     const hintGoToInventory = showOnboardingHints && isCashFlowProgressDone(cashFlowProgress) && !isInventoryProgressDone(inventoryProgress)
-    // Thẻ Đối chiếu cuộn tới (CashFlowCard: trễ 0,4s + cuộn 0,9s) và sáng viền ~2s cho khách nhìn (tự tắt); hết thì mũi tên "tiến" mới sáng.
-    const [forwardReady, setForwardReady] = useState(false)
-    useEffect(() => {
-        if (!hintGoToInventory) return
-        const t = setTimeout(() => setForwardReady(true), REPORT_FORWARD_MS)
-        return () => clearTimeout(t)
-    }, [hintGoToInventory])
-    const goInventoryCta = hintGoToInventory && forwardReady
+    // Cùng nhịp với Nhật ký: làm tối ngay (chừa dải trên + thẻ Đối chiếu) → useForwardReady đổi sang dải dưới thẻ, bấm để sang Kiểm kê.
+    const goInventoryCta = useForwardReady(hintGoToInventory)
     // Bước cuối: nhập kho xong quay về đây → cuộn tới Thực chi, mở nhóm Tồn kho (CashFlowCard, ~1,4s); 2,4s sau đó
     // đánh dấu viewedNet → cuộn chậm xuống nút Đăng ký.
     const restockProgress = useOnboardingProgress('restockProgress', { isGuest, addressId })
@@ -742,9 +737,11 @@ export default function DailyReportPage() {
                             không rời tab Báo cáo (xem ExpenseEditorModal ở cuối trang). */}
                         {(view === VIEW_ALL || view === VIEW_CASHFLOW) && (
                             <CashFlowCard
-                                guide={<OnboardingGuide inline hide={goInventoryCta} />}
-                                focusDiff={goInventoryCta}
-                                guideAfterDiff={<GuideTapRow show={goInventoryCta} text="Bây giờ kiểm kê nguyên vật liệu" onTap={() => goToMenuStep('report', +1, { navigate, backTo, scopeState: dateNavState, wizard: location.state?.wizard })} />}
+                                guide={<OnboardingGuide inline hide={isCashFlowProgressDone(cashFlowProgress) || goInventoryCta} />}
+                                guideBeforeDiff={<OnboardingGuide inline hide={!isCashFlowProgressDone(cashFlowProgress) || goInventoryCta} />}
+                                focusDiff={hintGoToInventory}
+                                focusWatch={goInventoryCta}
+                                guideAfterDiff={<GuideTapRow show={goInventoryCta} text="Sau đó kiểm kê nguyên vật liệu" onTap={() => goToMenuStep('report', +1, { navigate, backTo, scopeState: dateNavState, wizard: location.state?.wizard })} />}
                                 actualCash={actualCash}
                                 actualTransfer={actualTransfer}
                                 dailyExpense={dailyExpense}

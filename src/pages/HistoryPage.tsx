@@ -24,7 +24,7 @@ import OrdersList from '../components/HistoryPage/OrdersList'
 import OnboardingGuide from '../components/common/onboarding/OnboardingGuide'
 import GuideTapRow from '../components/common/onboarding/GuideTapRow'
 import FocusMask from '../components/common/FocusMask'
-import { JOURNAL_FORWARD_MS } from '../utils/onboardingHint'
+import { useForwardReady } from '../hooks/useForwardReady'
 import SalesCard from '../components/DailyReportPage/SalesCard'
 import ExpensePanel from '../components/HistoryPage/ExpensePanel'
 import AddExpenseModal from '../components/HistoryPage/AddExpenseModal'
@@ -80,14 +80,8 @@ export default function HistoryPage() {
     const orderDone = orderStored.sent >= 1
     const journalProgress = useOnboardingProgress('journalProgress', { isGuest, addressId })
     const journalGuide = isGuest && orderDone && !journalProgress.viewedReport
-    // Nhịp guide: dải trên giải thích số (làm tối, chỉ chừa dải + thẻ Tổng cộng) → hết JOURNAL_FORWARD_MS đổi sang dải dưới thẻ, bấm để sang Báo cáo.
-    const [forwardReady, setForwardReady] = useState(false)
-    useEffect(() => {
-        if (!journalGuide) return
-        const t = setTimeout(() => setForwardReady(true), JOURNAL_FORWARD_MS)
-        return () => clearTimeout(t)
-    }, [journalGuide])
-    const reportCta = journalGuide && forwardReady
+    // Nhịp guide: dải trên giải thích số (làm tối, chỉ chừa dải + thẻ Tổng cộng) → useForwardReady đổi sang dải dưới thẻ, bấm để sang Báo cáo.
+    const reportCta = useForwardReady(journalGuide)
 
     // Date selection (scope/offset/customRange + handlers) lives in the shared
     // hook so /history and /report stay in lock-step. Seeded from nav state

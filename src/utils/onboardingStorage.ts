@@ -17,7 +17,7 @@ export const DEFAULT_ONBOARDING_STATE = {
     // Bước 4 "Kết ca" — DailyReportPage.tsx. expectCash/expectTransfer = số guide đọc ra để két lệch 20k so với doanh thu.
     cashFlowProgress: { cash: false, transfer: false, expectCash: 0, expectTransfer: 0 },
     // Bước 5 "Kiểm kê" — tab Kiểm kê của /inventory. coffee: đã lưu Cuối kỳ cà phê; suggest: số cà phê móm sẵn vào ô Cuối kỳ (Lý thuyết − phần ly pha không bill).
-    inventoryProgress: { coffee: false, suggest: 0 },
+    inventoryProgress: { coffee: false, suggest: 0, viewedLoss: false }, // viewedLoss: đã xem Tổng hao hụt + Khả năng bấm thiếu → mới bật chuông bổ sung kho
     // Bước 6 "Bổ sung tồn kho" — WarehousePrepNotice.tsx: bought = đã nhập kho mẫu 1 món (app nhập nốt phần còn lại).
     // viewedNet: đã quay về Báo cáo xem Thực nhận cuối ngày sau khi chi tiền nhập kho (DailyReportPage.tsx).
     restockProgress: { bought: false, viewedNet: false },
