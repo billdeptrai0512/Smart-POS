@@ -5,7 +5,7 @@ import { useProducts } from '../../contexts/ProductContext'
 import { formatVND } from '../../utils'
 import type { RepeatedMissingCupCandidate } from '../../utils/inventory'
 
-// PROTOTYPE — "có thể pha bán nhưng chưa bấm bill". Cùng kiểu thẻ Tổng hao hụt ngay trên (tiêu đề + tổng ở đầu, vạch, các dòng).
+// PROTOTYPE — "có thể pha bán nhưng chưa bấm bill". Phần dưới của thẻ Tổng hao hụt (khung do InventoryReportCard vẽ), cùng kiểu: tiêu đề + tổng ở đầu, vạch, các dòng.
 // Mỗi dòng = (N×) tên món + giá (phải), công thức 1 ly "17g cà phê + 36ml sữa đặc + ly + nắp" (dưới) — các ly nêu tên nằm gọn trong
 // hao hụt hôm nay (phân rã ở findMissingCupCandidates, có thể lẫn nhiều món). Cuối thẻ: két dư ÷ số ly hụt = giá 1 ly, so khoảng giá menu.
 // Tự ẩn khi không có ứng viên đủ tin cậy.
@@ -60,7 +60,7 @@ export default function MissingCupSuspicionCard({ candidates = [], cash = null }
     )
 
     return (
-        <div className="bg-surface rounded-[20px] px-3 py-3 border border-warning/30 shadow-sm">
+        <div className="px-3 py-3 border-t border-border/60 first:border-t-0">
             <button type="button" onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between gap-2">
                 <span className="text-[14px] font-black text-text uppercase">Khả năng bấm thiếu</span>
                 <span className="flex items-center gap-2 min-w-0">

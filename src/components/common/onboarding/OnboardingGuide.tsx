@@ -53,11 +53,14 @@ export default function OnboardingGuide({ onPos = false, checkoutReady = false, 
     // idx 3 vẫn ở /history = lúc bấm mũi tên (viewedReport ghi trước khi chuyển trang): giữ dải, không thì nó biến mất rồi hiện lại ở /report → trang nhảy 40px.
     const onJournal = onHistory && (idx === 2 || idx === 3) && !pathname.endsWith('/expense')
     const onReport = pathname.startsWith('/report') && !pathname.endsWith('/revenue')
+    const onInventory = pathname.startsWith('/inventory') && !pathname.startsWith('/inventory/stocking')
     const pageGuide = onJournal ? 'Xem hôm nay bán được bao nhiêu'
-        : onReport ? (idx === 3 ? 'Nhập tiền mặt và chuyển khoản' : idx === 4 ? 'Đối chiếu chênh lệch với doanh thu' : null)
-        : pathname.startsWith('/inventory') && !pathname.startsWith('/inventory/stocking') && idx === 4 ? 'Nhập tồn cà phê cuối kỳ' : null // không "Sau đó": câu cầu nối ở /report vừa mở đầu bằng nó
-    const gone = (onPos && (idx !== 1 || checkoutReady)) || (onHistory && idx === 1) || !isGuest || !addressId || idx === -1
-    const current = gone ? undefined : STEPS[idx].items(local).find(i => !i.done)
+        : onReport ? (local.restockProgress.bought && !local.restockProgress.viewedNet ? 'Xem tổng thực chi cuối ngày' : idx === 3 ? 'Nhập tiền mặt và chuyển khoản' : idx === 4 ? 'Đối chiếu chênh lệch với doanh thu' : null)
+        : !onInventory ? null
+        : idx === 4 ? 'Nhập tồn cà phê cuối kỳ' // không "Sau đó": câu cầu nối ở /report vừa mở đầu bằng nó
+        : idx === 5 && !local.inventoryProgress.viewedLoss ? 'Xem hao hụt và ly bấm thiếu' : null
+    const gone = (onPos && (idx !== 1 || checkoutReady)) || (onHistory && idx === 1) || !isGuest || !addressId || (idx === -1 && !pageGuide)
+    const current = gone || idx === -1 ? undefined : STEPS[idx].items(local).find(i => !i.done)
     const hidden = gone || hide || (current?.hideBar && !pageGuide)
     const label = pageGuide ?? current?.label ?? ''
     // Nhớ câu cuối đã hiện: dải ẩn đi thì thu chiều cao dần (bên dưới) thay vì mất hẳn — khỏi giật trang 40px (vd. xong Kiểm kê → dải biến mất).

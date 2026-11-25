@@ -6,7 +6,7 @@ import { addDaysVN, dateFullVN, dateStringVN, rangeDayCount } from '../../utils/
 import { useLocation } from 'react-router-dom'
 import { NAV_ICON_BTN } from '../../constants/navStyles'
 import { useAuth } from '../../contexts/AuthContext'
-import { setMyEmail } from '../../services/authService'
+import { setMyEmail, setMyName } from '../../services/authService'
 import AddressNotice from './AddressNotice'
 import Delta from '../common/Delta'
 import { deltaPct } from '../../utils/deltaPct'
@@ -112,7 +112,7 @@ export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTa
             )}
 
             {showTabs && <AddressNotice bell={{ open: bellOpen, onClose: () => setBellOpen(false), onCount: setPending }} />}
-            {emailOpen && <AccountModal email={email} canEditEmail={showTabs} onSignOut={onSignOut} onClose={() => setEmailOpen(false)} />}
+            {emailOpen && <AccountModal name={profile?.name} email={email} canEdit={showTabs} onSignOut={onSignOut} onClose={() => setEmailOpen(false)} />}
         </header>
     )
 }
@@ -130,76 +130,83 @@ function Stat({ label, value, pct }: { label: string; value: string | null; pct:
 
 const INLINE_BTN = 'w-9 h-9 flex items-center justify-center rounded-[10px] disabled:opacity-50' // nút icon trong ô email
 
-// Modal Tài khoản: email (chỉ quản lý — lưu qua RPC set_my_email) + Đăng xuất (mọi vai trò). Email là đường duy nhất để đặt
-// lại mật khẩu, nên tài khoản cũ (email NULL) khai bổ sung ở đây.
-function AccountModal({ email, canEditEmail, onSignOut, onClose }: { email?: string | null; canEditEmail: boolean; onSignOut: () => void; onClose: () => void }) {
+// Modal Tài khoản: họ tên + email (chỉ quản lý — RPC set_my_name / set_my_email) + Đăng xuất (mọi vai trò).
+// Đăng ký không hỏi họ tên nên đổi ở đây; email là đường duy nhất để đặt lại mật khẩu (tài khoản cũ email NULL khai bổ sung).
+function AccountModal({ name, email, canEdit, onSignOut, onClose }: { name?: string | null; email?: string | null; canEdit: boolean; onSignOut: () => void; onClose: () => void }) {
+    return (
+        <Dialog onClose={onClose} panelClassName="w-full max-w-sm mx-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden">
+            <ModalHeader icon={User} title="Tài khoản" onClose={onClose} />
+            <div className="p-5 flex flex-col gap-4">
+                {canEdit && (
+                    <>
+                        <InlineField icon={User} label="Họ và tên" placeholder="Họ và tên" current={name || ''} save={setMyName} />
+                        <InlineField icon={Mail} label="Email" type="email" placeholder="Email (dùng để đặt lại mật khẩu)" current={email || ''} save={setMyEmail} />
+                        <div className="h-px bg-border/60" />
+                    </>
+                )}
+                <button
+                    type="button"
+                    onClick={onSignOut}
+                    className="w-full py-3 rounded-[14px] bg-bg border border-border/60 text-text-secondary font-bold text-sm hover:bg-surface-light hover:text-danger transition-colors flex items-center justify-center gap-2"
+                >
+                    <LogOut size={15} className="-scale-x-100" /> Đăng xuất
+                </button>
+            </div>
+        </Dialog>
+    )
+}
+
+// Ô sửa tại chỗ: Hủy/Lưu nằm trong ô, chỉ hiện khi giá trị đã đổi (✕ trả về giá trị cũ, ✓ lưu).
+function InlineField({ icon: Icon, label, type = 'text', placeholder, current, save }: {
+    icon: typeof User; label: string; type?: string; placeholder: string; current: string; save: (value: string) => Promise<string>
+}) {
     const { refreshProfile } = useAuth()
-    const [value, setValue] = useState(email || '')
+    const [value, setValue] = useState(current)
     const [busy, setBusy] = useState(false)
     const [err, setErr] = useState('')
-    const changed = value.trim() !== (email || '')
+    const changed = value.trim() !== current
 
     async function handleSave() {
-        if (!value.trim() || busy) return
+        if (!changed || !value.trim() || busy) return
         setBusy(true)
         setErr('')
         try {
-            await setMyEmail(value.trim())
-            refreshProfile()
-            onClose()
+            setValue(await save(value.trim())) // server trả giá trị đã chuẩn hoá (email viết thường)
+            await refreshProfile()
         } catch (e) {
-            setErr(errorMessage(e, 'Không lưu được email'))
+            setErr(errorMessage(e, `Không lưu được ${label.toLowerCase()}`))
         } finally {
             setBusy(false)
         }
     }
 
     return (
-        <Dialog
-            onClose={() => { if (!busy) onClose() }}
-            panelClassName="w-full max-w-sm mx-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden"
-        >
-                <ModalHeader icon={User} title="Tài khoản" onClose={onClose} hideClose={busy} />
-                <div className="p-5 flex flex-col gap-4">
-                    {canEditEmail && (
-                        <>
-                            {/* Hủy/Lưu nằm trong ô, chỉ hiện khi email đã đổi: ✕ trả về giá trị cũ, ✓ lưu. */}
-                            <div className="relative">
-                                <Mail size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none" aria-hidden />
-                                <input
-                                    type="email"
-                                    placeholder="Email (dùng để đặt lại mật khẩu)"
-                                    value={value}
-                                    onChange={e => setValue(e.target.value)}
-                                    onKeyDown={e => { if (e.key === 'Enter') handleSave() }}
-                                    disabled={busy}
-                                    className={`w-full pl-11 ${changed ? 'pr-[88px]' : 'pr-4'} py-3 rounded-[12px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary disabled:opacity-50`}
-                                />
-                                {changed && (
-                                    <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex gap-1">
-                                        <button type="button" aria-label="Hủy thay đổi" disabled={busy} onClick={() => { setValue(email || ''); setErr('') }} className={`${INLINE_BTN} text-text-secondary hover:bg-surface-light`}>
-                                            <X size={16} />
-                                        </button>
-                                        <button type="button" aria-label="Lưu email" disabled={busy || !value.trim()} onClick={handleSave} className={`${INLINE_BTN} bg-primary text-bg hover:bg-primary/90`}>
-                                            {busy ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                            {err && <p className="text-danger text-xs font-medium px-1">{err}</p>}
-                            <div className="h-px bg-border/60" />
-                        </>
-                    )}
-                    <button
-                        type="button"
-                        disabled={busy}
-                        onClick={onSignOut}
-                        className="w-full py-3 rounded-[14px] bg-bg border border-border/60 text-text-secondary font-bold text-sm hover:bg-surface-light hover:text-danger transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                        <LogOut size={15} className="-scale-x-100" /> Đăng xuất
-                    </button>
-                </div>
-        </Dialog>
+        <>
+            <div className="relative">
+                <Icon size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none" aria-hidden />
+                <input
+                    type={type}
+                    aria-label={label}
+                    placeholder={placeholder}
+                    value={value}
+                    onChange={e => setValue(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleSave() }}
+                    disabled={busy}
+                    className={`w-full pl-11 ${changed ? 'pr-[88px]' : 'pr-4'} py-3 rounded-[12px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary disabled:opacity-50`}
+                />
+                {changed && (
+                    <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex gap-1">
+                        <button type="button" aria-label="Hủy thay đổi" disabled={busy} onClick={() => { setValue(current); setErr('') }} className={`${INLINE_BTN} text-text-secondary hover:bg-surface-light`}>
+                            <X size={16} />
+                        </button>
+                        <button type="button" aria-label={`Lưu ${label.toLowerCase()}`} disabled={busy || !value.trim()} onClick={handleSave} className={`${INLINE_BTN} bg-primary text-bg hover:bg-primary/90`}>
+                            {busy ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+                        </button>
+                    </div>
+                )}
+            </div>
+            {err && <p className="text-danger text-xs font-medium px-1">{err}</p>}
+        </>
     )
 }
 

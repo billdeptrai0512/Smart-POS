@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, Navigate } from 'react-router-dom'
 import ErrorBanner from '../components/common/ErrorBanner'
 import PasswordInput from '../components/common/PasswordInput'
 import FloatingLabelInput from '../components/common/FloatingLabelInput'
@@ -20,7 +20,7 @@ const GUEST_BTN =
     'w-full py-3.5 rounded-[14px] bg-primary/5 uppercase border border-primary/40 text-primary font-black text-sm hover:bg-primary/10 hover:border-primary/60 focus-visible:outline-2 focus-visible:outline-primary/50 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed'
 
 export default function LoginPage() {
-    const { signIn, initGuestMode } = useAuth()
+    const { signIn, initGuestMode, user, isGuest } = useAuth()
     const navigate = useNavigate()
     const [username, setUsername] = useState('')
     const [password, setPassword] = useState('')
@@ -31,6 +31,8 @@ export default function LoginPage() {
     const [shopName, setShopName] = useState('')
 
     useEffect(() => { trackLoginPageVisit() }, [])
+    // Đã đăng nhập thì không cho vào đây: bấm "Dùng thử" khi còn phiên thật, supabase báo lại SIGNED_IN giữa chừng → app tự thoát chế độ khách (AuthContext).
+    const signedIn = !!user && !isGuest
 
     async function handleGuest(e: FormEvent) {
         e.preventDefault()
@@ -57,6 +59,8 @@ export default function LoginPage() {
             setLoading(false)
         }
     }
+
+    if (signedIn) return <Navigate to="/addresses" replace />
 
     return (
         <div className="flex flex-col items-center justify-start min-h-screen bg-bg px-4 py-8">

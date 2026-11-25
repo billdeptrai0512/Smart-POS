@@ -231,6 +231,12 @@ export async function signOut() {
 }
 
 // Lưu email cho tài khoản đang đăng nhập — đường duy nhất để đặt lại mật khẩu.
+export async function setMyName(name: string) {
+    const { data, error } = await supabase.rpc('set_my_name', { p_name: name })
+    if (error) throw error
+    return data as string
+}
+
 export async function setMyEmail(email: string) {
     const { data, error } = await supabase.rpc('set_my_email', { p_email: email })
     if (error) throw error
