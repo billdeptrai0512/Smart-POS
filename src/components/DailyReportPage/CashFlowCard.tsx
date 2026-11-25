@@ -60,7 +60,8 @@ interface Props {
     hintCash?: boolean
     hintTransfer?: boolean
     onHintFill?: () => void // guide: bấm vào 1 ô đang sáng → cả hai ô hiện số gợi ý rồi tự lưu
-    hintNet?: boolean
+    hintNet?: boolean // guide bước cuối: cuộn tới Thực chi, làm tối trang chừa dải guide + Thực chi + Thực nhận
+    guideBeforeNet?: ReactNode
     hintDiff?: boolean // guide: đã nhập đủ thực thu → cuộn tới thẻ Đối chiếu
     onEditExpense?: (expense: Row) => void
     onEditRestockPayment?: (payment: Row) => void
@@ -93,6 +94,7 @@ export default function CashFlowCard({
     guide,
     guideBeforeDiff,
     guideAfterDiff,
+    guideBeforeNet,
     focusDiff = false,
     focusWatch,
     footer,
@@ -465,11 +467,13 @@ export default function CashFlowCard({
             </div>
 
             <div className="flex flex-col gap-4">
+            <div ref={netRef} className="flex flex-col gap-4">
+            {hintNet && <FocusMask target={netRef} radius={20} delay={1250} />}
+            {guideBeforeNet && <div className="-mb-4">{guideBeforeNet}</div>}
             {/* PANEL 2: THỰC CHI — 4 section theo group_section nhãn (Vận hành / Quản lý
                 & khác / Tồn kho / Ngoài kinh doanh), section phụ chỉ hiện khi có chi.
                 Mỗi section là các dòng nhãn collapse; Tổng thực chi nằm cuối CÙNG PANEL. */}
             <ReportPanel
-                panelRef={netRef}
                 title="Thực chi"
                 total={{ label: 'Tổng thực chi', value: `-${formatVND(totalExpenses)}`, className: 'text-danger' }}
             >
@@ -545,6 +549,7 @@ export default function CashFlowCard({
                     <PanelRow label="Chuyển khoản" value={money(takeHomeTransfer)} valueClassName={cashNotEntered ? 'text-text-dim' : takeHomeTransfer < 0 ? 'text-danger' : 'text-text'} />
                 </div>
             </ReportPanel>
+            </div>
             {footer}
             </div>
         </div>

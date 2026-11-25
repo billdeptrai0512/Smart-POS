@@ -21,7 +21,6 @@ import { calculateEstimatedConsumption, calculateConsumptionBreakdown, buildIngr
 import { ingredientLabel } from '../../utils/ingredients'
 import { findIngredientByLabel } from '../../utils/onboardingHint'
 import { useForwardReady } from '../../hooks/useForwardReady'
-import GuideTapRow from '../common/onboarding/GuideTapRow'
 import { inShiftCashTotal } from '../../utils/reportStats'
 import { getGuestUnbilled } from '../../services/localRepository'
 import OnboardingGuide from '../common/onboarding/OnboardingGuide'
@@ -245,9 +244,12 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
         return () => clearTimeout(t)
     }, [hintInventory, coffeeTyped, inventory.isDirty, setInventoryProgress])
 
-    // Đếm xong → cho xem kết luận (Tổng hao hụt + Khả năng bấm thiếu), lát sau mới hiện dải bấm sang bổ sung kho.
+    // Đếm xong → cho xem kết luận (Tổng hao hụt + Khả năng bấm thiếu), lát sau tự bỏ lớp tối và bật chuông bổ sung kho (TopNav).
     const lossStep = isGuest && !!addressId && isInventoryProgressDone(inventoryProgress) && !inventoryProgress.viewedLoss
-    const lossCta = useForwardReady(lossStep)
+    const lossSeen = useForwardReady(lossStep)
+    useEffect(() => {
+        if (lossSeen) setInventoryProgress(prev => ({ ...prev, viewedLoss: true }))
+    }, [lossSeen, setInventoryProgress])
 
     const [isSaving, setIsSaving] = useState(false)
     const [openAudit, setOpenAudit] = useState(true)
@@ -360,9 +362,7 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
                     <InventoryReportCard
                         guide={<OnboardingGuide inline="below" />}
                         focusSummary={lossStep}
-                        focusWatch={lossCta}
-                        summaryBefore={isGuest && <OnboardingGuide inline hide={!lossStep || lossCta} />}
-                        summaryAfter={isGuest && <GuideTapRow show={lossCta} text="Sau đó bổ sung tồn kho" onTap={() => setInventoryProgress(prev => ({ ...prev, viewedLoss: true }))} />}
+                        summaryBefore={isGuest && <OnboardingGuide inline hide={!lossStep} />}
                         ingredientsList={inventory.ingredientsList}
                         isLoading={inventory.isLoadingIngredients}
                         openingStock={inventory.openingStock}

@@ -111,7 +111,7 @@ function Notice({ addressId, onRestocked, onOpenIngredient, hint, onClose }: Pro
                         onOpenIngredient={onOpenIngredient && (ingredient => { reopenSheet = !onClose; onOpenIngredient(ingredient) })}
                         onAfterRestock={(bought) => {
                             showToast(bought.length > 1 ? `Đã nhập kho ${bought.length} món` : `Đã nhập kho ${ingredientLabel(bought[0])}`, 'success')
-                            if (hint) writeOnboardingState(addressId, { restockProgress: { bought: true, viewedNet: false } })
+                            if (hint) writeOnboardingState(addressId, { restockProgress: { bought: true, viewedNet: false, ctaDismissed: false } })
                             return Promise.all([refreshProducts?.(), refreshTodayExpenses?.(), onRestocked?.(), loadDebts(), loadBought()])
                         }}
                         demoAutoBuy={hint}

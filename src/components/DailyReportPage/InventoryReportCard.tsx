@@ -64,11 +64,9 @@ interface Props {
     statusTone?: "success" | "primary"
     // Dưới Tổng hao hụt, cùng cột (laptop: cột phải dính).
     afterTotal?: ReactNode
-    // Guide khách (chỉ layout chia nhóm): dải trên/dưới cụm Tổng hao hụt + afterTotal; focusSummary = làm tối trang, chừa cụm này.
+    // Guide khách (chỉ layout chia nhóm): dải trên thẻ Tổng hao hụt; focusSummary = làm tối trang, chừa dải + thẻ.
     summaryBefore?: ReactNode
-    summaryAfter?: ReactNode
     focusSummary?: boolean
-    focusWatch?: unknown
 }
 export type HintStep = 'count'
 
@@ -118,7 +116,7 @@ export default function InventoryReportCard({
     // Nguyên liệu đang được onboarding phase 4 gợi ý bấm vào — xem DailyReportPage.tsx
     // (hintCoffeeIngredient) + onboarding/steps.ts.
     hintIngredient = null,
-    hintStep = null, hintFill, beforeTotal, guide, afterTotal, summaryBefore, summaryAfter, focusSummary = false, focusWatch, statusTone = "primary",
+    hintStep = null, hintFill, beforeTotal, guide, afterTotal, summaryBefore, focusSummary = false, statusTone = "primary",
 }: Props) {
     // Sort by status priority so staff sees "Chưa nhập" first, then anomalies,
     // then matched rows at the bottom. Tie-break by display name for stability.
@@ -315,11 +313,13 @@ export default function InventoryReportCard({
                 {/* Laptop+: cột phải dính đầu khung cuộn — Tổng hao hụt luôn thấy khi đếm. */}
                 {(totalRow || afterTotal) && (
                     <div ref={summaryRef} className="flex flex-col gap-3 scroll-mt-4 lg:sticky lg:top-0">
-                        {focusSummary && <FocusMask target={summaryRef} radius={20} delay={1250} watch={focusWatch} />}
+                        {focusSummary && <FocusMask target={summaryRef} radius={20} delay={1250} />}
                         {summaryBefore && <div className="-mb-3">{summaryBefore}</div>}
-                        {totalRow && <div className="bg-surface rounded-[20px] px-3 py-3 border border-border/60 shadow-sm">{totalRow}</div>}
-                        {afterTotal}
-                        {summaryAfter && <div className="-mt-3">{summaryAfter}</div>}
+                        {/* Một thẻ: Tổng hao hụt + afterTotal (khả năng bấm thiếu). empty:hidden: chưa đếm gì thì không để lại khung rỗng. */}
+                        <div className="bg-surface rounded-[20px] border border-border/60 shadow-sm empty:hidden">
+                            {totalRow && <div className="px-3 py-3">{totalRow}</div>}
+                            {afterTotal}
+                        </div>
                     </div>
                 )}
             </div>
@@ -339,7 +339,7 @@ export default function InventoryReportCard({
             {beforeTotal && <div className={`mt-3 rounded-[14px] border px-3 py-2.5 ${tone.border} ${tone.bg}`}>{beforeTotal}</div>}
             {totalRow && <div className="pt-3 mt-1 border-t border-border/40">{totalRow}</div>}
         </CollapsibleCard>
-        {afterTotal}
+        <div className="bg-surface rounded-[20px] border border-border/60 shadow-sm empty:hidden">{afterTotal}</div>
         </>
     )
 }

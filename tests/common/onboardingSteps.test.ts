@@ -20,7 +20,7 @@ describe('guide "một ngày của quán"', () => {
 
     it('Bán hàng: 1 dòng chào, gửi 1 đơn là xong', () => {
         const order = (p: Partial<typeof ctx.orderProgress>) => step('Bán hàng').items({ ...ctx, orderProgress: { ...ctx.orderProgress, ...p } })
-        expect(firstUndone(order({}))).toMatch(/Chạm vào món rồi bấm tạo đơn/)
+        expect(firstUndone(order({}))).toMatch(/Chạm vào món để thêm vào đơn/)
         expect(order({ sent: 1 }).every(i => i.done)).toBe(true)
     })
 

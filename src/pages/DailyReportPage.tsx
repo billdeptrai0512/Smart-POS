@@ -32,6 +32,7 @@ import CashFlowCard from '../components/DailyReportPage/CashFlowCard'
 import OnboardingGuide from '../components/common/onboarding/OnboardingGuide'
 import GuideTapRow from '../components/common/onboarding/GuideTapRow'
 import { slowScrollTo } from '../utils/slowScroll'
+import FocusMask from '../components/common/FocusMask'
 import ExpenseEditorModal from '../components/DailyReportPage/ExpenseEditorModal'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
 import { fetchExpenseCategories } from '../services/expenseService'
@@ -253,16 +254,17 @@ export default function DailyReportPage() {
     // Cùng nhịp với Nhật ký: làm tối ngay (chừa dải trên + thẻ Đối chiếu) → useForwardReady đổi sang dải dưới thẻ, bấm để sang Kiểm kê.
     const goInventoryCta = useForwardReady(hintGoToInventory)
     // Bước cuối: nhập kho xong quay về đây → cuộn tới Thực chi, mở nhóm Tồn kho (CashFlowCard, ~1,4s); 2,4s sau đó
-    // đánh dấu viewedNet → cuộn chậm xuống nút Đăng ký.
+    // đánh dấu viewedNet → bỏ lớp tối, cuộn chậm xuống nút Đăng ký.
     const restockProgress = useOnboardingProgress('restockProgress', { isGuest, addressId })
     const hintNet = isGuest && !!addressId && restockProgress.bought && !restockProgress.viewedNet
     useEffect(() => {
         if (!hintNet || !addressId) return
-        const t = setTimeout(() => writeOnboardingState(addressId, { restockProgress: { bought: true, viewedNet: true } }), 2400)
+        // 4s: lớp tối hiện ở 1,25s, nhóm Tồn kho mở ở 1,4s → còn ~2,5s để đọc (không có dải bấm giữ lại như Đối chiếu).
+        const t = setTimeout(() => writeOnboardingState(addressId, { restockProgress: { bought: true, viewedNet: true, ctaDismissed: false } }), 4000)
         return () => clearTimeout(t)
     }, [hintNet, addressId])
     // Đã xem Thực chi (lần này sau ~2,5s, hoặc quay lại từ trang khác) → cuộn xuống CTA đăng ký ở cuối trang.
-    const ctaRef = useRef<HTMLAnchorElement>(null)
+    const ctaRef = useRef<HTMLDivElement>(null)
     const scrollToCta = isGuest && restockProgress.bought && restockProgress.viewedNet
     useEffect(() => {
         if (!scrollToCta) return
@@ -661,15 +663,21 @@ export default function DailyReportPage() {
 
     // Cuối trang; tab Dòng tiền đặt trong CashFlowCard (cột phải, dưới Thực nhận).
     // Guide: CTA cuối của demo nằm cuối trang — khách cuộn qua Thực chi/Thực nhận là gặp (dải trên đỉnh ẩn ở
-    // trang này, OnboardingGuide). Hiện ngay khi nhập kho xong, không chờ tick viewedNet; thế chỗ 2 nút cuối trang.
-    const footer = isGuest && restockProgress.bought ? (
-        <Link ref={ctaRef} to="/signup" className={`m-3 h-10 px-4 flex items-center rounded-[14px] bg-primary/15 text-text text-[12px] font-black uppercase tracking-wider active:scale-[0.98] transition ${onboardingHintClass(true, 'solid')}`}>
+    // trang này, OnboardingGuide). Chỉ hiện sau khi xem xong Thực chi (viewedNet) — hiện sớm là chen trước dải "Xem tổng thực chi"; thế chỗ 2 nút cuối trang.
+    const footer = scrollToCta ? (
+        // div đệm: lỗ của FocusMask ôm cả viền nhấp nháy của nút. Tối chỉ chừa nút Đăng ký; chạm vùng tối là tắt hẳn.
+        <div ref={ctaRef} className="m-1 p-2">
+        {scrollToCta && !restockProgress.ctaDismissed && addressId && (
+            <FocusMask target={ctaRef} radius={22} delay={100} onDismiss={() => writeOnboardingState(addressId, { restockProgress: { bought: true, viewedNet: true, ctaDismissed: true } })} />
+        )}
+        <Link to="/signup" className={`h-10 px-4 flex items-center rounded-[14px] bg-primary/15 text-text text-[12px] font-black uppercase tracking-wider active:scale-[0.98] transition ${onboardingHintClass(true, 'solid')}`}>
             {/* Cùng kiểu dải guide: chữ gõ dần, canh giữa; bản ẩn giữ chỗ để chữ không trôi khi đang gõ. */}
             <span className="flex-1 relative text-center">
                 <span className="invisible">Đăng ký tài khoản</span>
                 <span className="absolute inset-0"><Typewriter text="Đăng ký tài khoản" /></span>
             </span>
         </Link>
+        </div>
     ) : (
         <div className="flex items-center justify-center gap-2 p-3">
             <button onClick={() => setShowSupportModal(true)} className={FOOT_BTN}>Hỗ trợ / góp ý</button>
@@ -738,7 +746,8 @@ export default function DailyReportPage() {
                         {(view === VIEW_ALL || view === VIEW_CASHFLOW) && (
                             <CashFlowCard
                                 guide={<OnboardingGuide inline hide={isCashFlowProgressDone(cashFlowProgress) || goInventoryCta} />}
-                                guideBeforeDiff={<OnboardingGuide inline hide={!isCashFlowProgressDone(cashFlowProgress) || goInventoryCta} />}
+                                guideBeforeDiff={<OnboardingGuide inline hide={!hintGoToInventory || goInventoryCta} />}
+                                guideBeforeNet={isGuest && <OnboardingGuide inline hide={!hintNet} />}
                                 focusDiff={hintGoToInventory}
                                 focusWatch={goInventoryCta}
                                 guideAfterDiff={<GuideTapRow show={goInventoryCta} text="Sau đó kiểm kê nguyên vật liệu" onTap={() => goToMenuStep('report', +1, { navigate, backTo, scopeState: dateNavState, wizard: location.state?.wizard })} />}

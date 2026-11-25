@@ -6,7 +6,7 @@ import ErrorBanner from '../components/common/ErrorBanner'
 import FloatingLabelInput from '../components/common/FloatingLabelInput'
 import PasswordInput from '../components/common/PasswordInput'
 import PasswordChecklist from '../components/common/PasswordChecklist'
-import { capitalizeWords, formatVND } from '../utils'
+import { formatVND } from '../utils'
 import { PLAN } from '../constants/monetization'
 import { errorMessage } from '../utils/errorMessage'
 import { isStrongPassword } from '../utils/password'
@@ -29,10 +29,8 @@ const suggestEmailFix = (value: string) => {
 export default function SignUpPage() {
     const { signUp, isGuest } = useAuth()
     const navigate = useNavigate()
-    const [name, setName] = useState('')
-    // Khách dùng thử đã nhập tên quán ở bước đầu → dùng lại, không hỏi lần nữa.
-    const guestShop = getGuestShopName()
-    const [branch, setBranch] = useState(guestShop)
+    // Khách dùng thử đã nhập tên quán ở bước đầu → điền sẵn, vẫn cho sửa.
+    const [branch, setBranch] = useState(getGuestShopName)
     // Có link ?clone=MÃ → chi nhánh đầu tiên do modal "Tạo địa chỉ" ở /addresses lo (chép cấu hình
     // từ mã), nên ở đây không hỏi tên quán.
     const hasCloneCode = !!sessionStorage.getItem('pending_clone_code')
@@ -47,7 +45,6 @@ export default function SignUpPage() {
 
     async function handleSubmit(e: FormEvent) {
         e.preventDefault()
-        if (!name.trim()) return setError({ msg: 'Vui lòng nhập tên', field: 'name' })
         if (!hasCloneCode && !branch.trim()) return setError({ msg: 'Vui lòng nhập tên quán', field: 'branch' })
         // ponytail: format email để type="email" + regex trong signUp lo, không lặp lại ở đây.
         if (!email.trim()) return setError({ msg: 'Vui lòng nhập email', field: 'email' })
@@ -57,7 +54,8 @@ export default function SignUpPage() {
         setError(null)
         setLoading(true)
         try {
-            const { address } = await signUp(username.trim(), password, name.trim(), email.trim(), hasCloneCode ? '' : branch)
+            // Không hỏi họ tên: users.name tạm = tên đăng nhập, đổi sau ở dialog Tài khoản (/addresses).
+            const { address } = await signUp(username.trim(), password, username.trim(), email.trim(), hasCloneCode ? '' : branch)
             // Có chi nhánh → y như tạo địa chỉ ở /addresses (AddressSelectPage.handleCreate): địa chỉ mới chưa có gói nên qua
             // cổng gói trước rồi vào Danh mục — vào thẳng /category thì SubscriptionGuard đá ngược về /addresses.
             // Không tự quyết theo cờ thu phí ở đây: trang này đọc cờ lúc còn là khách (anon → RLS trả [] → "tắt" sai);
@@ -81,7 +79,7 @@ export default function SignUpPage() {
                     <h1 className="text-2xl font-black text-text mt-3">Đăng ký</h1>
                     {/* Báo giá TRƯỚC khi điền form — khỏi bất ngờ ở trang gói ngay sau đăng ký.
                         ponytail: hiện cứng, không theo cờ thu phí (trang này đọc cờ bằng anon → luôn "tắt", xem handleSubmit). Tắt thu phí lâu dài thì gỡ dòng này. */}
-                    <p className="mt-1 text-[12px] text-text-secondary"><span className="font-bold text-text">{formatVND(PLAN.price)}</span> / tháng / chi nhánh</p>
+                    <p className="mt-1 text-[12px] text-text-secondary"><span className="font-bold text-text">{formatVND(Math.ceil(PLAN.price / (PLAN.months * 30) / 1000) * 1000)}</span> / ngày / chi nhánh</p>
 
                 </div>
 
@@ -89,18 +87,7 @@ export default function SignUpPage() {
                 <form onSubmit={handleSubmit} onChange={() => error?.field && setError({ msg: error.msg })} className="bg-surface border border-border/60 rounded-[20px] p-6 shadow-sm space-y-4">
                     <ErrorBanner message={error?.msg} />
 
-                    <FloatingLabelInput
-                        id="signup-name"
-                        aria-invalid={error?.field === 'name'}
-                        label="Họ và Tên"
-                        autoCapitalize="words"
-                        value={name}
-                        onChange={e => setName(capitalizeWords(e.target.value))}
-                        required
-                        autoComplete="name"
-                    />
-
-                    {!hasCloneCode && !guestShop && (
+                    {!hasCloneCode && (
                         <FloatingLabelInput
                             id="signup-branch"
                         aria-invalid={error?.field === 'branch'}

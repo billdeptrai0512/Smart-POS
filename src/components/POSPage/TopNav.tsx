@@ -69,7 +69,9 @@ export default function TopNav() {
     const inventory = useOnboardingProgress('inventoryProgress', { isGuest, addressId })
     const restockStep = isGuest && !onPos && pathname.startsWith('/inventory') && isInventoryProgressDone(inventory) && inventory.viewedLoss && !restock.bought
     // bellOpen: mua xong (bought) nhưng chưa đóng sheet → bell + lớp tối còn tới khi đóng (rồi closeSheet đưa sang Báo cáo).
-    const restockSpot = isGuest && !onPos && (restockStep || bellOpen)
+    // spotOpen: sheet được mở trong lúc đang ở bước này — chuông mở ngoài bước (xem tồn kho) thì không tối, không móm.
+    const [spotOpen, setSpotOpen] = useState(false)
+    const restockSpot = isGuest && !onPos && (restockStep || (bellOpen && spotOpen))
     const [restockCount, setRestockCount] = useState(0)
     const n = onPos ? prepCount : restockSpot ? (restock.bought ? 0 : restockCount) : kind === 'tasks' ? pending : 0
     const prep = useOnboardingProgress('prepProgress', { isGuest, addressId })
@@ -78,7 +80,8 @@ export default function TopNav() {
     const prepSpot = isGuest && onPos && !prep.done && (n > 0 || bellOpen)
     const spot = prepSpot || restockSpot
     // Khách dùng thử cũng có chuông trên /pos (y như người dùng thật) — chuông sáng nhịp guide tới khi lấy hàng xong.
-    const hasBell = onPos ? isOnline : restockSpot || (!isGuest && !!kind)
+    // Khách ngoài /pos: luôn có chuông như chủ quán 1 địa chỉ.
+    const hasBell = onPos ? isOnline : isGuest || !!kind
     const bellHint = spot && !bellOpen
 
     function go({ route, state }: NavItem) {
@@ -98,7 +101,7 @@ export default function TopNav() {
             {spot && <FocusMask target={bellRef} badge delay={restockSpot ? 800 : undefined} />}
             <AddressSwitcher />
             {hasBell && (
-                <button ref={bellRef} type="button" aria-label="Việc cần làm" onClick={() => setBellOpen(true)} className={`${NAV_ICON_BTN} ${onboardingHintClass(bellHint)}`}>
+                <button ref={bellRef} type="button" aria-label="Việc cần làm" onClick={() => { setSpotOpen(restockStep); setBellOpen(true) }} className={`${NAV_ICON_BTN} ${onboardingHintClass(bellHint)}`}>
                     <Bell size={19} className={n > 0 ? 'text-primary' : ''} />
                     {/* 1 chữ số: ô vuông 20×20 → tròn hẳn; ≥2 chữ số: giãn ngang thành viên thuốc */}
                     {n > 0 && (
@@ -135,7 +138,7 @@ export default function TopNav() {
             {restockStep && !bellOpen && addressId && <RestockCount addressId={addressId} onCount={setRestockCount} />}
             {onPos && isOnline && <PrepPinBar bell={{ open: bellOpen, onClose: () => setBellOpen(false), onCount: setPrepCount }} />}
             {!onPos && bellOpen && kind === 'tasks' && <AddressNotice onClose={() => { setBellOpen(false); setPending(pendingCount()) }} />}
-            {!onPos && bellOpen && (kind === 'restock' || restockSpot) && (
+            {!onPos && bellOpen && (kind === 'restock' || isGuest) && (
                 <WarehousePrepNotice
                     hint={restockSpot}
                     onClose={() => setBellOpen(false)}

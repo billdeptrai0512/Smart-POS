@@ -5,8 +5,8 @@ import { createPortal } from 'react-dom'
 // nhận chạm, nên target vẫn bấm được. Chờ `delay` ms (cho khách kịp nhìn màn hình) rồi tối dần trong delay/5.
 // badge: target có huy hiệu số nhô ra góc trên-phải (chuông) → lỗ ôm cả huy hiệu; không thì lỗ là ô bo tròn bán kính `radius`.
 // Lỗ đo lúc hiện, rồi đo lại khi cuộn/xoay màn hình; đổi chỗ mà target không đổi kích thước (dải trên co, dải dưới giãn) thì báo bằng `watch`.
-export default function FocusMask({ target, badge = false, radius = 14, delay = 2500, watch }: {
-    target: RefObject<HTMLElement | null>; badge?: boolean; radius?: number; delay?: number; watch?: unknown
+export default function FocusMask({ target, badge = false, radius = 14, delay = 2500, watch, onDismiss }: {
+    target: RefObject<HTMLElement | null>; badge?: boolean; radius?: number; delay?: number; watch?: unknown; onDismiss?: () => void // chạm vùng tối (không có thì chỉ khoá)
 }) {
     const [clip, setClip] = useState('')
     const first = useRef(true)
@@ -46,5 +46,5 @@ export default function FocusMask({ target, badge = false, radius = 14, delay = 
             removeEventListener('scroll', follow, true); removeEventListener('resize', follow)
         }
     }, [target, badge, radius, delay, watch])
-    return clip ? createPortal(<div className="fixed inset-0 z-[60] bg-black/60" style={{ clipPath: clip, animation: `fade-in ${delay / 5}ms ease-out` }} />, document.body) : null
+    return clip ? createPortal(<div onClick={onDismiss} className="fixed inset-0 z-[60] bg-black/60" style={{ clipPath: clip, animation: `fade-in ${delay / 5}ms ease-out` }} />, document.body) : null
 }

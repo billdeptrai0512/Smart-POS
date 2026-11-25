@@ -20,7 +20,7 @@ export const DEFAULT_ONBOARDING_STATE = {
     inventoryProgress: { coffee: false, suggest: 0, viewedLoss: false }, // viewedLoss: đã xem Tổng hao hụt + Khả năng bấm thiếu → mới bật chuông bổ sung kho
     // Bước 6 "Bổ sung tồn kho" — WarehousePrepNotice.tsx: bought = đã nhập kho mẫu 1 món (app nhập nốt phần còn lại).
     // viewedNet: đã quay về Báo cáo xem Thực nhận cuối ngày sau khi chi tiền nhập kho (DailyReportPage.tsx).
-    restockProgress: { bought: false, viewedNet: false },
+    restockProgress: { bought: false, viewedNet: false, ctaDismissed: false }, // ctaDismissed: đã chạm vùng tối quanh nút Đăng ký
 }
 
 export type OnboardingState = typeof DEFAULT_ONBOARDING_STATE
