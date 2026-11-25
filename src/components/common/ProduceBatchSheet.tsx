@@ -56,7 +56,7 @@ export default function ProduceBatchSheet({ product, suggestedQty, onClose, onDo
         <BottomSheet onClose={() => !saving && onClose()} panelClassName={SHEET_PANEL}>
             <SheetHeader title={`Sản xuất: ${product.name}`} onClose={onClose} closeDisabled={saving} />
             {yieldQty <= 0 || lines.length === 0 ? (
-                <p className="text-[13px] text-danger">Thành phẩm chưa có sản lượng mẻ hoặc công thức mẻ. Vào Danh mục → Công thức để thiết lập.</p>
+                <p className="text-[13px] text-danger">Thành phẩm chưa có sản lượng mẻ hoặc công thức mẻ. Vào Thực đơn → Công thức để thiết lập.</p>
             ) : (
                 <>
                     <div className="flex items-center gap-2">

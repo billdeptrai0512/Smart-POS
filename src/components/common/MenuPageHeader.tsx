@@ -14,13 +14,14 @@ interface Props {
     subtitle?: ReactNode
     onBack?: () => void // ‹ › chỉ hiện khi trang truyền handler (Kiểm kê/Lưu trữ không truyền)
     onForward?: () => void
-    tabs: MenuTab[]
-    activeTab: string | undefined
+    tabs?: MenuTab[]
+    activeTab?: string
     onTabSelect?: (key: string) => void
     hintTab?: string | null
+    children?: ReactNode // hàng phụ dưới tiêu đề (vd ô tìm ở /category)
 }
 
-export default function MenuPageHeader({ title, count, unitLabel, subtitle, onBack, onForward, tabs, activeTab, onTabSelect, hintTab }: Props) {
+export default function MenuPageHeader({ title, count, unitLabel, subtitle, onBack, onForward, tabs, activeTab, onTabSelect, hintTab, children }: Props) {
     // ‹ › chỉ còn cho khách dùng thử (guide đi từng trang bằng mũi tên); người dùng thật đi trang bằng thanh điều hướng phía trên.
     const { isGuest } = useAuth()
     return (
@@ -49,7 +50,8 @@ export default function MenuPageHeader({ title, count, unitLabel, subtitle, onBa
                 )}
             </div>
 
-            <MenuTabsBar tabs={tabs} activeTab={activeTab} onSelect={onTabSelect} hintTab={hintTab} />
+            {tabs && <MenuTabsBar tabs={tabs} activeTab={activeTab} onSelect={onTabSelect} hintTab={hintTab} />}
+            {children}
             </div>
         </header>
     )

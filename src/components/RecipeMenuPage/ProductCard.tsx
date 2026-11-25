@@ -14,38 +14,32 @@ interface Props {
     dragHandle?: ReactNode
     /** Tab Menu: thẻ gọn giống thẻ món ở POS (tên + giá), sắp xếp bằng kéo thả. */
     sortMode?: boolean
-    /** Chỉ cho sortMode: thẻ đang được chọn (viền cam + glow như POS). */
-    selected?: boolean
     /** Nhãn giá bán (mặc định "Giá bán"; topping dùng "Giá cộng thêm"). */
     priceLabel?: string
 }
 
 const SYMBOL_UNITS = new Set(['g', 'ml', 'l', 'kg', 'oz', 'mg'])
 
-export default function ProductCard({ product, prodRecipes, cost, ingredientUnits, onClick, dragHandle, sortMode = false, selected = false, priceLabel = 'Giá bán' }: Props) {
+export default function ProductCard({ product, prodRecipes, cost, ingredientUnits, onClick, dragHandle, sortMode = false, priceLabel = 'Giá bán' }: Props) {
     const { isStaff } = useAuth()
     const isOrphan = prodRecipes.length === 0
     const notCup = product.count_as_cup === false
 
-    // Cùng khuôn với ProductCard của POS (MenuGrid): rounded-[1.25rem], min-h 76px, tên trên – giá dưới, chọn = viền cam + glow.
+    // Cùng khuôn với ProductCard của POS (MenuGrid): rounded-[1.25rem], min-h 76px, tên trên – giá dưới.
     if (sortMode) {
         return (
             <div
                 onClick={onClick}
-                aria-pressed={selected}
-                className={`relative rounded-[1.25rem] px-3 py-2.5 text-left min-h-[76px] flex flex-col justify-between transition-all duration-300 ${onClick ? 'cursor-pointer' : ''} ${selected
-                    ? 'bg-surface border-2 border-primary shadow-[0_8px_24px_var(--color-primary-glow)]'
-                    : 'bg-surface border border-border/60 shadow-sm hover:border-text/30 hover:shadow-md hover:bg-surface-hover'}`}
+                className={`relative rounded-[1.25rem] px-3 py-2.5 text-left min-h-[76px] flex flex-col justify-between transition-all duration-300 ${onClick ? 'cursor-pointer' : ''} bg-surface border border-border/60 shadow-sm hover:border-text/30 hover:shadow-md hover:bg-surface-hover`}
             >
-                {selected && <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none" />}
                 <h3 className="relative z-10 w-full font-black text-[15px] sm:text-[16px] leading-tight break-words text-text">
-                    {isOrphan && <span title="Chưa có công thức" className="inline-block w-1.5 h-1.5 mr-1.5 align-middle rounded-full bg-danger" />}
                     {product.name}
                 </h3>
                 <div className="relative z-10 flex items-end justify-between mt-1.5 w-full gap-2">
-                    <span className={`font-extrabold text-[13px] ${selected ? 'text-primary' : 'text-text-secondary'}`}>{formatVND(product.price)}</span>
+                    <span className="font-extrabold text-[13px] text-text-secondary">{formatVND(product.price)}</span>
                     {dragHandle}
                 </div>
+                {isOrphan && <span className="relative z-10 mt-1 text-[11px] font-bold text-danger">Chưa có công thức</span>}
             </div>
         )
     }

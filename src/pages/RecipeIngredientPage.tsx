@@ -21,11 +21,14 @@ import {
     upsertIngredientCost,
     deleteRecipeRow,
     updateProductBatchYield,
+    updateProductSortOrder,
 } from '../services/orderService'
 import { sortIngredients, getIngredientUnit, makeCategoryOf, registerNewIngredients, normalizeIngredientKey } from '../utils/ingredients'
 import { useToast } from '../hooks/useToast'
 import { useSavingAction } from '../hooks/useSavingAction'
 import { useToppingDetail } from '../hooks/useToppingDetail'
+import Dropdown from '../components/common/Dropdown'
+import { idsWithProductIn } from '../utils/categoryOrder'
 import MenuTabsBar from '../components/common/MenuTabsBar'
 import ToppingSourceSection from '../components/RecipeIngredientPage/ToppingSourceSection'
 import ProductLinksSection from '../components/common/ProductLinksSection'
@@ -76,9 +79,7 @@ export default function RecipeIngredientPage() {
     const isBatch = !!product?.is_batch
     const isTopping = !product && toppings.some(t => t.id === productId)
     // Back / sau khi xoá: về đúng loại đang xem của danh sách.
-    const backUrl = recipeBackUrl(productId, products, batchProducts, toppings, location.state?.recipeFrom)
-    // Bỏ recipeFrom khi quay lại, kẻo lần sau vào chi tiết từ tab Công thức lại bị về Menu.
-    const backState = location.state && { ...location.state, recipeFrom: undefined }
+    const backUrl = recipeBackUrl(productId, products, batchProducts, toppings)
     const td = useToppingDetail(isTopping ? productId : null, withSaving, backUrl, () => showToast('Đã lưu', 'success'))
 
 
@@ -222,9 +223,21 @@ export default function RecipeIngredientPage() {
         await withSaving('Xóa món khỏi menu', async () => {
             await removeProductFromAddress(productId, addrId)
             refreshProducts?.()
-            navigate(backUrl, { state: backState })
+            navigate(backUrl, { state: location.state })
         })
     }
+
+    // Danh mục của món = dòng divider gần nhất đứng trước nó trong thứ tự menu.
+    const dividers = products.filter(p => p.is_divider)
+    const at = products.findIndex(p => p.id === productId)
+    const categoryId: string = products.slice(0, Math.max(at, 0)).reverse().find(p => p.is_divider)?.id ?? ''
+    const saveCategory = (next: string) => withSaving('Đổi danh mục', async () => {
+        const ids = idsWithProductIn(products, productId, next)
+        if (!ids || next === categoryId) return
+        await updateProductSortOrder(ids)
+        refreshProducts?.()
+        showToast('Đã lưu', 'success')
+    })
 
     // ─── Extras handlers ──────────────────────────────────────────────
     async function handleAddExtra(name: string, price: number, items: BaseItem[]) {
@@ -362,7 +375,7 @@ export default function RecipeIngredientPage() {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen bg-bg px-6 gap-4">
                 <span className="text-text-secondary text-[14px]">Không tìm thấy món này.</span>
-                <button onClick={() => navigate(backUrl, { state: backState })} className="text-primary font-bold text-[14px] underline">
+                <button onClick={() => navigate(backUrl, { state: location.state })} className="text-primary font-bold text-[14px] underline">
                     ← Quay lại
                 </button>
             </div>
@@ -406,6 +419,7 @@ export default function RecipeIngredientPage() {
                 canEdit={canEdit}
                 onSaveName={saveProductName}
                 price={product.price}
+                cost={prodRecipes.reduce((sum, r) => sum + r.amount * (ingredientCosts[r.ingredient] || 0), 0)}
                 priceLabel="Giá bán:"
                 onSavePrice={saveProductPrice}
                 subtitle={productTab === 'extras' ? `${extras.length} tùy chọn thêm` : undefined}
@@ -414,6 +428,19 @@ export default function RecipeIngredientPage() {
             </EditableEntityHeader>}
 
             <main className="flex-1 overflow-y-auto px-4 max-[329px]:px-2 py-4 space-y-3 bg-bg">
+                {!isBatch && onDetail && canEdit && (!!addressId || isAdmin) && dividers.length > 0 && (
+                    <Dropdown
+                        ariaLabel="Danh mục của món"
+                        value={categoryId}
+                        triggerLabel={`Danh mục: ${dividers.find(d => d.id === categoryId)?.name ?? 'Chưa phân'}`}
+                        onChange={saveCategory}
+                        align="left"
+                        className="w-full"
+                        triggerClassName="w-full justify-between rounded-[14px] bg-surface border border-border/60 p-3 text-[13px] font-black text-text"
+                        items={[{ value: '', label: 'Chưa phân danh mục' }, ...dividers.map(d => ({ value: d.id, label: d.name }))]}
+                    />
+                )}
+
                 {onDetail && <FastIngredientFill
                     entries={prodRecipes}
                     dbIngredients={dbIngredients}
@@ -459,14 +486,13 @@ export default function RecipeIngredientPage() {
                     </div>
                 </>)}
 
-                {/* Bán thành phẩm không có thẻ ở tab Menu nên đây là chỗ xóa duy nhất; món chính xóa ở "Sửa món". */}
-                {canEdit && isBatch && (
+                {canEdit && onDetail && (
                     <div className="mt-4 pt-4 border-t border-border/40">
                         <button
                             onClick={handleDeleteFromMenu}
                             className="text-danger hover:bg-danger/10 rounded-full px-3 py-1 text-[11px] font-medium transition-colors"
                         >
-                            Xóa thành phẩm
+                            {isBatch ? 'Xóa thành phẩm' : 'Xóa món'}
                         </button>
                     </div>
                 )}

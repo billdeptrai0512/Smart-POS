@@ -10,5 +10,5 @@ export const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     { title: 'Nhật ký', items: [{ icon: ScrollText, label: 'Nhật ký', tone: 'success', route: '/history/sales' }, { icon: Receipt, label: 'Chi phí', tone: 'danger', route: '/history/expense' }] },
     { title: 'Báo cáo', items: [{ icon: ArrowLeftRight, label: 'Dòng tiền', tone: 'info', route: '/report/cashflow' }, { icon: TrendingUp, label: 'Lợi nhuận', tone: 'success', route: '/report/revenue' }] },
     { title: 'Tồn kho', items: [{ icon: ClipboardCheck, label: 'Kiểm kê', tone: 'info', route: '/inventory/management' }, { icon: Package, label: 'Tồn kho', tone: 'primary', route: '/inventory/stocking' }] },
-    { title: 'Danh mục', items: [{ icon: Store, label: 'Cửa hàng', tone: 'info', route: '/category/overall' }, { icon: ChefHat, label: 'Công thức', tone: 'primary', route: '/category/recipes' }, { icon: BadgePercent, label: 'Chương trình', tone: 'warning', route: '/category/discounts', wide: true }] },
+    { title: 'Thực đơn', items: [{ icon: Store, label: 'Cửa hàng', tone: 'info', route: '/category/overall' }, { icon: ChefHat, label: 'Công thức', tone: 'primary', route: '/category/recipes' }, { icon: BadgePercent, label: 'Chương trình', tone: 'warning', route: '/category/discounts', wide: true }] },
 ]
