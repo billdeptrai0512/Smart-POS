@@ -400,9 +400,9 @@ export default function IngredientManagementPage() {
                             triggerLabel={groupChips.find(c => c.id === effectiveFilter)?.label || 'Phân loại'}
                             onChange={(id) => { setGroupFilter(id); setSearch('') }}
                             items={[
-                                ...(canManage ? [{ action: 'edit', icon: <Settings2 size={14} />, label: groupChips.length > 0 ? 'Quản lý' : 'Chia nhóm…', onClick: () => setShowGroupsSheet(true) }] : []),
-                                ...groupChips.map((c, i) => ({ value: c.id, label: c.label, count: c.count, divider: canManage && i === 0 })),
-                                { value: 'all', label: 'Tổng cộng', count: allIngredients.length, divider: true },
+                                { value: 'all', label: 'Tổng cộng', count: allIngredients.length },
+                                ...groupChips.map((c, i) => ({ value: c.id, label: c.label, count: c.count, divider: i === 0 })),
+                                ...(canManage ? [{ action: 'edit', icon: <Settings2 size={14} />, label: groupChips.length > 0 ? 'Quản lý' : 'Chia nhóm…', divider: true, onClick: () => setShowGroupsSheet(true) }] : []),
                             ]}
                             align="left"
                             className="shrink-0 w-[34%] max-w-[170px] lg:w-48 lg:max-w-none"
@@ -485,7 +485,8 @@ export default function IngredientManagementPage() {
                     panelClassName={SHEET_PANEL}
                 >
                         <SheetHeader title="Tạo nguyên liệu mới" onClose={() => setShowCreateModal(false)} closeDisabled={saving} />
-                        <CreateIngredientForm groups={ingredientGroups} saving={saving} onSubmit={handleCreateIngredient} />
+                        <hr className="-mx-5 border-border/60" />
+                        <CreateIngredientForm groups={ingredientGroups} saving={saving} onManageGroups={canManage ? () => setShowGroupsSheet(true) : undefined} onSubmit={handleCreateIngredient} />
                 </BottomSheet>
             )}
 

@@ -21,14 +21,11 @@ import {
     upsertIngredientCost,
     deleteRecipeRow,
     updateProductBatchYield,
-    updateProductSortOrder,
 } from '../services/orderService'
 import { sortIngredients, getIngredientUnit, makeCategoryOf, registerNewIngredients, normalizeIngredientKey } from '../utils/ingredients'
 import { useToast } from '../hooks/useToast'
 import { useSavingAction } from '../hooks/useSavingAction'
 import { useToppingDetail } from '../hooks/useToppingDetail'
-import Dropdown from '../components/common/Dropdown'
-import { idsWithProductIn } from '../utils/categoryOrder'
 import MenuTabsBar from '../components/common/MenuTabsBar'
 import ToppingSourceSection from '../components/RecipeIngredientPage/ToppingSourceSection'
 import ProductLinksSection from '../components/common/ProductLinksSection'
@@ -227,18 +224,6 @@ export default function RecipeIngredientPage() {
         })
     }
 
-    // Danh mục của món = dòng divider gần nhất đứng trước nó trong thứ tự menu.
-    const dividers = products.filter(p => p.is_divider)
-    const at = products.findIndex(p => p.id === productId)
-    const categoryId: string = products.slice(0, Math.max(at, 0)).reverse().find(p => p.is_divider)?.id ?? ''
-    const saveCategory = (next: string) => withSaving('Đổi danh mục', async () => {
-        const ids = idsWithProductIn(products, productId, next)
-        if (!ids || next === categoryId) return
-        await updateProductSortOrder(ids)
-        refreshProducts?.()
-        showToast('Đã lưu', 'success')
-    })
-
     // ─── Extras handlers ──────────────────────────────────────────────
     async function handleAddExtra(name: string, price: number, items: BaseItem[]) {
         if (extras.some(e => e.name.trim().toLowerCase() === name.trim().toLowerCase())) {
@@ -428,19 +413,6 @@ export default function RecipeIngredientPage() {
             </EditableEntityHeader>}
 
             <main className="flex-1 overflow-y-auto px-4 max-[329px]:px-2 py-4 space-y-3 bg-bg">
-                {!isBatch && onDetail && canEdit && (!!addressId || isAdmin) && dividers.length > 0 && (
-                    <Dropdown
-                        ariaLabel="Danh mục của món"
-                        value={categoryId}
-                        triggerLabel={`Danh mục: ${dividers.find(d => d.id === categoryId)?.name ?? 'Chưa phân'}`}
-                        onChange={saveCategory}
-                        align="left"
-                        className="w-full"
-                        triggerClassName="w-full justify-between rounded-[14px] bg-surface border border-border/60 p-3 text-[13px] font-black text-text"
-                        items={[{ value: '', label: 'Chưa phân danh mục' }, ...dividers.map(d => ({ value: d.id, label: d.name }))]}
-                    />
-                )}
-
                 {onDetail && <FastIngredientFill
                     entries={prodRecipes}
                     dbIngredients={dbIngredients}

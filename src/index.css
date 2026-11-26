@@ -526,6 +526,9 @@ body.pwa-banner-open .address-scroll-list {
    Phần giống hệt nhau giữa hai trang (header, thanh tab, dải guide) không chớp vì ảnh cũ + mới
    cộng sáng (plus-lighter mặc định) ra đúng pixel gốc. Trình duyệt không hỗ trợ → cắt cảnh tức thì. */
 ::view-transition-group(root) { animation-duration: 180ms; }
+/* Dòng mới trong sheet Quản lý danh mục bung ra + hiện dần */
+.category-row-enter { animation: restock-slide-in 0.25s ease-out backwards; }
+
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
 }

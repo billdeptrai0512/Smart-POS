@@ -144,7 +144,7 @@ export default function InventorySummaryPage() {
                         </div>
                         {totals.withdrawn > 0 && (
                             <div className="flex items-baseline justify-between gap-3 mt-3 pt-3 border-t border-border/40">
-                                <span className={LABEL}>Trị giá rút ra quầy (giá vốn)</span>
+                                <span className={LABEL}>Tổng giá trị vốn</span>
                                 <span className="text-[15px] font-black tabular-nums text-text shrink-0">{formatVND(Math.round(totals.withdrawn))}</span>
                             </div>
                         )}

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Settings2 } from 'lucide-react'
 import MoneyInput from '../common/MoneyInput'
 import Dropdown from '../common/Dropdown'
 import FormField, { FIELD_INPUT } from './FormField'
@@ -10,13 +11,14 @@ interface Props {
     categories?: { id: string; label: string }[]
     /** Id danh mục chọn sẵn ('' = chưa phân). */
     defaultCategory?: string
+    onManageCategories: () => void
     onSubmit: (name: string, price: string, categoryId: string) => void
 }
 
 const FIELD_TRIGGER = 'w-full h-11 px-3 rounded-[12px] bg-surface-light border border-border/60 text-text text-[14px]'
 
 // Tự giữ name/price: modal gỡ mount sau khi tạo xong nên state tự reset; lỗi thì form còn nguyên giá trị.
-export default function CreateProductForm({ saving, categories = [], defaultCategory = '', onSubmit }: Props) {
+export default function CreateProductForm({ saving, categories = [], defaultCategory = '', onManageCategories, onSubmit }: Props) {
     const [name, setName] = useState('')
     const [price, setPrice] = useState('')
     const [category, setCategory] = useState(defaultCategory)
@@ -47,21 +49,25 @@ export default function CreateProductForm({ saving, categories = [], defaultCate
                 </FormField>
             </div>
 
-            {categories.length > 0 && (
-                <FormField label="Danh mục">
-                    <Dropdown
-                        ariaLabel="Danh mục của món"
-                        value={category}
-                        triggerLabel={categories.find(c => c.id === category)?.label ?? 'Chưa phân danh mục'}
-                        align="left"
-                        up
-                        className="w-full"
-                        triggerClassName={FIELD_TRIGGER}
-                        items={[{ value: '', label: 'Chưa phân danh mục' }, ...categories.map(c => ({ value: c.id, label: c.label }))]}
-                        onChange={setCategory}
-                    />
-                </FormField>
-            )}
+            <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black uppercase tracking-widest text-text-secondary">Danh mục</span>
+                    <button type="button" onClick={onManageCategories} className="flex items-center gap-1 text-[12px] font-bold text-primary active:opacity-70">
+                        <Settings2 size={14} /> Quản lý
+                    </button>
+                </div>
+                <Dropdown
+                    ariaLabel="Danh mục của món"
+                    value={category}
+                    triggerLabel={categories.find(c => c.id === category)?.label ?? 'Không thuộc danh mục'}
+                    align="left"
+                    up
+                    className="w-full"
+                    triggerClassName={FIELD_TRIGGER}
+                    items={[{ value: '', label: 'Không thuộc danh mục' }, ...categories.map(c => ({ value: c.id, label: c.label }))]}
+                    onChange={setCategory}
+                />
+            </div>
 
             <hr className="-mx-5 border-border/60" />
             <button
