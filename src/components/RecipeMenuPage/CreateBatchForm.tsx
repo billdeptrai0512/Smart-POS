@@ -55,7 +55,6 @@ export default function CreateBatchForm({ saving, onSubmit }: Props) {
                     </div>
                 </div>
             </FormField>
-            <hr className="-mx-5 border-border/60" />
             <button
                 onClick={() => canSubmit && onSubmit(name.trim(), unit, yieldNum)}
                 disabled={!canSubmit}

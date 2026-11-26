@@ -58,7 +58,6 @@ export default function CreateToppingForm({ saving, sourceOptions = [], unitOf, 
                 </FormField>
             )}
             {options.length > 0 && <ToppingSourceSection source={source} options={options} unitOf={unitOf} canEdit up onSave={setSource} />}
-            <hr className="-mx-5 border-border/60" />
             <button
                 onClick={submit}
                 disabled={!canSubmit}

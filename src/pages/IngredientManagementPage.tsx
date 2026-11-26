@@ -393,16 +393,15 @@ export default function IngredientManagementPage() {
                     />
                 ) : (<>
                 <div className="mb-3 flex items-stretch gap-2 h-11 lg:mb-4">
-                    {(groupChips.length > 0 || canManage) && (
+                    {groupChips.length > 0 && (
                         <Dropdown
                             ariaLabel="Lọc theo nhóm"
                             value={effectiveFilter}
                             triggerLabel={groupChips.find(c => c.id === effectiveFilter)?.label || 'Phân loại'}
                             onChange={(id) => { setGroupFilter(id); setSearch('') }}
                             items={[
-                                { value: 'all', label: 'Tổng cộng', count: allIngredients.length },
-                                ...groupChips.map((c, i) => ({ value: c.id, label: c.label, count: c.count, divider: i === 0 })),
-                                ...(canManage ? [{ action: 'edit', icon: <Settings2 size={14} />, label: groupChips.length > 0 ? 'Quản lý' : 'Chia nhóm…', divider: true, onClick: () => setShowGroupsSheet(true) }] : []),
+                                { value: 'all', label: 'Tất cả', count: `${allIngredients.length} loại` },
+                                ...groupChips.map((c, i) => ({ value: c.id, label: c.label, count: `${c.count} loại`, divider: i === 0 })),
                             ]}
                             align="left"
                             className="shrink-0 w-[34%] max-w-[170px] lg:w-48 lg:max-w-none"
@@ -485,7 +484,6 @@ export default function IngredientManagementPage() {
                     panelClassName={SHEET_PANEL}
                 >
                         <SheetHeader title="Tạo nguyên liệu mới" onClose={() => setShowCreateModal(false)} closeDisabled={saving} />
-                        <hr className="-mx-5 border-border/60" />
                         <CreateIngredientForm groups={ingredientGroups} saving={saving} onManageGroups={canManage ? () => setShowGroupsSheet(true) : undefined} onSubmit={handleCreateIngredient} />
                 </BottomSheet>
             )}

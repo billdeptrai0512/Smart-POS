@@ -45,7 +45,7 @@ export default function CreateIngredientForm({ groups, saving, onManageGroups, o
                     />
                 </FormField>
             </div>
-            {groups && groups.length > 0 && (
+            {groups && (groups.length > 0 || onManageGroups) && (
                 <div className="flex flex-col gap-1.5">
                     <div className="flex items-center justify-between">
                         <span className="text-[11px] font-black uppercase tracking-widest text-text-secondary">Phân loại</span>
@@ -69,7 +69,6 @@ export default function CreateIngredientForm({ groups, saving, onManageGroups, o
                 </div>
             )}
 
-            <hr className="-mx-5 border-border/60" />
             <button
                 onClick={submit}
                 disabled={!canSubmit}

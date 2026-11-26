@@ -69,7 +69,6 @@ export default function CreateProductForm({ saving, categories = [], defaultCate
                 />
             </div>
 
-            <hr className="-mx-5 border-border/60" />
             <button
                 onClick={submit}
                 disabled={!canSubmit}

@@ -516,7 +516,6 @@ export default function RecipeMenuPage() {
                         onClose={() => setCreateOpen(false)}
                         closeDisabled={saving}
                     />
-                    <hr className="-mx-5 border-border/60" />
                     {kind === 'main' && <CreateProductForm saving={saving} categories={categoryChips.filter(c => c.id !== 'none')} defaultCategory={effectiveFilter === 'all' || effectiveFilter === 'none' ? '' : effectiveFilter} onManageCategories={openManage} onSubmit={handleCreateProduct} />}
                     {kind === 'batch' && (
                         <>
