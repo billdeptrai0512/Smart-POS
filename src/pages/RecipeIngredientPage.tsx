@@ -30,7 +30,7 @@ import MenuTabsBar from '../components/common/MenuTabsBar'
 import ToppingSourceSection from '../components/RecipeIngredientPage/ToppingSourceSection'
 import ProductLinksSection from '../components/common/ProductLinksSection'
 import { ICON_BTN_DANGER } from '../components/common/ModalShell'
-import { capitalizeWords } from '../utils'
+import { capitalizeWords, formatVND } from '../utils'
 import { useConfirm } from '../contexts/ConfirmContext'
 import Toast from '../components/POSPage/Toast'
 import EditableEntityHeader from '../components/common/EditableEntityHeader'
@@ -369,6 +369,12 @@ export default function RecipeIngredientPage() {
 
     const countAsCup = cupOptimistic ?? product.count_as_cup !== false
     const onDetail = isBatch || productTab === 'detail'
+    const cost = prodRecipes.reduce((sum, r) => sum + r.amount * (ingredientCosts[r.ingredient] || 0), 0)
+    const deleteBtn = canEdit ? (
+        <button onClick={handleDeleteFromMenu} className={ICON_BTN_DANGER} aria-label={isBatch ? 'Xóa thành phẩm' : 'Xóa món'} title={isBatch ? 'Xóa thành phẩm' : 'Xóa món'}>
+            <Trash2 size={18} />
+        </button>
+    ) : undefined
 
     const extraHandlers: ExtraHandlers = {
         saveName: saveExtraName,
@@ -385,7 +391,7 @@ export default function RecipeIngredientPage() {
 
             {isBatch ? (
                 // Tên thành phẩm = khóa nguyên liệu nên không đổi tên ở đây (đổi sẽ tách nó khỏi tồn kho/công thức món).
-                <EditableEntityHeader name={product.name} canEdit={false} onSaveName={() => { }}>
+                <EditableEntityHeader name={product.name} canEdit={false} onSaveName={() => { }} action={deleteBtn}>
                     <div className="flex items-center justify-center gap-1.5 text-[12px] font-bold text-text-secondary">
                         <span>1 mẻ ra:</span>
                         <InlineEditor
@@ -403,16 +409,32 @@ export default function RecipeIngredientPage() {
                 nameTransform={capitalizeWords}
                 canEdit={canEdit}
                 onSaveName={saveProductName}
-                price={product.price}
-                cost={prodRecipes.reduce((sum, r) => sum + r.amount * (ingredientCosts[r.ingredient] || 0), 0)}
-                priceLabel="Giá bán:"
-                onSavePrice={saveProductPrice}
                 subtitle={productTab === 'extras' ? `${extras.length} tùy chọn thêm` : undefined}
             >
                 <MenuTabsBar tabs={[{ key: 'detail', label: 'Định lượng' }, { key: 'extras', label: 'Tùy chọn thêm' }]} activeTab={productTab} onSelect={setProductTab} />
             </EditableEntityHeader>}
 
             <main className="flex-1 overflow-y-auto px-4 max-[329px]:px-2 py-4 space-y-3 bg-bg">
+                {!isBatch && onDetail && (
+                    <div className="bg-surface border border-border/60 rounded-[14px] px-3 py-2 grid grid-cols-2 items-center">
+                        <div className="flex items-baseline gap-1.5 pr-2">
+                            <span className="text-[11px] font-black uppercase tracking-wide text-text-secondary whitespace-nowrap">Giá bán</span>
+                            <InlineEditor
+                                value={product.price}
+                                canEdit={canEdit}
+                                onSave={saveProductPrice}
+                                type="number"
+                                renderDisplay={(v: number) => <span className="text-[15px] font-black tabular-nums text-success">{formatVND(v)}</span>}
+                                inputWidthClassName="w-[96px]"
+                            />
+                        </div>
+                        <div className="flex items-baseline gap-1.5 pl-3 border-l border-border/60">
+                            <span className="text-[11px] font-black uppercase tracking-wide text-text-secondary whitespace-nowrap">Giá vốn</span>
+                            <span className="text-[15px] font-black tabular-nums text-primary">{formatVND(cost)}</span>
+                        </div>
+                    </div>
+                )}
+
                 {onDetail && <FastIngredientFill
                     entries={prodRecipes}
                     dbIngredients={dbIngredients}
@@ -456,18 +478,10 @@ export default function RecipeIngredientPage() {
                             <span className={`absolute top-1 left-1 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ease-out ${countAsCup ? 'translate-x-5' : ''}`} />
                         </button>
                     </div>
+                    <button onClick={handleDeleteFromMenu} className="w-full h-11 flex items-center justify-center gap-2 rounded-[14px] border border-danger/30 text-danger text-[13px] font-black hover:bg-danger/10 active:scale-[0.98] transition-all">
+                        <Trash2 size={16} /> Xóa món
+                    </button>
                 </>)}
-
-                {canEdit && onDetail && (
-                    <div className="mt-4 pt-4 border-t border-border/40">
-                        <button
-                            onClick={handleDeleteFromMenu}
-                            className="text-danger hover:bg-danger/10 rounded-full px-3 py-1 text-[11px] font-medium transition-colors"
-                        >
-                            {isBatch ? 'Xóa thành phẩm' : 'Xóa món'}
-                        </button>
-                    </div>
-                )}
             </main>
 
 
